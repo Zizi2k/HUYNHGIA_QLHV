@@ -15,6 +15,7 @@ const attendanceRoutes = require('./routes/attendanceRoutes');
 const dashboardRoutes = require('./routes/dashboardRoutes');
 const onlineSessionRoutes = require('./routes/onlineSessionRoutes');
 const { ensureSchema } = require('./config/ensureSchema');
+const pool = require('./config/db');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -42,6 +43,15 @@ app.use('/api/online-sessions', onlineSessionRoutes);
 
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'OK', message: 'API học trực tuyến đang hoạt động' });
+});
+
+app.get('/api/health/db', async (_req, res) => {
+  try {
+    await pool.query('SELECT 1');
+    res.json({ status: 'OK', db: 'connected' });
+  } catch (err) {
+    res.status(500).json({ status: 'ERROR', db: 'failed', error: err.message });
+  }
 });
 
 app.use((err, _req, res, _next) => {
