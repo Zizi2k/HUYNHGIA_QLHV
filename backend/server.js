@@ -1,0 +1,62 @@
+require('dotenv').config();
+const express = require('express');
+const cors = require('cors');
+const path = require('path');
+const multer = require('multer');
+
+const authRoutes = require('./routes/authRoutes');
+const userRoutes = require('./routes/userRoutes');
+const classRoutes = require('./routes/classRoutes');
+const lessonRoutes = require('./routes/lessonRoutes');
+const quizRoutes = require('./routes/quizRoutes');
+const assignmentRoutes = require('./routes/assignmentRoutes');
+const discussionRoutes = require('./routes/discussionRoutes');
+const attendanceRoutes = require('./routes/attendanceRoutes');
+const dashboardRoutes = require('./routes/dashboardRoutes');
+const onlineSessionRoutes = require('./routes/onlineSessionRoutes');
+const { ensureSchema } = require('./config/ensureSchema');
+
+const app = express();
+const PORT = process.env.PORT || 5000;
+
+app.use(cors());
+app.use((req, res, next) => {
+  const contentType = req.headers['content-type'] || '';
+  if (contentType.includes('multipart/form-data')) {
+    return next();
+  }
+  express.json()(req, res, next);
+});
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+
+app.use('/api/auth', authRoutes);
+app.use('/api/users', userRoutes);
+app.use('/api/classes', classRoutes);
+app.use('/api/lessons', lessonRoutes);
+app.use('/api/quizzes', quizRoutes);
+app.use('/api/assignments', assignmentRoutes);
+app.use('/api/discussions', discussionRoutes);
+app.use('/api/attendance', attendanceRoutes);
+app.use('/api/dashboard', dashboardRoutes);
+app.use('/api/online-sessions', onlineSessionRoutes);
+
+app.get('/api/health', (_req, res) => {
+  res.json({ status: 'OK', message: 'API học trực tuyến đang hoạt động' });
+});
+
+app.use((err, _req, res, _next) => {
+  if (err instanceof multer.MulterError) {
+    if (err.code === 'LIMIT_FILE_SIZE') {
+      return res.status(400).json({ message: 'Tệp tin quá lớn (tối đa 50MB)' });
+    }
+    return res.status(400).json({ message: err.message });
+  }
+  res.status(err.status || 500).json({ message: err.message || 'Lỗi hệ thống' });
+});
+
+app.listen(PORT, () => {
+  console.log(`Server chạy tại http://localhost:${PORT}`);
+  ensureSchema().catch((err) => {
+    console.warn('Không thể kiểm tra schema DB:', err.message);
+  });
+});

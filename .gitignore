@@ -1,0 +1,26 @@
+# Dependencies
+node_modules/
+
+# Environment & secrets
+.env
+.env.local
+*.local
+
+# Build output
+frontend/dist/
+frontend/dist-ssr/
+
+# Uploads
+backend/uploads/*
+!backend/uploads/.gitkeep
+
+# Logs & OS
+*.log
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# Cursor / editor
+.cursor/
