@@ -63,13 +63,6 @@ export default function LoginPage() {
                 {loading ? 'Đang đăng nhập...' : 'Đăng nhập'}
               </Button>
             </Form>
-
-            <div className="mt-4 p-3 bg-light rounded small">
-              <strong>Tài khoản dùng thử:</strong>
-              <div>Quản trị viên: admin / ADMIN001</div>
-              <div>Giáo viên: nguyenvangiao / GV001</div>
-              <div>Học sinh: nguyenvana / HS001</div>
-            </div>
           </Card.Body>
         </Card>
       </Container>
