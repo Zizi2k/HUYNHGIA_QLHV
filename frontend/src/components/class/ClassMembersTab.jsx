@@ -560,8 +560,18 @@ export default function ClassMembersTab({ classId, className, members, isTeacher
             )}
 
             <Alert variant="info" className="small">
-              File Excel cần các cột: <strong>Mã học viên, Họ tên, Mã lớp, Số điện thoại, Zalo</strong>.
-              Bấm <strong>Tải file mẫu</strong> để xem định dạng chuẩn.
+              {isAdmin ? (
+                <>
+                  File mẫu gồm đủ thông tin như <strong>Thêm học viên thủ công</strong>: mã HV, họ tên, liên hệ,
+                  khóa học, ngày bắt đầu và các khoản học phí. Bấm <strong>Tải file mẫu</strong> để xem định dạng.
+                  Cột học phí có thể để trống nếu chỉ thêm học viên vào lớp.
+                </>
+              ) : (
+                <>
+                  File Excel cần các cột: <strong>Mã học viên, Họ tên, Mã lớp, Số điện thoại, Zalo</strong>.
+                  Bấm <strong>Tải file mẫu</strong> để xem định dạng chuẩn.
+                </>
+              )}
             </Alert>
 
             <Form.Group>
