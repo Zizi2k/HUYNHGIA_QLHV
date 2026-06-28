@@ -1,4 +1,5 @@
 const pool = require('../config/db');
+const { getUserScope, studentCodeMatchesScope } = require('../utils/adminScope');
 
 async function isClassMember(userId, classId) {
   const [rows] = await pool.query(
@@ -18,13 +19,37 @@ async function isClassTeacher(userId, classId) {
   return rows.length > 0;
 }
 
+async function isClassInUserScope(classId, user) {
+  const scope = getUserScope(user);
+  if (!scope) return true;
+
+  const [students] = await pool.query(
+    `SELECT u.code FROM class_members cm
+     JOIN users u ON cm.user_id = u.id
+     WHERE cm.class_id = ? AND u.role = 'student'`,
+    [classId]
+  );
+  const [profiles] = await pool.query(
+    'SELECT student_code FROM tuition_profiles WHERE class_id = ?',
+    [classId]
+  );
+  const codes = [
+    ...students.map((s) => s.code),
+    ...profiles.map((p) => p.student_code),
+  ];
+  if (codes.length === 0) return true;
+  return codes.some((code) => studentCodeMatchesScope(code, scope));
+}
+
 async function canManageClass(user, classId) {
+  if (!(await isClassInUserScope(classId, user))) return false;
   if (user.role === 'admin') return true;
   if (user.role === 'teacher') return isClassTeacher(user.id, classId);
   return false;
 }
 
 async function canAccessClass(user, classId) {
+  if (!(await isClassInUserScope(classId, user))) return false;
   if (user.role === 'admin') return true;
   return isClassMember(user.id, classId);
 }
@@ -98,6 +123,7 @@ const requireClassTeacher = (param = 'id') => async (req, res, next) => {
 module.exports = {
   isClassMember,
   isClassTeacher,
+  isClassInUserScope,
   canManageClass,
   canAccessClass,
   assertClassAccess,

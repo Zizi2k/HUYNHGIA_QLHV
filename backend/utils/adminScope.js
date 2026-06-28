@@ -60,6 +60,35 @@ function appendUserCodeScopeSql(user, userAlias = 'u') {
   };
 }
 
+function classScopeWhereSql(scope, classIdColumn = 'c.id') {
+  if (!scope) return { sql: '', params: [] };
+  const pattern = `${scope}%`;
+  return {
+    sql: ` AND (
+      (
+        NOT EXISTS (
+          SELECT 1 FROM class_members cm
+          JOIN users u ON cm.user_id = u.id
+          WHERE cm.class_id = ${classIdColumn} AND u.role = 'student'
+        )
+        AND NOT EXISTS (
+          SELECT 1 FROM tuition_profiles tp WHERE tp.class_id = ${classIdColumn}
+        )
+      )
+      OR EXISTS (
+        SELECT 1 FROM class_members cm
+        JOIN users u ON cm.user_id = u.id
+        WHERE cm.class_id = ${classIdColumn} AND u.role = 'student' AND UPPER(u.code) LIKE ?
+      )
+      OR EXISTS (
+        SELECT 1 FROM tuition_profiles tp
+        WHERE tp.class_id = ${classIdColumn} AND UPPER(tp.student_code) LIKE ?
+      )
+    )`,
+    params: [pattern, pattern],
+  };
+}
+
 function filterMembersByScope(user, members) {
   const scope = getUserScope(user);
   if (!scope) return members;
@@ -93,6 +122,7 @@ module.exports = {
   resolveCodePrefixFilter,
   appendStudentCodeScopeSql,
   appendUserCodeScopeSql,
+  classScopeWhereSql,
   filterMembersByScope,
   assertStudentCodeInScope,
   scopeLabel,

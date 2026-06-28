@@ -10,6 +10,7 @@ const {
   getUserScope,
   filterMembersByScope,
   appendStudentCodeScopeSql,
+  classScopeWhereSql,
 } = require('../utils/adminScope');
 const { addMonthsToDate } = require('../utils/dateHelpers');
 const { insertTuitionProfile } = require('../utils/tuitionProfileDb');
@@ -56,27 +57,45 @@ const getClasses = async (req, res) => {
       ? ` AND (c.name LIKE ? OR c.code LIKE ? OR c.description LIKE ?)`
       : '';
     const searchParams = search ? [`%${search}%`, `%${search}%`, `%${search}%`] : [];
+    const scope = getUserScope(req.user);
+    const scopeFilter = classScopeWhereSql(scope);
 
     let query;
     let params = [];
 
     if (req.user.role === 'admin') {
-      query = `
-        SELECT c.*, COUNT(cm.id) AS member_count
-        FROM classes c
-        LEFT JOIN class_members cm ON c.id = cm.class_id
-        WHERE 1=1${searchClause}
-        GROUP BY c.id ORDER BY c.created_at DESC`;
-      params = [...searchParams];
+      if (scope) {
+        query = `
+          SELECT c.*,
+            (SELECT COUNT(*) FROM class_members cm2
+             JOIN users u2 ON cm2.user_id = u2.id
+             WHERE cm2.class_id = c.id AND u2.role = 'student' AND UPPER(u2.code) LIKE ?) AS member_count
+          FROM classes c
+          WHERE 1=1${scopeFilter.sql}${searchClause}
+          ORDER BY c.created_at DESC`;
+        params = [`${scope}%`, ...scopeFilter.params, ...searchParams];
+      } else {
+        query = `
+          SELECT c.*, COUNT(cm.id) AS member_count
+          FROM classes c
+          LEFT JOIN class_members cm ON c.id = cm.class_id
+          WHERE 1=1${searchClause}
+          GROUP BY c.id ORDER BY c.created_at DESC`;
+        params = [...searchParams];
+      }
     } else {
       query = `
-        SELECT c.*, COUNT(cm2.id) AS member_count
+        SELECT c.*,
+          (SELECT COUNT(*) FROM class_members cm2
+           JOIN users u2 ON cm2.user_id = u2.id
+           WHERE cm2.class_id = c.id AND u2.role = 'student'${scope ? ' AND UPPER(u2.code) LIKE ?' : ''}) AS member_count
         FROM classes c
         INNER JOIN class_members cm ON c.id = cm.class_id AND cm.user_id = ?
-        LEFT JOIN class_members cm2 ON c.id = cm2.class_id
-        WHERE 1=1${searchClause}
+        WHERE 1=1${scopeFilter.sql}${searchClause}
         GROUP BY c.id ORDER BY c.created_at DESC`;
-      params = [req.user.id, ...searchParams];
+      params = scope
+        ? [`${scope}%`, req.user.id, ...scopeFilter.params, ...searchParams]
+        : [req.user.id, ...scopeFilter.params, ...searchParams];
     }
 
     const [rows] = await pool.query(query, params);
