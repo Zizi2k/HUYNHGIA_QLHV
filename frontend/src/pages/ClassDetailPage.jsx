@@ -30,6 +30,8 @@ export default function ClassDetailPage() {
   const [quizzes, setQuizzes] = useState([]);
   const [discussions, setDiscussions] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [activeTab, setActiveTab] = useState('lessons');
   const [showLessonModal, setShowLessonModal] = useState(false);
   const [showDiscussionModal, setShowDiscussionModal] = useState(false);
   const [lessonForm, setLessonForm] = useState({
@@ -48,40 +50,47 @@ export default function ClassDetailPage() {
   const isStudent = user?.role === 'student';
   const classStudents = classData?.members?.filter((m) => m.role === 'student') || [];
 
+  const fetchClassData = async () => {
+    setAccessError('');
+    setLoadError('');
+
+    const classRes = await classService.getById(id);
+    setClassData(classRes.data);
+
+    const results = await Promise.allSettled([
+      lessonService.getByClass(id),
+      assignmentService.getAll(id),
+      quizService.getAll(id),
+      discussionService.getByClass(id),
+    ]);
+
+    const [lessonRes, assignRes, quizRes, discRes] = results;
+
+    if (lessonRes.status === 'fulfilled') setLessons(lessonRes.value.data);
+    else setLessons([]);
+
+    if (assignRes.status === 'fulfilled') setAssignments(assignRes.value.data);
+    else setAssignments([]);
+
+    if (quizRes.status === 'fulfilled') setQuizzes(quizRes.value.data);
+    else setQuizzes([]);
+
+    if (discRes.status === 'fulfilled') setDiscussions(discRes.value.data);
+    else setDiscussions([]);
+
+    const failed = results.filter((r) => r.status === 'rejected');
+    if (failed.length > 0) {
+      console.error('Một số dữ liệu lớp học không tải được:', failed);
+    }
+  };
+
   const loadData = async () => {
     setLoading(true);
     setAccessError('');
     setLoadError('');
 
     try {
-      const classRes = await classService.getById(id);
-      setClassData(classRes.data);
-
-      const results = await Promise.allSettled([
-        lessonService.getByClass(id),
-        assignmentService.getAll(id),
-        quizService.getAll(id),
-        discussionService.getByClass(id),
-      ]);
-
-      const [lessonRes, assignRes, quizRes, discRes] = results;
-
-      if (lessonRes.status === 'fulfilled') setLessons(lessonRes.value.data);
-      else setLessons([]);
-
-      if (assignRes.status === 'fulfilled') setAssignments(assignRes.value.data);
-      else setAssignments([]);
-
-      if (quizRes.status === 'fulfilled') setQuizzes(quizRes.value.data);
-      else setQuizzes([]);
-
-      if (discRes.status === 'fulfilled') setDiscussions(discRes.value.data);
-      else setDiscussions([]);
-
-      const failed = results.filter((r) => r.status === 'rejected');
-      if (failed.length > 0) {
-        console.error('Một số dữ liệu lớp học không tải được:', failed);
-      }
+      await fetchClassData();
     } catch (err) {
       if (err.response?.status === 403) {
         setAccessError(err.response?.data?.message || 'Bạn không có quyền truy cập lớp học này');
@@ -94,7 +103,21 @@ export default function ClassDetailPage() {
     }
   };
 
-  useEffect(() => { loadData(); }, [id]);
+  const refreshData = async () => {
+    setRefreshing(true);
+    try {
+      await fetchClassData();
+    } catch (err) {
+      console.error('Không thể cập nhật dữ liệu lớp:', err);
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
+  useEffect(() => {
+    setActiveTab('lessons');
+    loadData();
+  }, [id]);
 
   const resetLessonForm = () => {
     setLessonForm({ title: '', description: '', file: null, sourceType: 'file', linkUrl: '' });
@@ -163,7 +186,7 @@ export default function ClassDetailPage() {
       }
       setShowLessonModal(false);
       resetLessonForm();
-      loadData();
+      refreshData();
     } catch (err) {
       setUploadError(err.response?.data?.message || 'Không thể đăng tài liệu');
     } finally {
@@ -211,14 +234,14 @@ export default function ClassDetailPage() {
     await discussionService.create({ class_id: parseInt(id), ...discussionForm });
     setShowDiscussionModal(false);
     setDiscussionForm({ title: '', content: '' });
-    loadData();
+    refreshData();
   };
 
   const handleDeleteLesson = async (lessonId) => {
     if (!window.confirm('Xóa bài giảng này?')) return;
     try {
       const res = await lessonService.delete(lessonId);
-      if (!notifyDeleteResult(res)) loadData();
+      if (!notifyDeleteResult(res)) refreshData();
     } catch (err) {
       alert(err.response?.data?.message || 'Không thể xóa bài giảng');
     }
@@ -251,10 +274,15 @@ export default function ClassDetailPage() {
 
   return (
     <div className="page-container">
-      <h2 className="mb-1 text-break">{classData.name}</h2>
+      <h2 className="mb-1 text-break">
+        {classData.name}
+        {refreshing && (
+          <Spinner animation="border" size="sm" className="ms-2 align-middle" />
+        )}
+      </h2>
       <p className="text-muted mb-4 text-break">{classData.description}</p>
 
-      <Tab.Container defaultActiveKey="lessons">
+      <Tab.Container activeKey={activeTab} onSelect={(k) => setActiveTab(k || 'lessons')}>
         <Nav variant="tabs" className="mb-3 app-nav-tabs-scroll flex-nowrap">
           <Nav.Item><Nav.Link eventKey="lessons">Bài giảng</Nav.Link></Nav.Item>
           <Nav.Item><Nav.Link eventKey="assignments">Bài tập</Nav.Link></Nav.Item>
@@ -266,7 +294,7 @@ export default function ClassDetailPage() {
         </Nav>
 
         <Tab.Content>
-          <Tab.Pane eventKey="lessons" mountOnEnter unmountOnExit>
+          <Tab.Pane eventKey="lessons">
             {canManageClass && (
               <Button className="mb-3" onClick={() => { resetLessonForm(); setShowLessonModal(true); }}>
                 <i className="bi bi-upload me-1" />Đăng tài liệu
@@ -355,27 +383,27 @@ export default function ClassDetailPage() {
             )}
           </Tab.Pane>
 
-          <Tab.Pane eventKey="assignments" mountOnEnter unmountOnExit>
+          <Tab.Pane eventKey="assignments">
             <ClassAssignmentsTab
               classId={id}
               assignments={assignments}
               isTeacher={canManageClass}
               isStudent={isStudent}
-              onUpdated={loadData}
+              onUpdated={refreshData}
             />
           </Tab.Pane>
 
-          <Tab.Pane eventKey="quizzes" mountOnEnter unmountOnExit>
+          <Tab.Pane eventKey="quizzes">
             <ClassQuizzesTab
               classId={id}
               quizzes={quizzes}
               isTeacher={canManageClass}
               isStudent={isStudent}
-              onUpdated={loadData}
+              onUpdated={refreshData}
             />
           </Tab.Pane>
 
-          <Tab.Pane eventKey="discussions" mountOnEnter unmountOnExit>
+          <Tab.Pane eventKey="discussions">
             <Button className="mb-3" onClick={() => setShowDiscussionModal(true)}>
               <i className="bi bi-chat-dots me-1" />Tạo thảo luận
             </Button>
@@ -400,7 +428,7 @@ export default function ClassDetailPage() {
             )}
           </Tab.Pane>
 
-          <Tab.Pane eventKey="online" mountOnEnter unmountOnExit>
+          <Tab.Pane eventKey="online">
             <ClassOnlineTab
               classId={id}
               className={classData?.name}
@@ -409,7 +437,7 @@ export default function ClassDetailPage() {
             />
           </Tab.Pane>
 
-          <Tab.Pane eventKey="members" mountOnEnter unmountOnExit>
+          <Tab.Pane eventKey="members">
             <ClassMembersTab
               classId={id}
               className={classData?.name}
@@ -417,11 +445,11 @@ export default function ClassDetailPage() {
               isTeacher={canManageClass}
               isAdmin={isAdmin}
               isStudent={isStudent}
-              onUpdated={loadData}
+              onUpdated={refreshData}
             />
           </Tab.Pane>
 
-          <Tab.Pane eventKey="attendance" mountOnEnter unmountOnExit>
+          <Tab.Pane eventKey="attendance">
             <ClassAttendanceTab
               classId={id}
               students={classStudents}
