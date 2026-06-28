@@ -1,5 +1,7 @@
 const pool = require('../config/db');
 const { enrichProfile, parseAmount, SUBJECTS } = require('../utils/tuitionHelpers');
+const { PROFILE_SELECT } = require('../utils/tuitionProfileDb');
+const { addMonthsToDate } = require('../utils/dateHelpers');
 
 async function linkUserAndClass(conn, studentCode, classLabel) {
   let userId = null;
@@ -40,13 +42,6 @@ async function fetchPaymentsForProfiles(profileIds) {
   });
   return map;
 }
-
-const PROFILE_SELECT = `
-  SELECT tp.*, fd.name AS discount_name, c.name AS linked_class_name
-  FROM tuition_profiles tp
-  LEFT JOIN fee_discounts fd ON tp.discount_id = fd.id
-  LEFT JOIN classes c ON tp.class_id = c.id
-`;
 
 const getProfiles = async (req, res) => {
   try {
@@ -110,7 +105,7 @@ const createProfile = async (req, res) => {
     const {
       student_code, fullname, subject, class_label, enrichment_class, current_class,
       phone, zalo, base_fee, fee_before_discount, fee_after_discount, book_fee,
-      discount_id, discount_reason,
+      discount_id, discount_reason, course_id, start_date,
     } = req.body;
 
     if (!student_code || !fullname || !subject) {
@@ -122,18 +117,30 @@ const createProfile = async (req, res) => {
 
     const { userId, classId } = await linkUserAndClass(conn, student_code, class_label);
 
+    let endDate = null;
+    let courseId = course_id || null;
+    if (course_id && start_date) {
+      const [courses] = await conn.query('SELECT duration_months, subject FROM training_courses WHERE id = ?', [
+        course_id,
+      ]);
+      if (courses.length > 0 && courses[0].subject === subject) {
+        endDate = addMonthsToDate(start_date, courses[0].duration_months);
+      }
+    }
+
     const [result] = await conn.query(
       `INSERT INTO tuition_profiles
-       (student_code, user_id, fullname, subject, class_id, class_label, enrichment_class,
+       (student_code, user_id, fullname, subject, course_id, class_id, class_label, enrichment_class,
         current_class, phone, zalo, base_fee, fee_before_discount, fee_after_discount,
-        book_fee, discount_id, discount_reason)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        book_fee, discount_id, discount_reason, start_date, end_date)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
-        student_code.trim(), userId, fullname.trim(), subject, classId,
+        student_code.trim(), userId, fullname.trim(), subject, courseId, classId,
         class_label || null, enrichment_class || null, current_class || null,
         phone || null, zalo || null,
         parseAmount(base_fee), parseAmount(fee_before_discount), parseAmount(fee_after_discount),
         parseAmount(book_fee), discount_id || null, discount_reason || null,
+        start_date || null, endDate,
       ]
     );
 
@@ -161,23 +168,41 @@ const updateProfile = async (req, res) => {
     const {
       student_code, fullname, subject, class_label, enrichment_class, current_class,
       phone, zalo, base_fee, fee_before_discount, fee_after_discount, book_fee,
-      discount_id, discount_reason,
+      discount_id, discount_reason, course_id, start_date,
     } = req.body;
 
     const { userId, classId } = await linkUserAndClass(conn, student_code, class_label);
 
+    const [existing] = await conn.query('SELECT course_id, start_date, end_date FROM tuition_profiles WHERE id = ?', [
+      req.params.id,
+    ]);
+    let courseId = course_id ?? existing[0]?.course_id ?? null;
+    let startDate = start_date ?? existing[0]?.start_date ?? null;
+    let endDate = existing[0]?.end_date ?? null;
+
+    if (course_id || start_date) {
+      const lookupId = course_id || existing[0]?.course_id;
+      if (lookupId && startDate) {
+        const [courses] = await conn.query('SELECT duration_months FROM training_courses WHERE id = ?', [lookupId]);
+        if (courses.length > 0) {
+          endDate = addMonthsToDate(startDate, courses[0].duration_months);
+        }
+      }
+    }
+
     const [result] = await conn.query(
       `UPDATE tuition_profiles SET
-        student_code=?, user_id=?, fullname=?, subject=?, class_id=?, class_label=?,
+        student_code=?, user_id=?, fullname=?, subject=?, course_id=?, class_id=?, class_label=?,
         enrichment_class=?, current_class=?, phone=?, zalo=?,
         base_fee=?, fee_before_discount=?, fee_after_discount=?, book_fee=?,
-        discount_id=?, discount_reason=?
+        discount_id=?, discount_reason=?, start_date=?, end_date=?
        WHERE id=?`,
       [
-        student_code, userId, fullname, subject, classId, class_label || null,
+        student_code, userId, fullname, subject, courseId, classId, class_label || null,
         enrichment_class || null, current_class || null, phone || null, zalo || null,
         parseAmount(base_fee), parseAmount(fee_before_discount), parseAmount(fee_after_discount),
         parseAmount(book_fee), discount_id || null, discount_reason || null,
+        startDate, endDate,
         req.params.id,
       ]
     );

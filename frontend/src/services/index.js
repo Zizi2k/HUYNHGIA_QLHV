@@ -118,3 +118,15 @@ export const tuitionService = {
     responseType: 'blob',
   }),
 };
+
+export const studentService = {
+  getCourses: (params) => api.get('/students/courses', { params }),
+  createCourse: (data) => api.post('/students/courses', data),
+  updateCourse: (id, data) => api.put(`/students/courses/${id}`, data),
+  deleteCourse: (id) => api.delete(`/students/courses/${id}`),
+
+  getOverview: (params) => api.get('/students/overview', { params }),
+  getNextCode: (subject) => api.get('/students/next-code', { params: { subject } }),
+  createEnrollment: (data) => api.post('/students/enroll', data),
+  updateEnrollment: (id, data) => api.put(`/students/enroll/${id}`, data),
+};

@@ -1,4 +1,5 @@
 import { Modal, Form, Button, Alert, Spinner, Row, Col } from 'react-bootstrap';
+import { calcEndDate, formatDateVi } from '../students/studentConstants';
 
 const emptyStudentFields = {
   code: '',
@@ -8,6 +9,8 @@ const emptyStudentFields = {
 };
 
 const emptyTuitionFields = {
+  course_id: '',
+  start_date: new Date().toISOString().slice(0, 10),
   enrichment_class: '',
   current_class: '',
   base_fee: '',
@@ -28,9 +31,12 @@ export default function AddStudentModal({
   error,
   form,
   discounts,
+  courses = [],
   onChange,
   onSubmit,
 }) {
+  const selectedCourse = courses.find((c) => String(c.id) === String(form.course_id));
+  const endDatePreview = calcEndDate(form.start_date, selectedCourse?.duration_months);
   return (
     <Modal show={show} onHide={onHide} size={isAdmin ? 'lg' : undefined} className={isAdmin ? 'scrollable-form-modal' : ''}>
       <Modal.Header closeButton>
@@ -92,6 +98,48 @@ export default function AddStudentModal({
               {isAdmin && (
                 <>
                   <hr className="my-4" />
+                  <h6 className="fw-bold mb-3">Khóa học & thời hạn</h6>
+                  <Row className="g-3 mb-3">
+                    <Col md={6}>
+                      <Form.Group>
+                        <Form.Label>Khóa học <span className="text-danger">*</span></Form.Label>
+                        <Form.Select
+                          value={form.course_id}
+                          onChange={(e) => onChange('course_id', e.target.value)}
+                          required
+                        >
+                          <option value="">— Chọn khóa —</option>
+                          {courses.map((c) => (
+                            <option key={c.id} value={c.id}>
+                              {c.name} ({c.duration_months} tháng)
+                            </option>
+                          ))}
+                        </Form.Select>
+                      </Form.Group>
+                    </Col>
+                    <Col md={3}>
+                      <Form.Group>
+                        <Form.Label>Ngày bắt đầu <span className="text-danger">*</span></Form.Label>
+                        <Form.Control
+                          type="date"
+                          value={form.start_date}
+                          onChange={(e) => onChange('start_date', e.target.value)}
+                          required
+                        />
+                      </Form.Group>
+                    </Col>
+                    <Col md={3}>
+                      <Form.Group>
+                        <Form.Label>Ngày kết thúc</Form.Label>
+                        <Form.Control
+                          value={endDatePreview ? formatDateVi(endDatePreview) : '—'}
+                          readOnly
+                          className="bg-light"
+                        />
+                      </Form.Group>
+                    </Col>
+                  </Row>
+
                   <h6 className="fw-bold mb-3">Thông tin học phí</h6>
                   <Row className="g-3">
                     <Col md={6}>

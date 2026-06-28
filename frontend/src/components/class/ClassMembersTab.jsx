@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Modal, Form, Button, Alert, Spinner, InputGroup, ListGroup, Badge,
 } from 'react-bootstrap';
-import { classService, tuitionService } from '../../services';
+import { classService, tuitionService, studentService } from '../../services';
 import DataTable, { DataTableEmpty } from '../common/DataTable';
 import AddStudentModal, { emptyStudentFields, emptyTuitionFields } from './AddStudentModal';
 
@@ -36,6 +36,7 @@ export default function ClassMembersTab({ classId, className, members, isTeacher
   const [error, setError] = useState('');
   const [importResult, setImportResult] = useState(null);
   const [discounts, setDiscounts] = useState([]);
+  const [courses, setCourses] = useState([]);
   const [subjectLabel, setSubjectLabel] = useState('');
 
   const students = members?.filter((m) => m.role === 'student') || [];
@@ -61,10 +62,22 @@ export default function ClassMembersTab({ classId, className, members, isTeacher
       const [codeRes, discountRes] = await Promise.all(requests);
       setDiscounts(discountRes?.data || []);
       setSubjectLabel(codeRes.data.subject_label || '');
+
+      if (isAdmin && codeRes.data.subject) {
+        const courseRes = await studentService.getCourses({
+          subject: codeRes.data.subject,
+          active_only: '1',
+        });
+        setCourses(courseRes.data);
+      } else {
+        setCourses([]);
+      }
+
       setForm({
         ...emptyForm,
         code: codeRes.data.next_code,
         current_class: className || codeRes.data.class_label || '',
+        start_date: new Date().toISOString().slice(0, 10),
       });
     } catch (err) {
       setShowAddModal(false);
@@ -124,6 +137,8 @@ export default function ClassMembersTab({ classId, className, members, isTeacher
       };
       if (isAdmin) {
         payload.tuition = {
+          course_id: form.course_id,
+          start_date: form.start_date,
           enrichment_class: form.enrichment_class,
           current_class: form.current_class,
           base_fee: form.base_fee,
@@ -488,6 +503,7 @@ export default function ClassMembersTab({ classId, className, members, isTeacher
         error={error}
         form={form}
         discounts={discounts}
+        courses={courses}
         onChange={(field, value) => setForm((prev) => ({ ...prev, [field]: value }))}
         onSubmit={handleAdd}
       />

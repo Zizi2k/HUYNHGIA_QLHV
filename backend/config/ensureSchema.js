@@ -88,6 +88,45 @@ async function ensureSchema() {
   } catch (err) {
     if (err.code !== 'ER_DUP_FIELDNAME') throw err;
   }
+
+  await pool.query(`CREATE TABLE IF NOT EXISTS training_courses (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    name VARCHAR(100) NOT NULL,
+    subject ENUM('chinese', 'english', 'computer', 'vietnamese') NOT NULL,
+    duration_months INT NOT NULL DEFAULT 3,
+    description TEXT,
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  )`);
+
+  for (const col of ['course_id INT NULL', 'start_date DATE NULL', 'end_date DATE NULL']) {
+    try {
+      await pool.query(`ALTER TABLE tuition_profiles ADD COLUMN ${col}`);
+    } catch (err) {
+      if (err.code !== 'ER_DUP_FIELDNAME') throw err;
+    }
+  }
+
+  try {
+    await pool.query(
+      `ALTER TABLE tuition_profiles ADD CONSTRAINT fk_tuition_course
+       FOREIGN KEY (course_id) REFERENCES training_courses(id) ON DELETE SET NULL`
+    );
+  } catch (err) {
+    if (err.code !== 'ER_DUP_FIELDNAME' && err.code !== 'ER_FK_DUP_NAME') throw err;
+  }
+
+  const [courseCount] = await pool.query('SELECT COUNT(*) AS c FROM training_courses');
+  if (courseCount[0].c === 0) {
+    await pool.query(
+      `INSERT INTO training_courses (name, subject, duration_months, description) VALUES
+       ('Khóa 3 tháng - Tiếng Anh', 'english', 3, 'Khóa học Tiếng Anh 3 tháng'),
+       ('Khóa 6 tháng - Tiếng Anh', 'english', 6, 'Khóa học Tiếng Anh 6 tháng'),
+       ('Khóa 3 tháng - Tiếng Trung', 'chinese', 3, 'Khóa học Tiếng Trung 3 tháng'),
+       ('Khóa 3 tháng - Tin học', 'computer', 3, 'Khóa học Tin học 3 tháng'),
+       ('Khóa 3 tháng - Tiếng Việt', 'vietnamese', 3, 'Khóa học Tiếng Việt 3 tháng')`
+    );
+  }
 }
 
 module.exports = { ensureSchema };

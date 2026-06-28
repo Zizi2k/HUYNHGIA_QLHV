@@ -5,6 +5,8 @@ const {
 const { assertClassAccess, isClassTeacher } = require('../middleware/classAccess');
 const { parseAmount, SUBJECTS } = require('../utils/tuitionHelpers');
 const { getNextStudentCode, inferSubjectFromClassName } = require('../utils/studentCode');
+const { addMonthsToDate } = require('../utils/dateHelpers');
+const { insertTuitionProfile } = require('../utils/tuitionProfileDb');
 
 async function getClassRow(conn, classId) {
   const [classes] = await conn.query('SELECT * FROM classes WHERE id = ?', [classId]);
@@ -36,37 +38,6 @@ function validateTuitionFields(tuition = {}) {
     return 'Vui lòng nhập lý do giảm khi chọn mức giảm';
   }
   return null;
-}
-
-async function insertTuitionProfile(conn, {
-  studentCode, userId, fullname, subject, classId, classLabel,
-  phone, zalo, tuition,
-}) {
-  await conn.query(
-    `INSERT INTO tuition_profiles
-     (student_code, user_id, fullname, subject, class_id, class_label, enrichment_class,
-      current_class, phone, zalo, base_fee, fee_before_discount, fee_after_discount,
-      book_fee, discount_id, discount_reason)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [
-      studentCode.trim(),
-      userId,
-      fullname.trim(),
-      subject,
-      classId,
-      classLabel || null,
-      tuition.enrichment_class?.trim() || null,
-      tuition.current_class?.trim() || null,
-      phone?.trim() || null,
-      zalo?.trim() || null,
-      parseAmount(tuition.base_fee),
-      parseAmount(tuition.fee_before_discount),
-      parseAmount(tuition.fee_after_discount),
-      parseAmount(tuition.book_fee),
-      tuition.discount_id || null,
-      tuition.discount_reason?.trim() || null,
-    ]
-  );
 }
 
 const getClasses = async (req, res) => {
@@ -255,6 +226,12 @@ const createStudentMember = async (req, res) => {
       if (tuitionError) {
         return res.status(400).json({ message: tuitionError });
       }
+      if (!tuition?.course_id) {
+        return res.status(400).json({ message: 'Vui lòng chọn khóa học' });
+      }
+      if (!tuition?.start_date) {
+        return res.status(400).json({ message: 'Vui lòng nhập ngày bắt đầu' });
+      }
     }
 
     if (!code?.trim()) {
@@ -304,6 +281,20 @@ const createStudentMember = async (req, res) => {
     ]);
 
     if (isAdmin) {
+      const [courses] = await conn.query(
+        'SELECT * FROM training_courses WHERE id = ? AND is_active = TRUE',
+        [tuition.course_id]
+      );
+      if (courses.length === 0) {
+        await conn.rollback();
+        return res.status(404).json({ message: 'Không tìm thấy khóa học' });
+      }
+      if (courses[0].subject !== subject) {
+        await conn.rollback();
+        return res.status(400).json({ message: 'Khóa học không thuộc môn của lớp' });
+      }
+      const endDate = addMonthsToDate(tuition.start_date, courses[0].duration_months);
+
       const [dupProfile] = await conn.query(
         'SELECT id FROM tuition_profiles WHERE student_code = ? AND subject = ?',
         [code.trim(), subject]
@@ -323,6 +314,9 @@ const createStudentMember = async (req, res) => {
         phone: phone?.trim() || null,
         zalo: zalo?.trim() || null,
         tuition: tuition || {},
+        courseId: tuition.course_id,
+        startDate: tuition.start_date,
+        endDate,
       });
     }
 
