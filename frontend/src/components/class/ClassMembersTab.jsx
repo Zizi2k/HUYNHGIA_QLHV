@@ -547,8 +547,21 @@ export default function ClassMembersTab({ classId, className, members, isTeacher
           <Modal.Body>
             {error && <Alert variant="danger" className="py-2">{error}</Alert>}
             {importResult && (
-              <Alert variant="success" className="py-2">
+              <Alert variant={importResult.tuition_failed ? 'warning' : 'success'} className="py-2">
                 <div>{importResult.message}</div>
+                {(importResult.tuition_created > 0 || importResult.tuition_updated > 0) && (
+                  <div className="small mt-1">
+                    Học phí: {importResult.tuition_created || 0} mới, {importResult.tuition_updated || 0} cập nhật
+                  </div>
+                )}
+                {importResult.tuition_errors?.length > 0 && (
+                  <ul className="mb-0 mt-2 small text-danger">
+                    <li className="fw-semibold">Lỗi học phí (học viên vẫn được thêm vào lớp):</li>
+                    {importResult.tuition_errors.map((e) => (
+                      <li key={`tuition-${e.row}-${e.message}`}>Dòng {e.row}: {e.message}</li>
+                    ))}
+                  </ul>
+                )}
                 {importResult.errors?.length > 0 && (
                   <ul className="mb-0 mt-2 small">
                     {importResult.errors.map((e) => (

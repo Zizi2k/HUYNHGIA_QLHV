@@ -3,7 +3,7 @@ const pool = require('../config/db');
 const { buildStudentUsername, extractStudentNumber, ensureUniqueUsername, regenerateClassUsernames } = require('../utils/username');
 const { assertStudentCodeInScope } = require('../utils/adminScope');
 const { normalizeHeader, parseAmount, resolveTuitionAmounts } = require('../utils/tuitionHelpers');
-const { inferSubjectFromClassName } = require('../utils/studentCode');
+const { inferSubjectFromClassName, parseStudentCode, inferSubjectFromCodePrefix } = require('../utils/studentCode');
 const { addMonthsToDate } = require('../utils/dateHelpers');
 const { insertTuitionProfile } = require('../utils/tuitionProfileDb');
 
@@ -48,15 +48,39 @@ function resolveClassSubject(classRow) {
   return inferSubjectFromClassName(classRow?.name || '');
 }
 
+function parseCellValue(value) {
+  if (value === null || value === undefined || value === '') return '';
+  if (value instanceof Date) {
+    return value.toISOString().slice(0, 10);
+  }
+  if (typeof value === 'number') {
+    if (value > 30000 && value < 70000 && XLSX.SSF?.parse_date_code) {
+      const dc = XLSX.SSF.parse_date_code(value);
+      if (dc) {
+        return `${dc.y}-${String(dc.m).padStart(2, '0')}-${String(dc.d).padStart(2, '0')}`;
+      }
+    }
+  }
+  return String(value).trim();
+}
+
+function resolveRowSubject(classRow, studentCode) {
+  const fromClass = resolveClassSubject(classRow);
+  if (fromClass) return fromClass;
+  const parsed = parseStudentCode(studentCode);
+  if (!parsed) return null;
+  return inferSubjectFromCodePrefix(parsed.prefix);
+}
+
 function toUsernameFromName(fullname, code, username, fallbackOrdinal) {
   const studentNumber = extractStudentNumber(code, username, fallbackOrdinal);
   return buildStudentUsername(fullname, studentNumber);
 }
 
 function parseSheet(filePath) {
-  const workbook = XLSX.readFile(filePath);
+  const workbook = XLSX.readFile(filePath, { cellDates: true });
   const sheet = workbook.Sheets[workbook.SheetNames[0]];
-  const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
+  const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '', raw: false });
   if (rows.length < 2) return [];
 
   const headerRow = rows[0];
@@ -73,11 +97,12 @@ function parseSheet(filePath) {
   return rows.slice(1).map((row, index) => {
     const get = (key) => {
       const idx = colMap[key];
-      return idx === undefined ? '' : String(row[idx] ?? '').trim();
+      return idx === undefined ? '' : parseCellValue(row[idx]);
     };
+    const code = get('code').toUpperCase();
     return {
       rowNumber: index + 2,
-      code: get('code'),
+      code,
       fullname: get('fullname'),
       classCode: get('classCode'),
       phone: get('phone'),
@@ -109,7 +134,6 @@ function validateTuitionRow(row) {
     ['start_date', 'ngày bắt đầu'],
     ['base_fee', 'học phí ban đầu'],
     ['fee_before_discount', 'học phí trước giảm'],
-    ['fee_after_discount', 'học phí sau giảm'],
     ['book_fee', 'phí sách'],
   ];
   for (const [field, label] of required) {
@@ -121,10 +145,29 @@ function validateTuitionRow(row) {
       return `${label} không hợp lệ`;
     }
   }
+  if (!row.fee_after_discount && !row.discount_name && !row.fee_before_discount) {
+    return 'Vui lòng nhập học phí sau giảm';
+  }
   if (row.discount_name && !String(row.discount_reason || '').trim()) {
     return 'Vui lòng nhập lý do giảm khi chọn mức giảm';
   }
   return null;
+}
+
+async function normalizeTuitionRow(conn, row) {
+  if (!row.fee_after_discount && row.fee_before_discount) {
+    row.fee_after_discount = row.fee_before_discount;
+  }
+  if (row.discount_name) {
+    const discountId = await lookupDiscount(conn, row.discount_name);
+    if (discountId) {
+      const { feeAfter } = await resolveTuitionAmounts(conn, {
+        fee_before_discount: row.fee_before_discount,
+        discount_id: discountId,
+      });
+      row.fee_after_discount = String(feeAfter);
+    }
+  }
 }
 
 async function matchClass(classId, classCode, currentClass) {
@@ -152,13 +195,20 @@ async function lookupDiscount(conn, name) {
 
 async function lookupCourse(conn, name, subject) {
   if (!name) return null;
-  const [rows] = await conn.query(
-    'SELECT id, duration_months, subject FROM training_courses WHERE name = ? AND is_active = TRUE LIMIT 1',
-    [name]
+  const trimmed = name.trim();
+  let [rows] = await conn.query(
+    'SELECT id, duration_months, subject, name FROM training_courses WHERE TRIM(name) = ? AND is_active = TRUE LIMIT 1',
+    [trimmed]
   );
+  if (rows.length === 0) {
+    [rows] = await conn.query(
+      'SELECT id, duration_months, subject, name FROM training_courses WHERE name LIKE ? AND is_active = TRUE LIMIT 1',
+      [`%${trimmed}%`]
+    );
+  }
   if (rows.length === 0) return null;
   if (subject && rows[0].subject !== subject) {
-    throw new Error(`Khóa học "${name}" không thuộc môn của lớp`);
+    throw new Error(`Khóa học "${name}" không thuộc môn của lớp (${subject})`);
   }
   return rows[0];
 }
@@ -166,6 +216,11 @@ async function lookupCourse(conn, name, subject) {
 async function upsertTuitionFromImport(conn, {
   row, userId, studentCode, fullname, classRow, subject,
 }) {
+  if (!subject) {
+    throw new Error('Không xác định được môn học. Gán môn cho lớp hoặc dùng mã HV đúng định dạng (VD: EGTA0001)');
+  }
+
+  await normalizeTuitionRow(conn, row);
   const tuitionError = validateTuitionRow(row);
   if (tuitionError) throw new Error(tuitionError);
 
@@ -249,7 +304,6 @@ const importStudents = async (req, res) => {
       return res.status(404).json({ message: 'Không tìm thấy lớp học' });
     }
     const currentClass = classes[0];
-    const subject = resolveClassSubject(currentClass);
 
     const rows = parseSheet(req.file.path);
     if (rows.length === 0) {
@@ -257,7 +311,14 @@ const importStudents = async (req, res) => {
     }
 
     const results = {
-      imported: 0, updated: 0, skipped: 0, tuition_created: 0, tuition_updated: 0, errors: [],
+      imported: 0,
+      updated: 0,
+      skipped: 0,
+      tuition_created: 0,
+      tuition_updated: 0,
+      tuition_failed: 0,
+      errors: [],
+      tuition_errors: [],
     };
     const pendingUserIds = [];
 
@@ -277,12 +338,6 @@ const importStudents = async (req, res) => {
           assertStudentCodeInScope(req.user, row.code);
         } catch (scopeErr) {
           results.errors.push({ row: row.rowNumber, message: scopeErr.message });
-          results.skipped++;
-          continue;
-        }
-
-        if (isAdmin && hasTuitionData(row) && !subject) {
-          results.errors.push({ row: row.rowNumber, message: 'Lớp chưa gán môn học, không thể import học phí' });
           results.skipped++;
           continue;
         }
@@ -325,16 +380,22 @@ const importStudents = async (req, res) => {
         }
 
         if (isAdmin && hasTuitionData(row)) {
-          const tuitionResult = await upsertTuitionFromImport(conn, {
-            row,
-            userId,
-            studentCode: row.code,
-            fullname: row.fullname,
-            classRow: currentClass,
-            subject,
-          });
-          if (tuitionResult === 'created') results.tuition_created++;
-          else results.tuition_updated++;
+          const rowSubject = resolveRowSubject(currentClass, row.code);
+          try {
+            const tuitionResult = await upsertTuitionFromImport(conn, {
+              row,
+              userId,
+              studentCode: row.code,
+              fullname: row.fullname,
+              classRow: currentClass,
+              subject: rowSubject,
+            });
+            if (tuitionResult === 'created') results.tuition_created++;
+            else results.tuition_updated++;
+          } catch (tuitionErr) {
+            results.tuition_errors.push({ row: row.rowNumber, message: tuitionErr.message });
+            results.tuition_failed++;
+          }
         }
 
         pendingUserIds.push(userId);
@@ -351,9 +412,12 @@ const importStudents = async (req, res) => {
     const tuitionMsg = isAdmin && (results.tuition_created || results.tuition_updated)
       ? `, học phí: ${results.tuition_created} mới / ${results.tuition_updated} cập nhật`
       : '';
+    const tuitionFailMsg = results.tuition_failed
+      ? ` (${results.tuition_failed} dòng học phí lỗi — xem chi tiết bên dưới)`
+      : '';
 
     res.json({
-      message: `Import thành công: ${results.imported} học viên mới, ${results.updated} cập nhật${tuitionMsg}`,
+      message: `Import thành công: ${results.imported} học viên mới, ${results.updated} cập nhật${tuitionMsg}${tuitionFailMsg}`,
       ...results,
     });
   } catch (err) {
