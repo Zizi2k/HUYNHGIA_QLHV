@@ -5,8 +5,6 @@ import { useAuth } from '../../context/AuthContext';
 import UserAvatar from '../UserAvatar';
 import ProfileModal from '../ProfileModal';
 
-const roleLabels = { admin: 'Quản trị viên', teacher: 'Giáo viên', student: 'Học sinh' };
-
 export default function Topbar({ onToggleSidebar, onToggleMobile }) {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
@@ -45,7 +43,6 @@ export default function Topbar({ onToggleSidebar, onToggleMobile }) {
               <UserAvatar user={user} size={36} />
               <div className="app-topbar-user-info d-none d-sm-block">
                 <span className="app-topbar-user-name">{user?.fullname}</span>
-                <span className="app-topbar-user-role">{roleLabels[user?.role]}</span>
               </div>
               <i className="bi bi-chevron-down app-topbar-chevron d-none d-sm-inline" />
             </Dropdown.Toggle>
