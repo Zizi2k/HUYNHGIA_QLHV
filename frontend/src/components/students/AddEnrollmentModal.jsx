@@ -2,11 +2,13 @@ import { useEffect, useMemo, useState } from 'react';
 import {
   Modal, Form, Button, Alert, Spinner, Row, Col,
 } from 'react-bootstrap';
+import { useAuth } from '../../context/AuthContext';
 import { studentService, tuitionService } from '../../services';
 import {
   SUBJECT_OPTIONS, CODE_PREFIX_OPTIONS, calcEndDate, formatDateVi, todayDateValue,
 } from './studentConstants';
 import { applyTuitionFieldChange, isFeeAfterAutoCalculated } from '../tuition/tuitionDiscountCalc';
+import { lockedCodePrefix, isScopedAdmin } from '../../utils/adminScope';
 
 const emptyTuition = {
   enrichment_class: '',
@@ -40,6 +42,10 @@ export default function AddEnrollmentModal({
   courses,
   editStudent,
 }) {
+  const { user } = useAuth();
+  const forcedPrefix = lockedCodePrefix(user);
+  const prefixLocked = isScopedAdmin(user);
+
   const [form, setForm] = useState(emptyForm);
   const [discounts, setDiscounts] = useState([]);
   const [loadingMeta, setLoadingMeta] = useState(false);
@@ -96,11 +102,12 @@ export default function AddEnrollmentModal({
       return;
     }
 
-    setForm({ ...emptyForm });
+    setForm({ ...emptyForm, code_prefix: forcedPrefix || 'HG' });
     setLoadingMeta(true);
+    const initialPrefix = forcedPrefix || 'HG';
     Promise.all([
       tuitionService.getDiscounts(),
-      studentService.getNextCode('english', 'HG'),
+      studentService.getNextCode('english', initialPrefix),
     ])
       .then(([discountRes, codeRes]) => {
         setDiscounts(discountRes.data);
@@ -108,12 +115,12 @@ export default function AddEnrollmentModal({
           ...prev,
           code: codeRes.data.next_code,
           subject: codeRes.data.subject,
-          code_prefix: 'HG',
+          code_prefix: initialPrefix,
         }));
       })
       .catch(() => setError('Không thể tải dữ liệu ban đầu'))
       .finally(() => setLoadingMeta(false));
-  }, [show, editStudent]);
+  }, [show, editStudent, forcedPrefix]);
 
   const loadNextCode = async (subject, codePrefix = form.code_prefix) => {
     try {
@@ -286,7 +293,7 @@ export default function AddEnrollmentModal({
                     <Form.Select
                       value={form.code_prefix}
                       onChange={(e) => handlePrefixChange(e.target.value)}
-                      disabled={isEdit}
+                      disabled={isEdit || prefixLocked}
                     >
                       {CODE_PREFIX_OPTIONS.filter((p) => p.value).map((p) => (
                         <option key={p.value} value={p.value}>{p.label}</option>

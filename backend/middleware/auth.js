@@ -23,4 +23,12 @@ const authorize = (...roles) => (req, res, next) => {
   next();
 };
 
-module.exports = { authenticate, authorize };
+const requireSuperAdmin = (req, res, next) => {
+  const { isSuperAdmin } = require('../utils/adminScope');
+  if (!isSuperAdmin(req.user)) {
+    return res.status(403).json({ message: 'Chỉ admin tối cao mới có quyền này' });
+  }
+  next();
+};
+
+module.exports = { authenticate, authorize, requireSuperAdmin };

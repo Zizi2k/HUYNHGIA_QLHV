@@ -1,5 +1,6 @@
 import { NavLink } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
+import { isSuperAdmin } from '../../utils/adminScope';
 
 function NavItem({ to, icon, label, end = false }) {
   return (
@@ -19,6 +20,7 @@ function NavItem({ to, icon, label, end = false }) {
 export default function Sidebar({ collapsed, mobileOpen, onNavigate }) {
   const { user } = useAuth();
   const isAdmin = user?.role === 'admin';
+  const isSuper = isSuperAdmin(user);
   const isTeacherOrAdmin = user?.role === 'admin' || user?.role === 'teacher';
 
   const handleClick = () => {
@@ -52,9 +54,10 @@ export default function Sidebar({ collapsed, mobileOpen, onNavigate }) {
         {isAdmin && (
           <div className="app-sidebar-section">
             {!collapsed && <div className="app-sidebar-section-label">Quản trị</div>}
-            <NavItem to="/users" icon="people" label="Người dùng" />
+            {isSuper && <NavItem to="/admin-staff" icon="shield-lock" label="Phân quyền admin" />}
+            {isSuper && <NavItem to="/users" icon="people" label="Người dùng" />}
             <NavItem to="/students" icon="person-lines-fill" label="Quản lý học viên" />
-            <NavItem to="/audit" icon="journal-text" label="Nhật ký & duyệt" />
+            {isSuper && <NavItem to="/audit" icon="journal-text" label="Nhật ký & duyệt" />}
             <NavItem to="/tuition" icon="cash-coin" label="Học phí" />
           </div>
         )}

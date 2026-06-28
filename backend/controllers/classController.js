@@ -5,6 +5,7 @@ const {
 const { assertClassAccess, isClassTeacher } = require('../middleware/classAccess');
 const { parseAmount, SUBJECTS } = require('../utils/tuitionHelpers');
 const { getNextStudentCode, inferSubjectFromClassName, validateStudentCodeFormat } = require('../utils/studentCode');
+const { assertStudentCodeInScope, getAdminScope } = require('../utils/adminScope');
 const { addMonthsToDate } = require('../utils/dateHelpers');
 const { insertTuitionProfile } = require('../utils/tuitionProfileDb');
 const { handleDeletion } = require('../utils/deletionPolicy');
@@ -202,7 +203,8 @@ const getNextStudentCodeForClass = async (req, res) => {
     }
 
     const { prefix } = req.query;
-    const nextCode = await getNextStudentCode(conn, subject, prefix);
+    const scope = getAdminScope(req.user);
+    const nextCode = await getNextStudentCode(conn, subject, scope || prefix);
     res.json({
       next_code: nextCode,
       subject,
@@ -258,6 +260,11 @@ const createStudentMember = async (req, res) => {
       code = code.trim().toUpperCase();
       if (!validateStudentCodeFormat(code)) {
         return res.status(400).json({ message: 'Mã học viên không hợp lệ (ví dụ: HGTA0001, EGTA0001)' });
+      }
+      try {
+        assertStudentCodeInScope(req.user, code);
+      } catch (scopeErr) {
+        return res.status(scopeErr.status || 403).json({ message: scopeErr.message });
       }
     }
 

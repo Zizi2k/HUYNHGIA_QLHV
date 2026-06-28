@@ -13,6 +13,7 @@ import CourseManager from '../components/students/CourseManager';
 import {
   SUBJECT_OPTIONS, ENROLLMENT_STATUS_LABELS, CODE_PREFIX_OPTIONS, subjectLabel,
 } from '../components/students/studentConstants';
+import { isScopedAdmin, lockedCodePrefix, scopeLabel } from '../utils/adminScope';
 
 const emptySummary = { total: 0, active: 0, expiring: 0, expired: 0 };
 
@@ -35,6 +36,9 @@ export default function StudentsPage() {
   const [editStudent, setEditStudent] = useState(null);
   const [transferStudent, setTransferStudent] = useState(null);
 
+  const scopedPrefix = lockedCodePrefix(user);
+  const scopeLocked = isScopedAdmin(user);
+
   const loadMeta = () => {
     classService.getAll().then((res) => setClasses(res.data));
     studentService.getCourses({ active_only: '1' }).then((res) => setCourses(res.data));
@@ -48,6 +52,7 @@ export default function StudentsPage() {
     if (enrollmentFilter) params.enrollment_status = enrollmentFilter;
     if (search.trim()) params.search = search.trim();
     if (codePrefixFilter) params.code_prefix = codePrefixFilter;
+    else if (scopedPrefix) params.code_prefix = scopedPrefix;
 
     studentService.getOverview(params)
       .then((res) => {
@@ -60,6 +65,10 @@ export default function StudentsPage() {
       })
       .finally(() => setLoading(false));
   };
+
+  useEffect(() => {
+    if (scopedPrefix) setCodePrefixFilter(scopedPrefix);
+  }, [scopedPrefix]);
 
   useEffect(() => {
     loadMeta();
@@ -172,7 +181,7 @@ export default function StudentsPage() {
       </div>
 
       <div className="d-flex flex-wrap gap-2 mb-3">
-        {prefixCounts.map((p) => (
+        {!scopeLocked && prefixCounts.map((p) => (
           <Badge
             key={p.value}
             bg={codePrefixFilter === p.value ? 'dark' : 'light'}
@@ -188,11 +197,15 @@ export default function StudentsPage() {
 
       <Row className="g-2 mb-3">
         <Col md={2}>
-          <Form.Select value={codePrefixFilter} onChange={(e) => setCodePrefixFilter(e.target.value)}>
-            {CODE_PREFIX_OPTIONS.map((p) => (
-              <option key={p.value || 'all'} value={p.value}>{p.label}</option>
-            ))}
-          </Form.Select>
+          {scopeLocked ? (
+            <Form.Control value={scopeLabel(scopedPrefix)} readOnly className="bg-light" />
+          ) : (
+            <Form.Select value={codePrefixFilter} onChange={(e) => setCodePrefixFilter(e.target.value)}>
+              {CODE_PREFIX_OPTIONS.map((p) => (
+                <option key={p.value || 'all'} value={p.value}>{p.label}</option>
+              ))}
+            </Form.Select>
+          )}
         </Col>
         <Col md={2}>
           <Form.Select value={subjectFilter} onChange={(e) => setSubjectFilter(e.target.value)}>

@@ -19,7 +19,13 @@ const login = async (req, res) => {
 
     const user = rows[0];
     const token = jwt.sign(
-      { id: user.id, username: user.username, role: user.role, fullname: user.fullname },
+      {
+        id: user.id,
+        username: user.username,
+        role: user.role,
+        fullname: user.fullname,
+        admin_scope: user.admin_scope || (user.role === 'admin' ? 'all' : null),
+      },
       process.env.JWT_SECRET,
       { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
     );
@@ -33,6 +39,7 @@ const login = async (req, res) => {
         username: user.username,
         code: user.code,
         role: user.role,
+        admin_scope: user.admin_scope || (user.role === 'admin' ? 'all' : null),
         avatar_url: user.avatar_url || null,
       },
     });
@@ -80,7 +87,7 @@ const register = async (req, res) => {
 const getMe = async (req, res) => {
   try {
     const [rows] = await pool.query(
-      'SELECT id, fullname, username, code, role, status, avatar_url FROM users WHERE id = ?',
+      'SELECT id, fullname, username, code, role, admin_scope, status, avatar_url FROM users WHERE id = ?',
       [req.user.id]
     );
     if (rows.length === 0) return res.status(404).json({ message: 'Không tìm thấy người dùng' });
@@ -123,7 +130,7 @@ const updateProfile = async (req, res) => {
     }
 
     const [rows] = await pool.query(
-      'SELECT id, fullname, username, code, role, status, avatar_url FROM users WHERE id = ?',
+      'SELECT id, fullname, username, code, role, admin_scope, status, avatar_url FROM users WHERE id = ?',
       [req.user.id]
     );
 

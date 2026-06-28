@@ -1,7 +1,10 @@
 import { useEffect, useState } from 'react';
 import { Table, Button, Modal, Form, Spinner, Badge, Alert, Row, Col } from 'react-bootstrap';
+import { Navigate } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
 import { userService, classService } from '../services';
 import PageHeader from '../components/layout/PageHeader';
+import { isSuperAdmin } from '../utils/adminScope';
 
 const roleOptions = [
   { value: 'admin', label: 'Quản trị viên' },
@@ -46,6 +49,7 @@ function UserTableRow({ user, onEdit, onDelete, extraActions }) {
 }
 
 export default function UsersPage() {
+  const { user } = useAuth();
   const [classes, setClasses] = useState([]);
   const [classSearch, setClassSearch] = useState('');
   const [selectedClassId, setSelectedClassId] = useState('');
@@ -163,6 +167,10 @@ export default function UsersPage() {
       setAssigningId(null);
     }
   };
+
+  if (!isSuperAdmin(user)) {
+    return <Navigate to="/" replace />;
+  }
 
   if (loadingClasses) {
     return <div className="page-container text-center py-5"><Spinner animation="border" /></div>;

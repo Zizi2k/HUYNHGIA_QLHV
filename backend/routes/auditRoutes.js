@@ -1,5 +1,5 @@
 const express = require('express');
-const { authenticate, authorize } = require('../middleware/auth');
+const { authenticate, authorize, requireSuperAdmin } = require('../middleware/auth');
 const {
   getAuditLogs,
   getDeletionRequests,
@@ -12,6 +12,7 @@ const router = express.Router();
 
 router.use(authenticate);
 router.use(authorize('admin'));
+router.use(requireSuperAdmin);
 
 router.get('/logs', getAuditLogs);
 router.get('/deletion-requests', getDeletionRequests);

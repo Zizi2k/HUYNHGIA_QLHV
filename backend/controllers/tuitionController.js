@@ -3,6 +3,11 @@ const { enrichProfile, parseAmount, SUBJECTS, resolveTuitionAmounts } = require(
 const { PROFILE_SELECT } = require('../utils/tuitionProfileDb');
 const { addMonthsToDate } = require('../utils/dateHelpers');
 const { logAction } = require('../utils/auditLog');
+const {
+  appendStudentCodeScopeSql,
+  assertStudentCodeInScope,
+  resolveCodePrefixFilter,
+} = require('../utils/adminScope');
 
 async function linkUserAndClass(conn, studentCode, classLabel) {
   let userId = null;
@@ -46,7 +51,7 @@ async function fetchPaymentsForProfiles(profileIds) {
 
 const getProfiles = async (req, res) => {
   try {
-    const { subject, class_id, search, status } = req.query;
+    const { subject, class_id, search, status, code_prefix } = req.query;
     let sql = `${PROFILE_SELECT} WHERE 1=1`;
     const params = [];
 
@@ -62,6 +67,17 @@ const getProfiles = async (req, res) => {
       sql += ' AND (tp.student_code LIKE ? OR tp.fullname LIKE ? OR tp.phone LIKE ? OR tp.zalo LIKE ?)';
       const q = `%${search.trim()}%`;
       params.push(q, q, q, q);
+    }
+    if (code_prefix?.trim()) {
+      const effectivePrefix = resolveCodePrefixFilter(req.user, code_prefix);
+      if (effectivePrefix) {
+        sql += ' AND UPPER(tp.student_code) LIKE ?';
+        params.push(`${effectivePrefix}%`);
+      }
+    } else {
+      const scopeFilter = appendStudentCodeScopeSql(req.user);
+      sql += scopeFilter.sql;
+      params.push(...scopeFilter.params);
     }
     sql += ' ORDER BY tp.subject, tp.fullname';
 
@@ -89,6 +105,12 @@ const getProfileById = async (req, res) => {
     const [rows] = await pool.query(`${PROFILE_SELECT} WHERE tp.id = ?`, [req.params.id]);
     if (rows.length === 0) return res.status(404).json({ message: 'Không tìm thấy hồ sơ' });
 
+    try {
+      assertStudentCodeInScope(req.user, rows[0].student_code);
+    } catch (scopeErr) {
+      return res.status(scopeErr.status || 403).json({ message: scopeErr.message });
+    }
+
     const paymentMap = await fetchPaymentsForProfiles([rows[0].id]);
     const enriched = enrichProfile(rows[0], paymentMap[rows[0].id] || []);
     res.json({
@@ -114,6 +136,11 @@ const createProfile = async (req, res) => {
     }
     if (!SUBJECTS[subject]) {
       return res.status(400).json({ message: 'Môn học không hợp lệ' });
+    }
+    try {
+      assertStudentCodeInScope(req.user, student_code);
+    } catch (scopeErr) {
+      return res.status(scopeErr.status || 403).json({ message: scopeErr.message });
     }
 
     const { userId, classId } = await linkUserAndClass(conn, student_code, class_label);
@@ -186,9 +213,19 @@ const updateProfile = async (req, res) => {
       discount_id,
     });
 
-    const [existing] = await conn.query('SELECT course_id, start_date, end_date FROM tuition_profiles WHERE id = ?', [
+    const [existing] = await conn.query('SELECT course_id, start_date, end_date, student_code FROM tuition_profiles WHERE id = ?', [
       req.params.id,
     ]);
+    if (existing.length === 0) {
+      return res.status(404).json({ message: 'Không tìm thấy hồ sơ' });
+    }
+    try {
+      assertStudentCodeInScope(req.user, existing[0].student_code);
+      assertStudentCodeInScope(req.user, student_code);
+    } catch (scopeErr) {
+      return res.status(scopeErr.status || 403).json({ message: scopeErr.message });
+    }
+
     let courseId = course_id ?? existing[0]?.course_id ?? null;
     let startDate = start_date ?? existing[0]?.start_date ?? null;
     let endDate = existing[0]?.end_date ?? null;

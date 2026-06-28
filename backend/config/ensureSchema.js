@@ -176,6 +176,19 @@ async function ensureSchema() {
     INDEX idx_deletion_requester (requested_by),
     INDEX idx_deletion_resource (resource_type, resource_id)
   )`);
+
+  try {
+    await pool.query(
+      `ALTER TABLE users ADD COLUMN admin_scope ENUM('all', 'HG', 'EG') NULL DEFAULT NULL`
+    );
+  } catch (err) {
+    if (err.code !== 'ER_DUP_FIELDNAME') throw err;
+  }
+
+  await pool.query(
+    `UPDATE users SET admin_scope = 'all' WHERE role = 'admin' AND (admin_scope IS NULL OR admin_scope = '')`
+  ).catch(() => {});
+
   } catch (err) {
     console.warn('ensureSchema:', err.message);
   }

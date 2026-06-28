@@ -3,6 +3,7 @@ import { Dropdown, Badge } from 'react-bootstrap';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { auditService } from '../../services';
+import { isSuperAdmin, scopeLabel, getAdminScope } from '../../utils/adminScope';
 import UserAvatar from '../UserAvatar';
 import ProfileModal from '../ProfileModal';
 
@@ -12,9 +13,11 @@ export default function Topbar({ onToggleSidebar, onToggleMobile }) {
   const [showProfile, setShowProfile] = useState(false);
   const [pendingDeletes, setPendingDeletes] = useState(0);
   const isAdmin = user?.role === 'admin';
+  const isSuper = isSuperAdmin(user);
+  const adminScope = getAdminScope(user);
 
   useEffect(() => {
-    if (!isAdmin) return undefined;
+    if (!isSuper) return undefined;
     const load = () => {
       auditService.getPendingCount()
         .then((res) => setPendingDeletes(res.data.count || 0))
@@ -23,7 +26,7 @@ export default function Topbar({ onToggleSidebar, onToggleMobile }) {
     load();
     const timer = setInterval(load, 60000);
     return () => clearInterval(timer);
-  }, [isAdmin]);
+  }, [isSuper]);
 
   const handleLogout = () => {
     logout();
@@ -53,7 +56,12 @@ export default function Topbar({ onToggleSidebar, onToggleMobile }) {
         </div>
 
         <div className="app-topbar-right">
-          {isAdmin && (
+          {adminScope && (
+            <Badge bg={adminScope === 'HG' ? 'primary' : 'success'} className="me-2">
+              {scopeLabel(adminScope)}
+            </Badge>
+          )}
+          {isSuper && (
             <Link
               to="/audit"
               className="app-topbar-btn position-relative text-decoration-none"

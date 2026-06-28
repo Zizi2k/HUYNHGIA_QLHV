@@ -7,6 +7,12 @@ const { getNextStudentCode, inferSubjectFromClassName, validateStudentCodeFormat
 const { addMonthsToDate, getEnrollmentStatus } = require('../utils/dateHelpers');
 const { PROFILE_SELECT, insertTuitionProfile } = require('../utils/tuitionProfileDb');
 const { logAction } = require('../utils/auditLog');
+const {
+  resolveCodePrefixFilter,
+  appendStudentCodeScopeSql,
+  assertStudentCodeInScope,
+  getAdminScope,
+} = require('../utils/adminScope');
 
 function resolveClassSubject(classRow) {
   if (classRow?.subject) return classRow.subject;
@@ -69,8 +75,15 @@ const getOverview = async (req, res) => {
       params.push(q, q, q);
     }
     if (code_prefix?.trim()) {
-      sql += ' AND UPPER(tp.student_code) LIKE ?';
-      params.push(`${code_prefix.trim().toUpperCase()}%`);
+      const effectivePrefix = resolveCodePrefixFilter(req.user, code_prefix);
+      if (effectivePrefix) {
+        sql += ' AND UPPER(tp.student_code) LIKE ?';
+        params.push(`${effectivePrefix}%`);
+      }
+    } else {
+      const scopeFilter = appendStudentCodeScopeSql(req.user);
+      sql += scopeFilter.sql;
+      params.push(...scopeFilter.params);
     }
     sql += ' ORDER BY tp.subject, tp.start_date DESC, tp.fullname';
 
@@ -113,7 +126,8 @@ const getNextCode = async (req, res) => {
     if (!subject || !SUBJECTS[subject]) {
       return res.status(400).json({ message: 'Môn học không hợp lệ' });
     }
-    const nextCode = await getNextStudentCode(conn, subject, prefix);
+    const scope = getAdminScope(req.user);
+    const nextCode = await getNextStudentCode(conn, subject, scope || prefix);
     res.json({
       next_code: nextCode,
       subject,
@@ -188,6 +202,11 @@ const createEnrollment = async (req, res) => {
     }
     if (!validateStudentCodeFormat(studentCode)) {
       return res.status(400).json({ message: 'Mã học viên không hợp lệ (ví dụ: HGTA0001, EGTA0001)' });
+    }
+    try {
+      assertStudentCodeInScope(req.user, studentCode);
+    } catch (scopeErr) {
+      return res.status(scopeErr.status || 403).json({ message: scopeErr.message });
     }
 
     await conn.beginTransaction();
@@ -292,6 +311,11 @@ const updateEnrollment = async (req, res) => {
       return res.status(404).json({ message: 'Không tìm thấy hồ sơ học viên' });
     }
     const profile = profiles[0];
+    try {
+      assertStudentCodeInScope(req.user, profile.student_code);
+    } catch (scopeErr) {
+      return res.status(scopeErr.status || 403).json({ message: scopeErr.message });
+    }
 
     let endDate = profile.end_date;
     let courseId = profile.course_id;
@@ -330,6 +354,12 @@ const updateEnrollment = async (req, res) => {
       if (!validateStudentCodeFormat(newCodeRaw)) {
         await conn.rollback();
         return res.status(400).json({ message: 'Mã học viên không hợp lệ (ví dụ: HGTA0001, EGTA0001)' });
+      }
+      try {
+        assertStudentCodeInScope(req.user, newCodeRaw);
+      } catch (scopeErr) {
+        await conn.rollback();
+        return res.status(scopeErr.status || 403).json({ message: scopeErr.message });
       }
 
       const [dupUser] = profile.user_id
@@ -484,6 +514,11 @@ const transferStudent = async (req, res) => {
       return res.status(404).json({ message: 'Không tìm thấy học viên' });
     }
     const profile = profiles[0];
+    try {
+      assertStudentCodeInScope(req.user, profile.student_code);
+    } catch (scopeErr) {
+      return res.status(scopeErr.status || 403).json({ message: scopeErr.message });
+    }
 
     if (!profile.user_id) {
       return res.status(400).json({ message: 'Học viên chưa có tài khoản trong hệ thống' });

@@ -6,9 +6,7 @@ import { Navigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import PageHeader from '../components/layout/PageHeader';
 import { auditService } from '../services';
-import {
-  ACTION_OPTIONS, RESOURCE_OPTIONS, REQUEST_STATUS, formatDateTime, roleLabel,
-} from '../components/audit/auditConstants';
+import { isSuperAdmin } from '../utils/adminScope';
 
 function actionBadge(action) {
   const map = {
@@ -116,7 +114,7 @@ export default function AuditPage() {
     }
   };
 
-  if (user?.role !== 'admin') {
+  if (!isSuperAdmin(user)) {
     return <Navigate to="/" replace />;
   }
 
