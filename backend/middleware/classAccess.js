@@ -1,5 +1,6 @@
 const pool = require('../config/db');
 const { getUserScope, studentCodeMatchesScope } = require('../utils/adminScope');
+const { teachingStaffRoleSql, isTeachingStaffUser } = require('../utils/teachingStaff');
 
 async function isClassMember(userId, classId) {
   const [rows] = await pool.query(
@@ -13,7 +14,8 @@ async function isClassTeacher(userId, classId) {
   const [rows] = await pool.query(
     `SELECT cm.id FROM class_members cm
      JOIN users u ON cm.user_id = u.id
-     WHERE cm.class_id = ? AND cm.user_id = ? AND u.role = 'teacher'`,
+     WHERE cm.class_id = ? AND cm.user_id = ? AND u.role != 'student'
+       AND ${teachingStaffRoleSql('u')}`,
     [classId, userId]
   );
   return rows.length > 0;
@@ -44,7 +46,7 @@ async function isClassInUserScope(classId, user) {
 async function canManageClass(user, classId) {
   if (!(await isClassInUserScope(classId, user))) return false;
   if (user.role === 'admin') return true;
-  if (user.role === 'teacher') return isClassTeacher(user.id, classId);
+  if (isTeachingStaffUser(user)) return isClassTeacher(user.id, classId);
   return false;
 }
 

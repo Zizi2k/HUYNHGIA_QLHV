@@ -6,6 +6,7 @@ import { classService, tuitionService, studentService } from '../../services';
 import { applyTuitionFieldChange } from '../tuition/tuitionDiscountCalc';
 import DataTable, { DataTableEmpty } from '../common/DataTable';
 import AddStudentModal, { emptyStudentFields, emptyTuitionFields } from './AddStudentModal';
+import { teachingStaffBadge } from '../../utils/roles';
 
 const emptyForm = { ...emptyStudentFields, ...emptyTuitionFields };
 
@@ -351,7 +352,10 @@ export default function ClassMembersTab({ classId, className, members, isTeacher
                   </div>
                 </div>
                 <div className="d-flex align-items-center gap-2">
-                  <Badge bg="primary" className="px-3 py-2">Giáo viên</Badge>
+                  {(() => {
+                    const badge = teachingStaffBadge(m);
+                    return <Badge bg={badge.bg} className="px-3 py-2">{badge.label}</Badge>;
+                  })()}
                   {isAdmin && (
                     <Button
                       variant="light"
@@ -615,20 +619,20 @@ export default function ClassMembersTab({ classId, className, members, isTeacher
             {error && <Alert variant="danger" className="py-2">{error}</Alert>}
             {availableTeachers.length === 0 ? (
               <Alert variant="light" className="mb-0">
-                Không còn giáo viên nào để thêm. Tạo tài khoản giáo viên tại mục Quản lý người dùng.
+                Không còn giáo viên hoặc admin phụ HG/EG nào để thêm. Tạo tài khoản tại Quản lý người dùng hoặc Phân quyền admin.
               </Alert>
             ) : (
               <Form.Group>
-                <Form.Label>Chọn giáo viên</Form.Label>
+                <Form.Label>Chọn giáo viên / admin phụ</Form.Label>
                 <Form.Select
                   value={selectedTeacherId}
                   onChange={(e) => setSelectedTeacherId(e.target.value)}
                   required
                 >
-                  <option value="">-- Chọn giáo viên --</option>
+                  <option value="">-- Chọn giáo viên hoặc admin --</option>
                   {availableTeachers.map((t) => (
                     <option key={t.id} value={t.id}>
-                      {t.fullname} ({t.username})
+                      {t.fullname} ({t.username}){t.role === 'admin' ? ' — Admin phụ' : ''}
                     </option>
                   ))}
                 </Form.Select>

@@ -17,6 +17,13 @@ const { insertTuitionProfile } = require('../utils/tuitionProfileDb');
 const { handleDeletion } = require('../utils/deletionPolicy');
 const { logAction } = require('../utils/auditLog');
 const { mapPublicMembers } = require('../utils/userProjection');
+const {
+  teachingStaffRoleSql,
+  isTeachingStaffUser,
+  getClassStudentScope,
+  filterTeachingStaffByScope,
+  resolveTeachingStaffScope,
+} = require('../utils/teachingStaff');
 
 async function getClassRow(conn, classId) {
   const [classes] = await conn.query('SELECT * FROM classes WHERE id = ?', [classId]);
@@ -561,17 +568,23 @@ const deleteClass = async (req, res) => {
 
 const getAvailableTeachers = async (req, res) => {
   try {
+    const classId = req.params.id;
+    const classScope = await getClassStudentScope(classId);
+    const staffScope = resolveTeachingStaffScope(classScope, req.user);
+
     const [rows] = await pool.query(
-      `SELECT u.id, u.fullname, u.username, u.code
+      `SELECT u.id, u.fullname, u.username, u.code, u.role, u.admin_scope
        FROM users u
-       WHERE u.role = 'teacher' AND u.status = TRUE
+       WHERE u.status = TRUE
+         AND ${teachingStaffRoleSql('u')}
          AND u.id NOT IN (
            SELECT user_id FROM class_members WHERE class_id = ?
          )
-       ORDER BY u.fullname`,
-      [req.params.id]
+       ORDER BY u.role DESC, u.fullname`,
+      [classId]
     );
-    res.json(rows);
+
+    res.json(filterTeachingStaffByScope(rows, staffScope));
   } catch (err) {
     res.status(500).json({ message: 'Lỗi hệ thống', error: err.message });
   }
@@ -581,14 +594,24 @@ const addTeacher = async (req, res) => {
   try {
     const { user_id } = req.body;
     const [users] = await pool.query(
-      'SELECT id, role FROM users WHERE id = ? AND status = TRUE',
+      'SELECT id, role, admin_scope, code, status FROM users WHERE id = ?',
       [user_id]
     );
-    if (users.length === 0) {
+    if (users.length === 0 || !users[0].status) {
       return res.status(404).json({ message: 'Không tìm thấy giáo viên' });
     }
-    if (users[0].role !== 'teacher') {
-      return res.status(400).json({ message: 'Chỉ có thể thêm tài khoản giáo viên vào lớp' });
+    if (!isTeachingStaffUser(users[0])) {
+      return res.status(400).json({
+        message: 'Chỉ có thể thêm giáo viên hoặc admin phụ HG/EG vào lớp',
+      });
+    }
+
+    const classScope = await getClassStudentScope(req.params.id);
+    const staffScope = resolveTeachingStaffScope(classScope, req.user);
+    if (staffScope && !filterTeachingStaffByScope(users, staffScope).length) {
+      return res.status(400).json({
+        message: `Giáo viên/admin không thuộc nhánh ${staffScope}`,
+      });
     }
 
     await pool.query('INSERT INTO class_members (class_id, user_id) VALUES (?, ?)', [
@@ -606,7 +629,7 @@ const addTeacher = async (req, res) => {
 const removeTeacher = async (req, res) => {
   try {
     const [member] = await pool.query(
-      `SELECT u.role FROM class_members cm
+      `SELECT u.role, u.admin_scope FROM class_members cm
        JOIN users u ON cm.user_id = u.id
        WHERE cm.class_id = ? AND cm.user_id = ?`,
       [req.params.id, req.params.userId]
@@ -614,8 +637,11 @@ const removeTeacher = async (req, res) => {
     if (member.length === 0) {
       return res.status(404).json({ message: 'Giáo viên không có trong lớp' });
     }
-    if (member[0].role !== 'teacher') {
+    if (member[0].role === 'student') {
       return res.status(400).json({ message: 'Thành viên này không phải giáo viên' });
+    }
+    if (!isTeachingStaffUser({ role: member[0].role, admin_scope: member[0].admin_scope })) {
+      return res.status(400).json({ message: 'Thành viên này không phải giáo viên hoặc admin phụ' });
     }
 
     await pool.query('DELETE FROM class_members WHERE class_id=? AND user_id=?', [

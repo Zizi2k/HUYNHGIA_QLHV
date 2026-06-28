@@ -1,6 +1,7 @@
 const pool = require('../config/db');
 const { mapPublicHonorEntries } = require('../utils/userProjection');
 const { assertClassAccess } = require('../middleware/classAccess');
+const { teachingStaffRoleSql } = require('../utils/teachingStaff');
 
 const getDashboard = async (req, res) => {
   try {
@@ -26,7 +27,7 @@ const getDashboard = async (req, res) => {
     } else if (role === 'teacher') {
       const [[c]] = await pool.query(
         `SELECT COUNT(DISTINCT cm.class_id) AS count FROM class_members cm
-         JOIN users u ON cm.user_id = u.id WHERE u.role = 'teacher' AND cm.user_id = ?`,
+         JOIN users u ON cm.user_id = u.id WHERE ${teachingStaffRoleSql('u')} AND cm.user_id = ?`,
         [userId]
       );
       const [[a]] = await pool.query(

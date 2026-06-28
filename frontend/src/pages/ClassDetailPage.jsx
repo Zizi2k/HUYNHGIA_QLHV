@@ -18,6 +18,7 @@ import ClassAssignmentsTab from '../components/class/ClassAssignmentsTab';
 import ClassQuizzesTab from '../components/class/ClassQuizzesTab';
 import ClassOnlineTab from '../components/class/ClassOnlineTab';
 import { notifyDeleteResult } from '../utils/deleteHelpers';
+import { canActAsClassTeacher } from '../utils/roles';
 
 import { API_BASE } from '../config/apiBase';
 
@@ -44,8 +45,7 @@ export default function ClassDetailPage() {
   const [loadError, setLoadError] = useState('');
 
   const isAdmin = user?.role === 'admin';
-  const isClassTeacher = user?.role === 'teacher'
-    && classData?.members?.some((m) => m.id === user.id && m.role === 'teacher');
+  const isClassTeacher = canActAsClassTeacher(user, classData?.members);
   const canManageClass = isAdmin || isClassTeacher;
   const isStudent = user?.role === 'student';
   const classStudents = classData?.members?.filter((m) => m.role === 'student') || [];

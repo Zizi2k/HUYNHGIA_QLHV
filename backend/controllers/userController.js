@@ -2,6 +2,7 @@ const pool = require('../config/db');
 const { assertClassAccess } = require('../middleware/classAccess');
 const { logAction } = require('../utils/auditLog');
 const { isSuperAdmin, getUserScope, studentCodeMatchesScope } = require('../utils/adminScope');
+const { teachingStaffRoleSql, filterTeachingStaffByScope, resolveTeachingStaffScope } = require('../utils/teachingStaff');
 
 const listAdmins = async (req, res) => {
   try {
@@ -24,7 +25,7 @@ const getUsers = async (req, res) => {
       return res.json({ members: [], unassigned_teachers: [] });
     }
 
-    if (req.user.role === 'teacher') {
+    if (req.user.role === 'teacher' || (req.user.role === 'admin' && getUserScope(req.user))) {
       if (!(await assertClassAccess(req.user, classId, res, { manage: true }))) return;
     }
 
@@ -43,14 +44,18 @@ const getUsers = async (req, res) => {
       : members;
 
     const [unassignedTeachers] = await pool.query(
-      `SELECT u.id, u.fullname, u.username, u.code, u.role, u.status, u.created_at
+      `SELECT u.id, u.fullname, u.username, u.code, u.role, u.admin_scope, u.status, u.created_at
        FROM users u
-       WHERE u.role = 'teacher' AND u.status = TRUE
+       WHERE u.status = TRUE
+         AND ${teachingStaffRoleSql('u')}
          AND NOT EXISTS (SELECT 1 FROM class_members cm WHERE cm.user_id = u.id)
-       ORDER BY u.fullname`
+       ORDER BY u.role DESC, u.fullname`
     );
 
-    res.json({ members: filteredMembers, unassigned_teachers: unassignedTeachers });
+    const staffScope = resolveTeachingStaffScope(null, req.user);
+    const scopedUnassigned = filterTeachingStaffByScope(unassignedTeachers, staffScope);
+
+    res.json({ members: filteredMembers, unassigned_teachers: scopedUnassigned });
   } catch (err) {
     res.status(500).json({ message: 'Lỗi hệ thống', error: err.message });
   }

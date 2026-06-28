@@ -131,6 +131,7 @@ export default function AdminStaffPage() {
 
       <Alert variant="light" className="mb-4">
         <strong>HG</strong> và <strong>EG</strong> là hai nhóm học viên tách biệt — admin phụ chỉ thấy và quản lý đúng tiền tố được giao.
+        Admin phụ HG/EG cũng có thể được phân công <strong>giáo viên phụ trách lớp</strong> tại tab Thành viên của lớp học.
       </Alert>
 
       {loading ? (

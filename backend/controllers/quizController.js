@@ -2,6 +2,7 @@ const pool = require('../config/db');
 const { assertClassAccess, getQuizClassId } = require('../middleware/classAccess');
 const { handleDeletion } = require('../utils/deletionPolicy');
 const { logAction } = require('../utils/auditLog');
+const { teachingStaffRoleSql } = require('../utils/teachingStaff');
 
 const getQuizzes = async (req, res) => {
   try {
@@ -37,7 +38,7 @@ const getQuizzes = async (req, res) => {
       query += ` WHERE q.class_id IN (
         SELECT cm.class_id FROM class_members cm
         JOIN users u ON cm.user_id = u.id
-        WHERE cm.user_id = ? AND u.role = 'teacher'
+        WHERE cm.user_id = ? AND ${teachingStaffRoleSql('u')}
       )`;
       params.push(req.user.id);
     }
