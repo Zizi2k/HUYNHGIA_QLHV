@@ -12,6 +12,7 @@ import AttendancePage from './pages/AttendancePage';
 import TuitionPage from './pages/TuitionPage';
 import StudentsPage from './pages/StudentsPage';
 import AdminStaffPage from './pages/AdminStaffPage';
+import AuditPage from './pages/AuditPage';
 
 function App() {
   return (
