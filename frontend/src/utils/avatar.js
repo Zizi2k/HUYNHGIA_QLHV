@@ -1,4 +1,4 @@
-const API_BASE = import.meta.env.VITE_API_URL?.replace('/api', '') || 'http://localhost:5000';
+import { API_BASE } from '../config/apiBase';
 
 export function getInitials(fullname) {
   if (!fullname) return '?';

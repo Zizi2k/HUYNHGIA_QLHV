@@ -11,7 +11,7 @@ import {
   isExternalLessonUrl,
 } from '../../utils/fileTypes';
 
-const API_BASE = import.meta.env.VITE_API_URL?.replace('/api', '') || 'http://localhost:5000';
+import { API_BASE } from '../../config/apiBase';
 
 const emptyForm = {
   title: '', description: '', deadline: '',

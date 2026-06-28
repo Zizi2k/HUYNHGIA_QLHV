@@ -20,8 +20,11 @@ export default function LoginPage() {
       navigate('/');
     } catch (err) {
       const serverMsg = err.response?.data?.message;
+      const status = err.response?.status;
       if (!err.response) {
         setError('Không kết nối được máy chủ. Vui lòng thử lại sau vài giây.');
+      } else if (status === 502 || status === 503 || status === 504) {
+        setError('Máy chủ đang bận hoặc chưa sẵn sàng. Vui lòng thử lại sau 1–2 phút.');
       } else if (serverMsg) {
         setError(serverMsg);
       } else {

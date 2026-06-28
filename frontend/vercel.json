@@ -1,3 +1,13 @@
 {
-  "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }]
+  "rewrites": [
+    {
+      "source": "/api/:path*",
+      "destination": "https://huynhgia-api.onrender.com/api/:path*"
+    },
+    {
+      "source": "/uploads/:path*",
+      "destination": "https://huynhgia-api.onrender.com/uploads/:path*"
+    },
+    { "source": "/(.*)", "destination": "/index.html" }
+  ]
 }

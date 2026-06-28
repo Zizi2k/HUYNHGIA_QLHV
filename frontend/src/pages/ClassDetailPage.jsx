@@ -19,7 +19,7 @@ import ClassQuizzesTab from '../components/class/ClassQuizzesTab';
 import ClassOnlineTab from '../components/class/ClassOnlineTab';
 import { notifyDeleteResult } from '../utils/deleteHelpers';
 
-const API_BASE = import.meta.env.VITE_API_URL?.replace('/api', '') || 'http://localhost:5000';
+import { API_BASE } from '../config/apiBase';
 
 export default function ClassDetailPage() {
   const { id } = useParams();
