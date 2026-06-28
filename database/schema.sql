@@ -19,6 +19,7 @@ CREATE TABLE classes (
   name VARCHAR(100) NOT NULL,
   code VARCHAR(50),
   description TEXT,
+  subject ENUM('chinese', 'english', 'computer', 'vietnamese') NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 

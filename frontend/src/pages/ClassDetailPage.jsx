@@ -1,7 +1,7 @@
 import { useEffect, useState, useMemo } from 'react';
 import { useParams } from 'react-router-dom';
 import {
-  Container, Nav, Tab, Card, Button, Form, Modal, Spinner, Badge, ListGroup, Alert,
+  Nav, Tab, Card, Button, Form, Modal, Spinner, Badge, ListGroup, Alert,
 } from 'react-bootstrap';
 import {
   classService, lessonService, assignmentService, quizService, discussionService,
@@ -203,24 +203,24 @@ export default function ClassDetailPage() {
   const getLessonFileUrl = (fileUrl) => getLessonResourceUrl(fileUrl, API_BASE);
 
   if (loading) {
-    return <Container className="text-center py-5"><Spinner animation="border" /></Container>;
+    return <div className="page-container text-center py-5"><Spinner animation="border" /></div>;
   }
 
   if (accessError) {
     return (
-      <Container className="py-5">
+      <div className="page-container py-5">
         <Alert variant="warning">{accessError}</Alert>
-      </Container>
+      </div>
     );
   }
 
   return (
-    <Container>
-      <h2 className="mb-1">{classData?.name}</h2>
-      <p className="text-muted mb-4">{classData?.description}</p>
+    <div className="page-container">
+      <h2 className="mb-1 text-break">{classData?.name}</h2>
+      <p className="text-muted mb-4 text-break">{classData?.description}</p>
 
       <Tab.Container defaultActiveKey="lessons">
-        <Nav variant="tabs" className="mb-3">
+        <Nav variant="tabs" className="mb-3 app-nav-tabs-scroll flex-nowrap">
           <Nav.Item><Nav.Link eventKey="lessons">Bài giảng</Nav.Link></Nav.Item>
           <Nav.Item><Nav.Link eventKey="assignments">Bài tập</Nav.Link></Nav.Item>
           <Nav.Item><Nav.Link eventKey="quizzes">Bài kiểm tra</Nav.Link></Nav.Item>
@@ -377,6 +377,7 @@ export default function ClassDetailPage() {
           <Tab.Pane eventKey="members">
             <ClassMembersTab
               classId={id}
+              className={classData?.name}
               members={classData?.members}
               isTeacher={canManageClass}
               isAdmin={isAdmin}
@@ -603,6 +604,6 @@ export default function ClassDetailPage() {
           </Modal.Footer>
         </Form>
       </Modal>
-    </Container>
+    </div>
   );
 }

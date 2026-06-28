@@ -81,6 +81,13 @@ async function ensureSchema() {
   for (const stmt of TUITION_STATEMENTS) {
     await pool.query(stmt);
   }
+  try {
+    await pool.query(
+      `ALTER TABLE classes ADD COLUMN subject ENUM('chinese', 'english', 'computer', 'vietnamese') NULL AFTER description`
+    );
+  } catch (err) {
+    if (err.code !== 'ER_DUP_FIELDNAME') throw err;
+  }
 }
 
 module.exports = { ensureSchema };

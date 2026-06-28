@@ -131,7 +131,7 @@ export default function TuitionPage() {
       />
 
       <Tab.Container activeKey={activeTab} onSelect={(k) => setActiveTab(k || 'list')}>
-        <Nav variant="tabs" className="mb-4">
+        <Nav variant="tabs" className="mb-4 app-nav-tabs-scroll flex-nowrap">
           <Nav.Item><Nav.Link eventKey="list">Danh sách học phí</Nav.Link></Nav.Item>
           <Nav.Item><Nav.Link eventKey="discounts">Mức giảm giá</Nav.Link></Nav.Item>
           <Nav.Item><Nav.Link eventKey="report">Báo cáo tháng</Nav.Link></Nav.Item>

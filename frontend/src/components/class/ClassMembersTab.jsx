@@ -1,11 +1,11 @@
 import { useMemo, useState } from 'react';
-import {
-  Button, Modal, Form, ListGroup, Badge, Alert, Spinner, InputGroup,
+import { Modal, Form, Button, Alert, Spinner, InputGroup,
 } from 'react-bootstrap';
-import { classService } from '../../services';
+import { classService, tuitionService } from '../../services';
 import DataTable, { DataTableEmpty } from '../common/DataTable';
+import AddStudentModal, { emptyStudentFields, emptyTuitionFields } from './AddStudentModal';
 
-const emptyForm = { code: '', fullname: '', phone: '', zalo: '' };
+const emptyForm = { ...emptyStudentFields, ...emptyTuitionFields };
 
 const AVATAR_COLORS = ['#3b82f6', '#8b5cf6', '#06b6d4', '#10b981', '#f59e0b', '#ef4444'];
 
@@ -19,7 +19,7 @@ function avatarColor(id) {
   return AVATAR_COLORS[id % AVATAR_COLORS.length];
 }
 
-export default function ClassMembersTab({ classId, members, isTeacher, isAdmin, onUpdated }) {
+export default function ClassMembersTab({ classId, className, members, isTeacher, isAdmin, onUpdated }) {
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
@@ -31,9 +31,12 @@ export default function ClassMembersTab({ classId, members, isTeacher, isAdmin, 
   const [selectedTeacherId, setSelectedTeacherId] = useState('');
   const [search, setSearch] = useState('');
   const [saving, setSaving] = useState(false);
+  const [loadingMeta, setLoadingMeta] = useState(false);
   const [importing, setImporting] = useState(false);
   const [error, setError] = useState('');
   const [importResult, setImportResult] = useState(null);
+  const [discounts, setDiscounts] = useState([]);
+  const [subjectLabel, setSubjectLabel] = useState('');
 
   const students = members?.filter((m) => m.role === 'student') || [];
   const teachers = members?.filter((m) => m.role !== 'student') || [];
@@ -48,10 +51,27 @@ export default function ClassMembersTab({ classId, members, isTeacher, isAdmin, 
       || s.zalo?.toLowerCase().includes(q));
   }, [students, search]);
 
-  const openAddModal = () => {
+  const openAddModal = async () => {
     setError('');
-    setForm(emptyForm);
+    setLoadingMeta(true);
     setShowAddModal(true);
+    try {
+      const requests = [classService.getNextStudentCode(classId)];
+      if (isAdmin) requests.push(tuitionService.getDiscounts());
+      const [codeRes, discountRes] = await Promise.all(requests);
+      setDiscounts(discountRes?.data || []);
+      setSubjectLabel(codeRes.data.subject_label || '');
+      setForm({
+        ...emptyForm,
+        code: codeRes.data.next_code,
+        current_class: className || codeRes.data.class_label || '',
+      });
+    } catch (err) {
+      setShowAddModal(false);
+      alert(err.response?.data?.message || 'Không thể tải mã học viên tiếp theo');
+    } finally {
+      setLoadingMeta(false);
+    }
   };
 
   const openEditModal = (student) => {
@@ -96,7 +116,25 @@ export default function ClassMembersTab({ classId, members, isTeacher, isAdmin, 
     setSaving(true);
     setError('');
     try {
-      await classService.createStudent(classId, form);
+      const payload = {
+        code: form.code,
+        fullname: form.fullname,
+        phone: form.phone,
+        zalo: form.zalo,
+      };
+      if (isAdmin) {
+        payload.tuition = {
+          enrichment_class: form.enrichment_class,
+          current_class: form.current_class,
+          base_fee: form.base_fee,
+          fee_before_discount: form.fee_before_discount,
+          fee_after_discount: form.fee_after_discount,
+          book_fee: form.book_fee,
+          discount_id: form.discount_id || null,
+          discount_reason: form.discount_reason,
+        };
+      }
+      await classService.createStudent(classId, payload);
       setShowAddModal(false);
       onUpdated();
     } catch (err) {
@@ -440,23 +478,19 @@ export default function ClassMembersTab({ classId, members, isTeacher, isAdmin, 
         </DataTable>
       )}
 
-      <Modal show={showAddModal} onHide={() => setShowAddModal(false)}>
-        <Modal.Header closeButton>
-          <Modal.Title>Thêm học viên</Modal.Title>
-        </Modal.Header>
-        <Form onSubmit={handleAdd}>
-          <Modal.Body>
-            {error && <Alert variant="danger" className="py-2">{error}</Alert>}
-            {renderStudentForm()}
-          </Modal.Body>
-          <Modal.Footer>
-            <Button variant="secondary" onClick={() => setShowAddModal(false)}>Hủy</Button>
-            <Button type="submit" variant="primary" disabled={saving}>
-              {saving ? <><Spinner size="sm" className="me-2" />Đang lưu...</> : 'Thêm'}
-            </Button>
-          </Modal.Footer>
-        </Form>
-      </Modal>
+      <AddStudentModal
+        show={showAddModal}
+        onHide={() => setShowAddModal(false)}
+        isAdmin={isAdmin}
+        subjectLabel={subjectLabel}
+        loadingMeta={loadingMeta}
+        saving={saving}
+        error={error}
+        form={form}
+        discounts={discounts}
+        onChange={(field, value) => setForm((prev) => ({ ...prev, [field]: value }))}
+        onSubmit={handleAdd}
+      />
 
       <Modal show={showEditModal} onHide={() => setShowEditModal(false)}>
         <Modal.Header closeButton>

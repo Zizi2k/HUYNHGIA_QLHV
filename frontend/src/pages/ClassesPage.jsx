@@ -4,8 +4,9 @@ import { Link } from 'react-router-dom';
 import { classService } from '../services';
 import { useAuth } from '../context/AuthContext';
 import PageHeader from '../components/layout/PageHeader';
+import { SUBJECT_OPTIONS } from '../components/tuition/tuitionConstants';
 
-const emptyForm = { name: '', description: '' };
+const emptyForm = { name: '', description: '', subject: '' };
 
 export default function ClassesPage() {
   const { user } = useAuth();
@@ -45,7 +46,11 @@ export default function ClassesPage() {
 
   const openEditModal = (cls) => {
     setEditingId(cls.id);
-    setForm({ name: cls.name, description: cls.description || '' });
+    setForm({
+      name: cls.name,
+      description: cls.description || '',
+      subject: cls.subject || '',
+    });
     setError('');
     setShowModal(true);
   };
@@ -139,7 +144,7 @@ export default function ClassesPage() {
                 <Card.Body>
                   <div className="d-flex justify-content-between align-items-start gap-2">
                     <div>
-                      <h5 className="mb-1">{cls.name}</h5>
+                      <h5 className="mb-1 text-break">{cls.name}</h5>
                       {cls.code && (
                         <span className="badge bg-secondary bg-opacity-10 text-secondary mb-2">{cls.code}</span>
                       )}
@@ -195,6 +200,22 @@ export default function ClassesPage() {
                 onChange={(e) => setForm({ ...form, name: e.target.value })}
                 required
               />
+            </Form.Group>
+            <Form.Group className="mb-3">
+              <Form.Label>Môn học</Form.Label>
+              <Form.Select
+                value={form.subject}
+                onChange={(e) => setForm({ ...form, subject: e.target.value })}
+                required
+              >
+                <option value="">-- Chọn môn học --</option>
+                {SUBJECT_OPTIONS.map((s) => (
+                  <option key={s.value} value={s.value}>{s.label}</option>
+                ))}
+              </Form.Select>
+              <Form.Text className="text-muted">
+                Dùng để tự sinh mã học viên và liên kết học phí khi thêm học viên.
+              </Form.Text>
             </Form.Group>
             <Form.Group>
               <Form.Label>Mô tả</Form.Label>

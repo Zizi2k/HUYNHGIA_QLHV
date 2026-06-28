@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Navigate, Outlet } from 'react-router-dom';
 import { Spinner } from 'react-bootstrap';
 import { useAuth } from '../context/AuthContext';
@@ -9,6 +9,11 @@ export default function MainLayout() {
   const { user, loading } = useAuth();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+
+  useEffect(() => {
+    document.body.classList.toggle('app-nav-locked', mobileOpen);
+    return () => document.body.classList.remove('app-nav-locked');
+  }, [mobileOpen]);
 
   if (loading) {
     return (

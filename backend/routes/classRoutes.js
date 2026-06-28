@@ -2,7 +2,7 @@ const express = require('express');
 const {
   getClasses, getClassById, createClass, updateClass, addMember, removeMember,
   deleteClass, getAvailableStudents, createStudentMember, updateStudentMember, syncUsernames,
-  getAvailableTeachers, addTeacher, removeTeacher,
+  getAvailableTeachers, addTeacher, removeTeacher, getNextStudentCodeForClass,
 } = require('../controllers/classController');
 const { importStudents, downloadTemplate } = require('../controllers/importController');
 const excelUpload = require('../middleware/excelUpload');
@@ -24,6 +24,7 @@ router.post('/:id/import-students', authorize('admin', 'teacher'), requireClassT
     importStudents(req, res);
   });
 });
+router.get('/:id/next-student-code', authorize('admin', 'teacher'), requireClassTeacher('id'), getNextStudentCodeForClass);
 router.post('/:id/students', authorize('admin', 'teacher'), requireClassTeacher('id'), createStudentMember);
 router.post('/:id/sync-usernames', authorize('admin', 'teacher'), requireClassTeacher('id'), syncUsernames);
 router.post('/:id/members', authorize('admin', 'teacher'), requireClassTeacher('id'), addMember);

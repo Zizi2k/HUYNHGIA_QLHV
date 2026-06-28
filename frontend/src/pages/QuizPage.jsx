@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Container, Card, Form, Button, Spinner, Alert } from 'react-bootstrap';
+import { Card, Form, Button, Spinner, Alert } from 'react-bootstrap';
 import { quizService } from '../services';
 
 export default function QuizPage() {
@@ -48,12 +48,12 @@ export default function QuizPage() {
   };
 
   if (loading) {
-    return <Container className="text-center py-5"><Spinner animation="border" /></Container>;
+    return <div className="page-container text-center py-5"><Spinner animation="border" /></div>;
   }
 
   if (result) {
     return (
-      <Container style={{ maxWidth: 600 }}>
+      <div className="page-container page-container-narrow">
         <Card className="border-0 shadow text-center p-4">
           <i className="bi bi-trophy text-warning" style={{ fontSize: '4rem' }} />
           <h3 className="mt-3">
@@ -68,19 +68,19 @@ export default function QuizPage() {
           )}
           <Button onClick={() => navigate(-1)}>Quay lại</Button>
         </Card>
-      </Container>
+      </div>
     );
   }
 
   return (
-    <Container style={{ maxWidth: 700 }}>
-      <h2 className="mb-4">{quiz?.title}</h2>
+    <div className="page-container page-container-narrow">
+      <h2 className="mb-4 text-break">{quiz?.title}</h2>
       {error && <Alert variant="danger">{error}</Alert>}
       <Form onSubmit={handleSubmit}>
         {quiz?.questions?.map((q, idx) => (
           <Card key={q.id} className="mb-3 border-0 shadow-sm">
             <Card.Body>
-              <h6>Câu {idx + 1}: {q.question}</h6>
+              <h6 className="text-break">Câu {idx + 1}: {q.question}</h6>
               {['A', 'B', 'C', 'D'].map((opt) => (
                 <Form.Check
                   key={opt}
@@ -90,7 +90,7 @@ export default function QuizPage() {
                   value={opt}
                   checked={answers[q.id] === opt}
                   onChange={() => setAnswers({ ...answers, [q.id]: opt })}
-                  className="mb-2"
+                  className="mb-2 text-break"
                   required
                 />
               ))}
@@ -98,10 +98,10 @@ export default function QuizPage() {
           </Card>
         ))}
         <Alert variant="info">Thời gian làm bài: {quiz?.time_limit} phút</Alert>
-        <Button type="submit" variant="primary" size="lg" disabled={submitting}>
+        <Button type="submit" variant="primary" size="lg" className="w-100 w-sm-auto" disabled={submitting}>
           {submitting ? 'Đang nộp...' : 'Nộp bài'}
         </Button>
       </Form>
-    </Container>
+    </div>
   );
 }

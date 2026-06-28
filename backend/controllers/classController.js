@@ -3,6 +3,71 @@ const {
   buildStudentUsername, extractStudentNumber, ensureUniqueUsername, regenerateClassUsernames,
 } = require('../utils/username');
 const { assertClassAccess, isClassTeacher } = require('../middleware/classAccess');
+const { parseAmount, SUBJECTS } = require('../utils/tuitionHelpers');
+const { getNextStudentCode, inferSubjectFromClassName } = require('../utils/studentCode');
+
+async function getClassRow(conn, classId) {
+  const [classes] = await conn.query('SELECT * FROM classes WHERE id = ?', [classId]);
+  return classes[0] || null;
+}
+
+function resolveClassSubject(classRow) {
+  if (classRow?.subject) return classRow.subject;
+  return inferSubjectFromClassName(classRow?.name || '');
+}
+
+function validateTuitionFields(tuition = {}) {
+  const required = [
+    ['base_fee', 'học phí ban đầu'],
+    ['fee_before_discount', 'học phí trước giảm'],
+    ['fee_after_discount', 'học phí sau giảm'],
+    ['book_fee', 'phí sách'],
+  ];
+  for (const [field, label] of required) {
+    const value = tuition[field];
+    if (value === '' || value === null || value === undefined) {
+      return `Vui lòng nhập ${label}`;
+    }
+    if (Number.isNaN(Number(value)) || Number(value) < 0) {
+      return `${label} không hợp lệ`;
+    }
+  }
+  if (tuition.discount_id && !String(tuition.discount_reason || '').trim()) {
+    return 'Vui lòng nhập lý do giảm khi chọn mức giảm';
+  }
+  return null;
+}
+
+async function insertTuitionProfile(conn, {
+  studentCode, userId, fullname, subject, classId, classLabel,
+  phone, zalo, tuition,
+}) {
+  await conn.query(
+    `INSERT INTO tuition_profiles
+     (student_code, user_id, fullname, subject, class_id, class_label, enrichment_class,
+      current_class, phone, zalo, base_fee, fee_before_discount, fee_after_discount,
+      book_fee, discount_id, discount_reason)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      studentCode.trim(),
+      userId,
+      fullname.trim(),
+      subject,
+      classId,
+      classLabel || null,
+      tuition.enrichment_class?.trim() || null,
+      tuition.current_class?.trim() || null,
+      phone?.trim() || null,
+      zalo?.trim() || null,
+      parseAmount(tuition.base_fee),
+      parseAmount(tuition.fee_before_discount),
+      parseAmount(tuition.fee_after_discount),
+      parseAmount(tuition.book_fee),
+      tuition.discount_id || null,
+      tuition.discount_reason?.trim() || null,
+    ]
+  );
+}
 
 const getClasses = async (req, res) => {
   try {
@@ -64,10 +129,11 @@ const getClassById = async (req, res) => {
 
 const createClass = async (req, res) => {
   try {
-    const { name, description } = req.body;
+    const { name, description, subject } = req.body;
+    const resolvedSubject = subject || inferSubjectFromClassName(name) || null;
     const [result] = await pool.query(
-      'INSERT INTO classes (name, description) VALUES (?, ?)',
-      [name, description]
+      'INSERT INTO classes (name, description, subject) VALUES (?, ?, ?)',
+      [name, description, resolvedSubject]
     );
     res.status(201).json({ message: 'Tạo lớp học thành công', id: result.insertId });
   } catch (err) {
@@ -77,9 +143,10 @@ const createClass = async (req, res) => {
 
 const updateClass = async (req, res) => {
   try {
-    const { name, description } = req.body;
-    await pool.query('UPDATE classes SET name=?, description=? WHERE id=?', [
-      name, description, req.params.id,
+    const { name, description, subject } = req.body;
+    const resolvedSubject = subject || inferSubjectFromClassName(name) || null;
+    await pool.query('UPDATE classes SET name=?, description=?, subject=? WHERE id=?', [
+      name, description, resolvedSubject, req.params.id,
     ]);
     res.json({ message: 'Cập nhật thành công' });
   } catch (err) {
@@ -131,17 +198,67 @@ const getAvailableStudents = async (req, res) => {
   }
 };
 
+const getNextStudentCodeForClass = async (req, res) => {
+  const conn = await pool.getConnection();
+  try {
+    const classRow = await getClassRow(conn, req.params.id);
+    if (!classRow) {
+      return res.status(404).json({ message: 'Không tìm thấy lớp học' });
+    }
+
+    const subject = resolveClassSubject(classRow);
+    if (!subject) {
+      return res.status(400).json({
+        message: 'Lớp chưa gán môn học. Admin cần cập nhật môn học cho lớp trước khi thêm học viên.',
+      });
+    }
+
+    const nextCode = await getNextStudentCode(conn, subject);
+    res.json({
+      next_code: nextCode,
+      subject,
+      subject_label: SUBJECTS[subject],
+      class_label: classRow.name,
+    });
+  } catch (err) {
+    res.status(500).json({ message: 'Lỗi hệ thống', error: err.message });
+  } finally {
+    conn.release();
+  }
+};
+
 const createStudentMember = async (req, res) => {
   const conn = await pool.getConnection();
   try {
-    const { code, fullname, phone, zalo } = req.body;
-    if (!code?.trim() || !fullname?.trim()) {
-      return res.status(400).json({ message: 'Vui lòng nhập mã học viên và họ tên' });
+    const { fullname, phone, zalo, tuition } = req.body;
+    let { code } = req.body;
+    const isAdmin = req.user.role === 'admin';
+
+    if (!fullname?.trim()) {
+      return res.status(400).json({ message: 'Vui lòng nhập họ tên' });
     }
 
-    const [classes] = await conn.query('SELECT id FROM classes WHERE id = ?', [req.params.id]);
-    if (classes.length === 0) {
+    const classRow = await getClassRow(conn, req.params.id);
+    if (!classRow) {
       return res.status(404).json({ message: 'Không tìm thấy lớp học' });
+    }
+
+    const subject = resolveClassSubject(classRow);
+    if (!subject) {
+      return res.status(400).json({
+        message: 'Lớp chưa gán môn học. Vui lòng cập nhật môn học cho lớp trước.',
+      });
+    }
+
+    if (isAdmin) {
+      const tuitionError = validateTuitionFields(tuition);
+      if (tuitionError) {
+        return res.status(400).json({ message: tuitionError });
+      }
+    }
+
+    if (!code?.trim()) {
+      code = await getNextStudentCode(conn, subject);
     }
 
     await conn.beginTransaction();
@@ -186,14 +303,41 @@ const createStudentMember = async (req, res) => {
       req.params.id, userId,
     ]);
 
+    if (isAdmin) {
+      const [dupProfile] = await conn.query(
+        'SELECT id FROM tuition_profiles WHERE student_code = ? AND subject = ?',
+        [code.trim(), subject]
+      );
+      if (dupProfile.length > 0) {
+        await conn.rollback();
+        return res.status(409).json({ message: 'Học viên đã có hồ sơ học phí cho môn này' });
+      }
+
+      await insertTuitionProfile(conn, {
+        studentCode: code.trim(),
+        userId,
+        fullname: fullname.trim(),
+        subject,
+        classId: classRow.id,
+        classLabel: classRow.name,
+        phone: phone?.trim() || null,
+        zalo: zalo?.trim() || null,
+        tuition: tuition || {},
+      });
+    }
+
     await regenerateClassUsernames(conn, req.params.id);
 
     await conn.commit();
-    res.status(201).json({ message: 'Thêm học viên thành công', id: userId });
+    res.status(201).json({
+      message: isAdmin ? 'Thêm học viên và hồ sơ học phí thành công' : 'Thêm học viên thành công',
+      id: userId,
+      code: code.trim(),
+    });
   } catch (err) {
     await conn.rollback();
     if (err.code === 'ER_DUP_ENTRY') {
-      return res.status(409).json({ message: 'Học viên đã có trong lớp' });
+      return res.status(409).json({ message: 'Học viên đã có trong lớp hoặc trùng hồ sơ học phí' });
     }
     res.status(500).json({ message: 'Lỗi hệ thống', error: err.message });
   } finally {
@@ -390,5 +534,5 @@ const removeTeacher = async (req, res) => {
 module.exports = {
   getClasses, getClassById, createClass, updateClass, addMember, removeMember,
   deleteClass, getAvailableStudents, createStudentMember, updateStudentMember, syncUsernames,
-  getAvailableTeachers, addTeacher, removeTeacher,
+  getAvailableTeachers, addTeacher, removeTeacher, getNextStudentCodeForClass,
 };

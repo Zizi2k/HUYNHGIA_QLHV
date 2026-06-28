@@ -31,6 +31,7 @@ export const classService = {
   removeTeacher: (classId, userId) => api.delete(`/classes/${classId}/teachers/${userId}`),
   importStudents: (classId, formData) => api.post(`/classes/${classId}/import-students`, formData),
   downloadImportTemplate: (classId) => api.get(`/classes/${classId}/import-template`, { responseType: 'blob' }),
+  getNextStudentCode: (classId) => api.get(`/classes/${classId}/next-student-code`),
 };
 
 export const lessonService = {
