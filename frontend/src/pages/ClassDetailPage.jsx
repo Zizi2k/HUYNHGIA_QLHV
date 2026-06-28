@@ -38,6 +38,7 @@ export default function ClassDetailPage() {
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState('');
   const [accessError, setAccessError] = useState('');
+  const [loadError, setLoadError] = useState('');
 
   const isAdmin = user?.role === 'admin';
   const isClassTeacher = user?.role === 'teacher'
@@ -47,24 +48,46 @@ export default function ClassDetailPage() {
   const classStudents = classData?.members?.filter((m) => m.role === 'student') || [];
 
   const loadData = async () => {
+    setLoading(true);
+    setAccessError('');
+    setLoadError('');
+
     try {
-      const [classRes, lessonRes, assignRes, quizRes, discRes] = await Promise.all([
-        classService.getById(id),
+      const classRes = await classService.getById(id);
+      setClassData(classRes.data);
+
+      const results = await Promise.allSettled([
         lessonService.getByClass(id),
         assignmentService.getAll(id),
         quizService.getAll(id),
         discussionService.getByClass(id),
       ]);
-      setClassData(classRes.data);
-      setLessons(lessonRes.data);
-      setAssignments(assignRes.data);
-      setQuizzes(quizRes.data);
-      setDiscussions(discRes.data);
-      setAccessError('');
+
+      const [lessonRes, assignRes, quizRes, discRes] = results;
+
+      if (lessonRes.status === 'fulfilled') setLessons(lessonRes.value.data);
+      else setLessons([]);
+
+      if (assignRes.status === 'fulfilled') setAssignments(assignRes.value.data);
+      else setAssignments([]);
+
+      if (quizRes.status === 'fulfilled') setQuizzes(quizRes.value.data);
+      else setQuizzes([]);
+
+      if (discRes.status === 'fulfilled') setDiscussions(discRes.value.data);
+      else setDiscussions([]);
+
+      const failed = results.filter((r) => r.status === 'rejected');
+      if (failed.length > 0) {
+        console.error('Một số dữ liệu lớp học không tải được:', failed);
+      }
     } catch (err) {
       if (err.response?.status === 403) {
         setAccessError(err.response?.data?.message || 'Bạn không có quyền truy cập lớp học này');
+      } else {
+        setLoadError(err.response?.data?.message || 'Không thể tải thông tin lớp học. Vui lòng thử lại.');
       }
+      setClassData(null);
     } finally {
       setLoading(false);
     }
@@ -214,10 +237,21 @@ export default function ClassDetailPage() {
     );
   }
 
+  if (loadError || !classData) {
+    return (
+      <div className="page-container py-5">
+        <Alert variant="danger">{loadError || 'Không thể tải thông tin lớp học.'}</Alert>
+        <Button variant="primary" className="mt-3" onClick={loadData}>
+          Thử lại
+        </Button>
+      </div>
+    );
+  }
+
   return (
     <div className="page-container">
-      <h2 className="mb-1 text-break">{classData?.name}</h2>
-      <p className="text-muted mb-4 text-break">{classData?.description}</p>
+      <h2 className="mb-1 text-break">{classData.name}</h2>
+      <p className="text-muted mb-4 text-break">{classData.description}</p>
 
       <Tab.Container defaultActiveKey="lessons">
         <Nav variant="tabs" className="mb-3 app-nav-tabs-scroll flex-nowrap">
@@ -231,7 +265,7 @@ export default function ClassDetailPage() {
         </Nav>
 
         <Tab.Content>
-          <Tab.Pane eventKey="lessons">
+          <Tab.Pane eventKey="lessons" mountOnEnter unmountOnExit>
             {canManageClass && (
               <Button className="mb-3" onClick={() => { resetLessonForm(); setShowLessonModal(true); }}>
                 <i className="bi bi-upload me-1" />Đăng tài liệu
@@ -320,7 +354,7 @@ export default function ClassDetailPage() {
             )}
           </Tab.Pane>
 
-          <Tab.Pane eventKey="assignments">
+          <Tab.Pane eventKey="assignments" mountOnEnter unmountOnExit>
             <ClassAssignmentsTab
               classId={id}
               assignments={assignments}
@@ -330,7 +364,7 @@ export default function ClassDetailPage() {
             />
           </Tab.Pane>
 
-          <Tab.Pane eventKey="quizzes">
+          <Tab.Pane eventKey="quizzes" mountOnEnter unmountOnExit>
             <ClassQuizzesTab
               classId={id}
               quizzes={quizzes}
@@ -340,7 +374,7 @@ export default function ClassDetailPage() {
             />
           </Tab.Pane>
 
-          <Tab.Pane eventKey="discussions">
+          <Tab.Pane eventKey="discussions" mountOnEnter unmountOnExit>
             <Button className="mb-3" onClick={() => setShowDiscussionModal(true)}>
               <i className="bi bi-chat-dots me-1" />Tạo thảo luận
             </Button>
@@ -365,7 +399,7 @@ export default function ClassDetailPage() {
             )}
           </Tab.Pane>
 
-          <Tab.Pane eventKey="online">
+          <Tab.Pane eventKey="online" mountOnEnter unmountOnExit>
             <ClassOnlineTab
               classId={id}
               className={classData?.name}
@@ -374,18 +408,18 @@ export default function ClassDetailPage() {
             />
           </Tab.Pane>
 
-          <Tab.Pane eventKey="members">
+          <Tab.Pane eventKey="members" mountOnEnter unmountOnExit>
             <ClassMembersTab
               classId={id}
               className={classData?.name}
-              members={classData?.members}
+              members={classData.members}
               isTeacher={canManageClass}
               isAdmin={isAdmin}
               onUpdated={loadData}
             />
           </Tab.Pane>
 
-          <Tab.Pane eventKey="attendance">
+          <Tab.Pane eventKey="attendance" mountOnEnter unmountOnExit>
             <ClassAttendanceTab
               classId={id}
               students={classStudents}

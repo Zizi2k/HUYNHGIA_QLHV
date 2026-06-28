@@ -1,6 +1,4 @@
-import { useState } from 'react';
 import { Modal, Form, Button, Alert, Spinner, Row, Col } from 'react-bootstrap';
-import { SUBJECT_OPTIONS } from '../tuition/tuitionConstants';
 
 const emptyStudentFields = {
   code: '',
