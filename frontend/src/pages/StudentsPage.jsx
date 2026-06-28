@@ -28,6 +28,7 @@ export default function StudentsPage() {
   const [classFilter, setClassFilter] = useState('');
   const [enrollmentFilter, setEnrollmentFilter] = useState('');
   const [codePrefixFilter, setCodePrefixFilter] = useState('');
+  const [search, setSearch] = useState('');
 
   const [showAdd, setShowAdd] = useState(false);
   const [showCourses, setShowCourses] = useState(false);
@@ -52,6 +53,10 @@ export default function StudentsPage() {
       .then((res) => {
         setStudents(res.data.students);
         setSummary(res.data.summary || emptySummary);
+      })
+      .catch(() => {
+        setStudents([]);
+        setSummary(emptySummary);
       })
       .finally(() => setLoading(false));
   };
