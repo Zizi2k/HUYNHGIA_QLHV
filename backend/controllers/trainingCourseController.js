@@ -1,12 +1,16 @@
 const pool = require('../config/db');
 const { SUBJECTS } = require('../utils/tuitionHelpers');
 const { logAction } = require('../utils/auditLog');
+const { adminCenterFilter } = require('../utils/centerQuery');
 
 const getCourses = async (req, res) => {
   try {
     const { subject, active_only } = req.query;
     let sql = 'SELECT * FROM training_courses WHERE 1=1';
     const params = [];
+    const centerFilter = adminCenterFilter(req, 'training_courses');
+    sql += centerFilter.sql;
+    params.push(...centerFilter.params);
 
     if (subject) {
       sql += ' AND subject = ?';
@@ -42,14 +46,15 @@ const createCourse = async (req, res) => {
     }
 
     const [result] = await pool.query(
-      `INSERT INTO training_courses (name, subject, duration_months, description, is_active)
-       VALUES (?, ?, ?, ?, ?)`,
+      `INSERT INTO training_courses (name, subject, duration_months, description, is_active, center_id)
+       VALUES (?, ?, ?, ?, ?, ?)`,
       [
         name.trim(),
         subject,
         months,
         description?.trim() || null,
         is_active !== false,
+        req.centerId || null,
       ]
     );
     res.status(201).json({ id: result.insertId, message: 'Tạo khóa học thành công' });

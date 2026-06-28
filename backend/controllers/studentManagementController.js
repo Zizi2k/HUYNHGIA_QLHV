@@ -7,6 +7,7 @@ const { getNextStudentCode, inferSubjectFromClassName } = require('../utils/stud
 const { addMonthsToDate, getEnrollmentStatus } = require('../utils/dateHelpers');
 const { PROFILE_SELECT, insertTuitionProfile } = require('../utils/tuitionProfileDb');
 const { logAction } = require('../utils/auditLog');
+const { adminCenterFilter } = require('../utils/centerQuery');
 
 function resolveClassSubject(classRow) {
   if (classRow?.subject) return classRow.subject;
@@ -54,6 +55,9 @@ const getOverview = async (req, res) => {
     const { subject, class_id, search, enrollment_status } = req.query;
     let sql = `${PROFILE_SELECT} WHERE 1=1`;
     const params = [];
+    const centerFilter = adminCenterFilter(req, 'tp');
+    sql += centerFilter.sql;
+    params.push(...centerFilter.params);
 
     if (subject) {
       sql += ' AND tp.subject = ?';
@@ -109,7 +113,7 @@ const getNextCode = async (req, res) => {
     if (!subject || !SUBJECTS[subject]) {
       return res.status(400).json({ message: 'Môn học không hợp lệ' });
     }
-    const nextCode = await getNextStudentCode(conn, subject);
+    const nextCode = await getNextStudentCode(conn, subject, req.centerId);
     res.json({
       next_code: nextCode,
       subject,
@@ -160,6 +164,9 @@ const createEnrollment = async (req, res) => {
     if (classSubject && classSubject !== subject) {
       return res.status(400).json({ message: 'Lớp học không thuộc môn đã chọn' });
     }
+    if (req.centerId && classRow.center_id && classRow.center_id !== req.centerId) {
+      return res.status(400).json({ message: 'Lớp học không thuộc trung tâm đang quản lý' });
+    }
 
     const [courses] = await conn.query(
       'SELECT * FROM training_courses WHERE id = ? AND is_active = TRUE',
@@ -179,7 +186,7 @@ const createEnrollment = async (req, res) => {
 
     let studentCode = code?.trim();
     if (!studentCode) {
-      studentCode = await getNextStudentCode(conn, subject);
+      studentCode = await getNextStudentCode(conn, subject, classRow.center_id);
     }
 
     await conn.beginTransaction();
@@ -195,8 +202,8 @@ const createEnrollment = async (req, res) => {
       userId = existing[0].id;
 
       const [dupProfile] = await conn.query(
-        'SELECT id FROM tuition_profiles WHERE student_code = ? AND subject = ?',
-        [studentCode, subject]
+        'SELECT id FROM tuition_profiles WHERE student_code = ? AND subject = ? AND center_id = ?',
+        [studentCode, subject, classRow.center_id]
       );
       if (dupProfile.length > 0) {
         await conn.rollback();
@@ -248,6 +255,7 @@ const createEnrollment = async (req, res) => {
       courseId: course_id,
       startDate: start_date,
       endDate,
+      centerId: classRow.center_id,
     });
 
     await regenerateClassUsernames(conn, class_id);

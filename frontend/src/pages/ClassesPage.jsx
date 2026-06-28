@@ -3,6 +3,7 @@ import { Row, Col, Card, Button, Modal, Form, Spinner, Alert, InputGroup } from 
 import { Link } from 'react-router-dom';
 import { classService } from '../services';
 import { useAuth } from '../context/AuthContext';
+import { useCenter } from '../context/CenterContext';
 import PageHeader from '../components/layout/PageHeader';
 import { SUBJECT_OPTIONS } from '../components/tuition/tuitionConstants';
 
@@ -10,6 +11,7 @@ const emptyForm = { name: '', description: '', subject: '' };
 
 export default function ClassesPage() {
   const { user } = useAuth();
+  const { centerKey } = useCenter() || {};
   const [classes, setClasses] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -35,7 +37,7 @@ export default function ClassesPage() {
       .finally(() => setLoading(false));
   }, [debouncedSearch]);
 
-  useEffect(() => { loadClasses(); }, [loadClasses]);
+  useEffect(() => { loadClasses(); }, [loadClasses, centerKey]);
 
   const openCreateModal = () => {
     setEditingId(null);

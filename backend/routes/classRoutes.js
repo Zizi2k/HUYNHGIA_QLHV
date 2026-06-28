@@ -7,11 +7,13 @@ const {
 const { importStudents, downloadTemplate } = require('../controllers/importController');
 const excelUpload = require('../middleware/excelUpload');
 const { authenticate, authorize } = require('../middleware/auth');
+const { resolveCenter } = require('../middleware/center');
 const { requireClassMember, requireClassTeacher } = require('../middleware/classAccess');
 
 const router = express.Router();
 
 router.use(authenticate);
+router.use(resolveCenter);
 router.get('/', getClasses);
 router.post('/', authorize('admin'), createClass);
 

@@ -1,6 +1,7 @@
 const pool = require('../config/db');
 const { mapPublicHonorEntries } = require('../utils/userProjection');
 const { assertClassAccess } = require('../middleware/classAccess');
+const { adminCenterFilter } = require('../utils/centerQuery');
 
 const getDashboard = async (req, res) => {
   try {
@@ -13,11 +14,31 @@ const getDashboard = async (req, res) => {
     let avgScore = 0;
 
     if (role === 'admin') {
-      const [[c]] = await pool.query('SELECT COUNT(*) AS count FROM classes');
-      const [[a]] = await pool.query('SELECT COUNT(*) AS count FROM assignments');
-      const [[q]] = await pool.query('SELECT COUNT(*) AS count FROM quizzes');
+      const centerFilter = adminCenterFilter(req, 'c');
+      const classJoinFilter = centerFilter.sql
+        ? ` FROM classes c WHERE 1=1${centerFilter.sql}`
+        : ' FROM classes';
+      const [[c]] = await pool.query(
+        `SELECT COUNT(*) AS count${classJoinFilter}`,
+        centerFilter.params
+      );
+      const assignFilter = adminCenterFilter(req, 'c');
+      const [[a]] = await pool.query(
+        `SELECT COUNT(*) AS count FROM assignments a
+         JOIN classes c ON a.class_id = c.id WHERE 1=1${assignFilter.sql}`,
+        assignFilter.params
+      );
+      const [[q]] = await pool.query(
+        `SELECT COUNT(*) AS count FROM quizzes q
+         JOIN classes c ON q.class_id = c.id WHERE 1=1${assignFilter.sql}`,
+        assignFilter.params
+      );
       const [[s]] = await pool.query(
-        'SELECT AVG(score) AS avg FROM submissions WHERE score IS NOT NULL'
+        `SELECT AVG(s.score) AS avg FROM submissions s
+         JOIN assignments a ON s.assignment_id = a.id
+         JOIN classes c ON a.class_id = c.id
+         WHERE s.score IS NOT NULL${assignFilter.sql}`,
+        assignFilter.params
       );
       classCount = c.count;
       assignmentCount = a.count;

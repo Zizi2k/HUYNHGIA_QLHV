@@ -12,6 +12,11 @@ api.interceptors.request.use((config) => {
     config.headers.Authorization = `Bearer ${token}`;
   }
 
+  const centerId = localStorage.getItem('activeCenterId');
+  if (centerId) {
+    config.headers['X-Center-Id'] = centerId;
+  }
+
   const isFormData = typeof FormData !== 'undefined' && config.data instanceof FormData;
   if (isFormData) {
     if (typeof config.headers.delete === 'function') {

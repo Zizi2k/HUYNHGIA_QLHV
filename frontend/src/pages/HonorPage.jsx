@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Table, Spinner, Badge, Alert, Form, Row, Col } from 'react-bootstrap';
 import { dashboardService, classService } from '../services';
+import { useCenter } from '../context/CenterContext';
 import PageHeader from '../components/layout/PageHeader';
 
 export default function HonorPage() {
@@ -9,6 +10,7 @@ export default function HonorPage() {
   const [honorList, setHonorList] = useState([]);
   const [loadingClasses, setLoadingClasses] = useState(true);
   const [loadingHonor, setLoadingHonor] = useState(false);
+  const { centerKey } = useCenter() || {};
 
   useEffect(() => {
     classService.getAll()
@@ -20,7 +22,7 @@ export default function HonorPage() {
         }
       })
       .finally(() => setLoadingClasses(false));
-  }, []);
+  }, [centerKey]);
 
   useEffect(() => {
     if (!selectedClassId) {

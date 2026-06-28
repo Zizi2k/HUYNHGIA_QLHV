@@ -3,6 +3,7 @@ const { enrichProfile, parseAmount, SUBJECTS, resolveTuitionAmounts } = require(
 const { PROFILE_SELECT } = require('../utils/tuitionProfileDb');
 const { addMonthsToDate } = require('../utils/dateHelpers');
 const { logAction } = require('../utils/auditLog');
+const { adminCenterFilter } = require('../utils/centerQuery');
 
 async function linkUserAndClass(conn, studentCode, classLabel) {
   let userId = null;
@@ -49,6 +50,9 @@ const getProfiles = async (req, res) => {
     const { subject, class_id, search, status } = req.query;
     let sql = `${PROFILE_SELECT} WHERE 1=1`;
     const params = [];
+    const centerFilter = adminCenterFilter(req, 'tp');
+    sql += centerFilter.sql;
+    params.push(...centerFilter.params);
 
     if (subject) {
       sql += ' AND tp.subject = ?';
@@ -139,8 +143,8 @@ const createProfile = async (req, res) => {
       `INSERT INTO tuition_profiles
        (student_code, user_id, fullname, subject, course_id, class_id, class_label, enrichment_class,
         current_class, phone, zalo, base_fee, fee_before_discount, fee_after_discount,
-        book_fee, discount_id, discount_reason, start_date, end_date)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        book_fee, discount_id, discount_reason, start_date, end_date, center_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         student_code.trim(), userId, fullname.trim(), subject, courseId, classId,
         class_label || null, enrichment_class || null, current_class || null,
@@ -148,6 +152,7 @@ const createProfile = async (req, res) => {
         parseAmount(base_fee), feeBefore, feeAfter,
         parseAmount(book_fee), discount_id || null, discount_reason || null,
         start_date || null, endDate,
+        req.centerId || null,
       ]
     );
 
@@ -313,6 +318,9 @@ const getPeriods = async (req, res) => {
     let sql = `SELECT tp.*, u.fullname AS creator_name FROM tuition_periods tp
                JOIN users u ON tp.created_by = u.id WHERE 1=1`;
     const params = [];
+    const centerFilter = adminCenterFilter(req, 'tp');
+    sql += centerFilter.sql;
+    params.push(...centerFilter.params);
     if (subject) { sql += ' AND tp.subject = ?'; params.push(subject); }
     if (month) { sql += ' AND tp.period_month = ?'; params.push(month); }
     sql += ' ORDER BY tp.period_month DESC, tp.subject';
@@ -331,9 +339,9 @@ const createPeriod = async (req, res) => {
     }
 
     const [result] = await pool.query(
-      `INSERT INTO tuition_periods (period_month, subject, title, note, created_by)
-       VALUES (?, ?, ?, ?, ?)`,
-      [period_month, subject, title || null, note || null, req.user.id]
+      `INSERT INTO tuition_periods (period_month, subject, title, note, created_by, center_id)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [period_month, subject, title || null, note || null, req.user.id, req.centerId || null]
     );
     res.status(201).json({ id: result.insertId, message: 'Tạo kỳ báo cáo thành công' });
   } catch (err) {
@@ -351,9 +359,10 @@ const getMonthlyReport = async (req, res) => {
       return res.status(400).json({ message: 'Thiếu môn học hoặc tháng' });
     }
 
+    const centerFilter = adminCenterFilter(req, 'tp');
     const [rows] = await pool.query(
-      `${PROFILE_SELECT} WHERE tp.subject = ? ORDER BY tp.fullname`,
-      [subject]
+      `${PROFILE_SELECT} WHERE tp.subject = ?${centerFilter.sql} ORDER BY tp.fullname`,
+      [subject, ...centerFilter.params]
     );
     const paymentMap = await fetchPaymentsForProfiles(rows.map((r) => r.id));
 
@@ -416,9 +425,10 @@ const exportMonthlyPdf = async (req, res) => {
 
     const { buildMonthlyTuitionPdf } = require('../utils/tuitionPdf');
 
+    const centerFilter = adminCenterFilter(req, 'tp');
     const [rows] = await pool.query(
-      `${PROFILE_SELECT} WHERE tp.subject = ? ORDER BY tp.fullname`,
-      [subject]
+      `${PROFILE_SELECT} WHERE tp.subject = ?${centerFilter.sql} ORDER BY tp.fullname`,
+      [subject, ...centerFilter.params]
     );
     const paymentMap = await fetchPaymentsForProfiles(rows.map((r) => r.id));
 

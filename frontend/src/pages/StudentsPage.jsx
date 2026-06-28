@@ -4,6 +4,7 @@ import {
 } from 'react-bootstrap';
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { useCenter } from '../context/CenterContext';
 import PageHeader from '../components/layout/PageHeader';
 import { studentService, classService } from '../services';
 import EnrollmentOverviewTable from '../components/students/EnrollmentOverviewTable';
@@ -18,6 +19,7 @@ const emptySummary = { total: 0, active: 0, expiring: 0, expired: 0 };
 
 export default function StudentsPage() {
   const { user } = useAuth();
+  const { centerKey } = useCenter() || {};
   const [students, setStudents] = useState([]);
   const [summary, setSummary] = useState(emptySummary);
   const [classes, setClasses] = useState([]);
@@ -57,11 +59,11 @@ export default function StudentsPage() {
 
   useEffect(() => {
     loadMeta();
-  }, []);
+  }, [centerKey]);
 
   useEffect(() => {
     loadOverview();
-  }, [subjectFilter, classFilter, enrollmentFilter]);
+  }, [subjectFilter, classFilter, enrollmentFilter, centerKey]);
 
   useEffect(() => {
     const timer = setTimeout(loadOverview, 300);

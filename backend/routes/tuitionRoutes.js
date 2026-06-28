@@ -1,5 +1,6 @@
 const express = require('express');
 const { authenticate, authorize } = require('../middleware/auth');
+const { resolveCenter } = require('../middleware/center');
 const excelUpload = require('../middleware/excelUpload');
 const {
   getDiscounts, createDiscount, updateDiscount, deleteDiscount,
@@ -15,6 +16,7 @@ const router = express.Router();
 
 router.use(authenticate);
 router.use(authorize('admin'));
+router.use(resolveCenter);
 
 router.get('/discounts', getDiscounts);
 router.post('/discounts', createDiscount);

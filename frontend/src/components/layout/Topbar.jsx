@@ -1,13 +1,15 @@
 import { useState, useEffect } from 'react';
-import { Dropdown, Badge } from 'react-bootstrap';
+import { Dropdown, Badge, Form } from 'react-bootstrap';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
+import { useCenter } from '../../context/CenterContext';
 import { auditService } from '../../services';
 import UserAvatar from '../UserAvatar';
 import ProfileModal from '../ProfileModal';
 
 export default function Topbar({ onToggleSidebar, onToggleMobile }) {
   const { user, logout } = useAuth();
+  const { centers, activeCenter, setActiveCenter, isAdmin: isCenterAdmin } = useCenter() || {};
   const navigate = useNavigate();
   const [showProfile, setShowProfile] = useState(false);
   const [pendingDeletes, setPendingDeletes] = useState(0);
@@ -23,7 +25,7 @@ export default function Topbar({ onToggleSidebar, onToggleMobile }) {
     load();
     const timer = setInterval(load, 60000);
     return () => clearInterval(timer);
-  }, [isAdmin]);
+  }, [isAdmin, activeCenter?.id]);
 
   const handleLogout = () => {
     logout();
@@ -53,6 +55,23 @@ export default function Topbar({ onToggleSidebar, onToggleMobile }) {
         </div>
 
         <div className="app-topbar-right">
+          {isCenterAdmin && centers?.length > 1 && (
+            <Form.Select
+              size="sm"
+              className="app-topbar-center-select"
+              value={activeCenter?.id || ''}
+              onChange={(e) => {
+                const next = centers.find((c) => String(c.id) === e.target.value);
+                if (next) setActiveCenter(next);
+              }}
+              style={{ width: 160 }}
+              aria-label="Chọn trung tâm"
+            >
+              {centers.map((c) => (
+                <option key={c.id} value={c.id}>{c.short_name}</option>
+              ))}
+            </Form.Select>
+          )}
           {isAdmin && (
             <Link
               to="/audit"

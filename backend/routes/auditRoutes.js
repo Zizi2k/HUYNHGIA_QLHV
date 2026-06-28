@@ -1,5 +1,6 @@
 const express = require('express');
 const { authenticate, authorize } = require('../middleware/auth');
+const { resolveCenter } = require('../middleware/center');
 const {
   getAuditLogs,
   getDeletionRequests,
@@ -12,6 +13,7 @@ const router = express.Router();
 
 router.use(authenticate);
 router.use(authorize('admin'));
+router.use(resolveCenter);
 
 router.get('/logs', getAuditLogs);
 router.get('/deletion-requests', getDeletionRequests);

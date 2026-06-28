@@ -175,6 +175,101 @@ async function ensureSchema() {
     INDEX idx_deletion_requester (requested_by),
     INDEX idx_deletion_resource (resource_type, resource_id)
   )`);
+
+  await pool.query(`CREATE TABLE IF NOT EXISTS centers (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    code VARCHAR(20) NOT NULL UNIQUE,
+    name VARCHAR(100) NOT NULL,
+    short_name VARCHAR(20) NOT NULL,
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  )`);
+
+  const [centerCount] = await pool.query('SELECT COUNT(*) AS c FROM centers');
+  if (centerCount[0].c === 0) {
+    await pool.query(
+      `INSERT INTO centers (code, name, short_name) VALUES
+       ('lhg', 'Language House Gia Hưng', 'LHG'),
+       ('egc', 'English Gia Hưng Center', 'EGC')`
+    );
+  }
+
+  const centerTables = [
+    'classes',
+    'tuition_profiles',
+    'fee_discounts',
+    'training_courses',
+    'tuition_periods',
+    'audit_log',
+    'deletion_requests',
+  ];
+  for (const table of centerTables) {
+    try {
+      await pool.query(`ALTER TABLE ${table} ADD COLUMN center_id INT NULL`);
+    } catch (err) {
+      if (err.code !== 'ER_DUP_FIELDNAME') throw err;
+    }
+  }
+
+  const [[lhgRow]] = await pool.query("SELECT id FROM centers WHERE code = 'lhg' LIMIT 1");
+  const [[egcRow]] = await pool.query("SELECT id FROM centers WHERE code = 'egc' LIMIT 1");
+  const lhgId = lhgRow?.id;
+  const egcId = egcRow?.id;
+
+  if (lhgId) {
+    for (const table of centerTables) {
+      await pool.query(`UPDATE ${table} SET center_id = ? WHERE center_id IS NULL`, [lhgId]);
+    }
+  }
+
+  try {
+    await pool.query('ALTER TABLE tuition_profiles DROP INDEX unique_student_subject');
+  } catch (err) {
+    if (err.code !== 'ER_CANT_DROP_FIELD_OR_KEY' && err.code !== 'ER_DROP_INDEX_FK') {
+      // ignore missing index
+    }
+  }
+  try {
+    await pool.query(
+      'ALTER TABLE tuition_profiles ADD UNIQUE KEY unique_center_student_subject (center_id, student_code, subject)'
+    );
+  } catch (err) {
+    if (err.code !== 'ER_DUP_KEYNAME') throw err;
+  }
+
+  try {
+    await pool.query('ALTER TABLE tuition_periods DROP INDEX unique_period_subject');
+  } catch (err) {
+    // ignore
+  }
+  try {
+    await pool.query(
+      'ALTER TABLE tuition_periods ADD UNIQUE KEY unique_center_period_subject (center_id, period_month, subject)'
+    );
+  } catch (err) {
+    if (err.code !== 'ER_DUP_KEYNAME') throw err;
+  }
+
+  if (egcId) {
+    const [egcCourses] = await pool.query(
+      'SELECT COUNT(*) AS c FROM training_courses WHERE center_id = ?',
+      [egcId]
+    );
+    if (egcCourses[0].c === 0) {
+      await pool.query(
+        `INSERT INTO training_courses (name, subject, duration_months, description, center_id) VALUES
+         ('Khóa 3 tháng - Tiếng Anh', 'english', 3, 'Khóa học Tiếng Anh 3 tháng', ?),
+         ('Khóa 6 tháng - Tiếng Anh', 'english', 6, 'Khóa học Tiếng Anh 6 tháng', ?),
+         ('Khóa 3 tháng - Tiếng Trung', 'chinese', 3, 'Khóa học Tiếng Trung 3 tháng', ?),
+         ('Khóa 3 tháng - Tin học', 'computer', 3, 'Khóa học Tin học 3 tháng', ?),
+         ('Khóa 3 tháng - Tiếng Việt', 'vietnamese', 3, 'Khóa học Tiếng Việt 3 tháng', ?)`,
+        [egcId, egcId, egcId, egcId, egcId]
+      );
+    }
+  }
+
+  const { invalidateCenterCache } = require('../utils/centerCache');
+  invalidateCenterCache();
 }
 
 module.exports = { ensureSchema };
