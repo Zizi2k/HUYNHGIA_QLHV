@@ -7,6 +7,13 @@ import { useAuth } from '../context/AuthContext';
 import PageHeader from '../components/layout/PageHeader';
 import { auditService } from '../services';
 import { isSuperAdmin } from '../utils/adminScope';
+import {
+  ACTION_OPTIONS,
+  RESOURCE_OPTIONS,
+  REQUEST_STATUS,
+  formatDateTime,
+  roleLabel,
+} from '../components/audit/auditConstants';
 
 function actionBadge(action) {
   const map = {
@@ -39,6 +46,8 @@ export default function AuditPage() {
   const [reviewNote, setReviewNote] = useState('');
   const [reviewing, setReviewing] = useState(false);
   const [pendingCount, setPendingCount] = useState(0);
+  const [logsError, setLogsError] = useState('');
+  const [requestsError, setRequestsError] = useState('');
 
   const refreshPendingCount = () => {
     auditService.getPendingCount()
@@ -52,6 +61,7 @@ export default function AuditPage() {
 
   const loadLogs = () => {
     setLoadingLogs(true);
+    setLogsError('');
     const params = {};
     if (actionFilter) params.action = actionFilter;
     if (resourceFilter) params.resource_type = resourceFilter;
@@ -59,13 +69,22 @@ export default function AuditPage() {
     if (search.trim()) params.search = search.trim();
     auditService.getLogs(params)
       .then((res) => setLogs(res.data))
+      .catch((err) => {
+        setLogs([]);
+        setLogsError(err.response?.data?.message || 'Không tải được nhật ký. Kiểm tra kết nối API backend.');
+      })
       .finally(() => setLoadingLogs(false));
   };
 
   const loadRequests = () => {
     setLoadingRequests(true);
+    setRequestsError('');
     auditService.getDeletionRequests({ status: requestStatus })
       .then((res) => setRequests(res.data))
+      .catch((err) => {
+        setRequests([]);
+        setRequestsError(err.response?.data?.message || 'Không tải được yêu cầu xóa. Kiểm tra kết nối API backend.');
+      })
       .finally(() => setLoadingRequests(false));
   };
 
@@ -140,6 +159,7 @@ export default function AuditPage() {
 
         <Tab.Content>
           <Tab.Pane eventKey="logs">
+            {logsError && <Alert variant="danger">{logsError}</Alert>}
             <Row className="g-2 mb-3">
               <Col md={2}>
                 <Form.Select value={actionFilter} onChange={(e) => setActionFilter(e.target.value)}>
@@ -217,6 +237,7 @@ export default function AuditPage() {
           </Tab.Pane>
 
           <Tab.Pane eventKey="requests">
+            {requestsError && <Alert variant="danger">{requestsError}</Alert>}
             <Row className="g-2 mb-3">
               <Col md={3}>
                 <Form.Select value={requestStatus} onChange={(e) => setRequestStatus(e.target.value)}>
