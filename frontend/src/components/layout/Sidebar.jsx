@@ -54,6 +54,7 @@ export default function Sidebar({ collapsed, mobileOpen, onNavigate }) {
             {!collapsed && <div className="app-sidebar-section-label">Quản trị</div>}
             <NavItem to="/users" icon="people" label="Người dùng" />
             <NavItem to="/students" icon="person-lines-fill" label="Quản lý học viên" />
+            <NavItem to="/audit" icon="journal-text" label="Nhật ký & duyệt" />
             <NavItem to="/tuition" icon="cash-coin" label="Học phí" />
           </div>
         )}

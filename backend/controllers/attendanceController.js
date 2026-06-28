@@ -1,6 +1,8 @@
 const pool = require('../config/db');
 const { assertClassAccess } = require('../middleware/classAccess');
 const { buildMonthlyPdf } = require('../utils/attendancePdf');
+const { handleDeletion } = require('../utils/deletionPolicy');
+const { logAction } = require('../utils/auditLog');
 
 async function getSessionClassId(sessionId) {
   const [rows] = await pool.query('SELECT class_id FROM attendance_sessions WHERE id = ?', [sessionId]);
@@ -200,6 +202,16 @@ const submitAttendance = async (req, res) => {
     }
 
     await conn.commit();
+
+    await logAction({
+      actorId: req.user.id,
+      action: 'create',
+      resourceType: 'attendance_session',
+      resourceId: sessionId,
+      resourceLabel: `Điểm danh ${session_date}`,
+      metadata: { class_id: Number(class_id) },
+    });
+
     res.status(201).json({
       message: 'Đã gửi báo cáo điểm danh cho quản trị viên',
       session_id: sessionId,
@@ -221,14 +233,24 @@ const submitAttendance = async (req, res) => {
 
 const deleteSession = async (req, res) => {
   try {
-    const classId = await getSessionClassId(req.params.sessionId);
-    if (!classId) {
+    const [rows] = await pool.query(
+      'SELECT id, session_date, class_id FROM attendance_sessions WHERE id = ?',
+      [req.params.sessionId]
+    );
+    if (rows.length === 0) {
       return res.status(404).json({ message: 'Không tìm thấy buổi điểm danh' });
     }
-    if (!(await assertClassAccess(req.user, classId, res, { manage: true }))) return;
+    const session = rows[0];
+    if (!(await assertClassAccess(req.user, session.class_id, res, { manage: true }))) return;
 
-    await pool.query('DELETE FROM attendance_sessions WHERE id = ?', [req.params.sessionId]);
-    res.json({ message: 'Xóa buổi điểm danh thành công' });
+    const label = `Điểm danh ${session.session_date}`;
+    return handleDeletion(req, res, {
+      resourceType: 'attendance_session',
+      resourceId: session.id,
+      resourceLabel: label,
+      metadata: { class_id: session.class_id },
+      successMessage: 'Xóa buổi điểm danh thành công',
+    });
   } catch (err) {
     res.status(500).json({ message: 'Lỗi hệ thống', error: err.message });
   }

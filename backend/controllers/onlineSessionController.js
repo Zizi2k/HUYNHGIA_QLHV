@@ -1,6 +1,8 @@
 const crypto = require('crypto');
 const pool = require('../config/db');
 const { assertClassAccess } = require('../middleware/classAccess');
+const { handleDeletion } = require('../utils/deletionPolicy');
+const { logAction } = require('../utils/auditLog');
 
 function generateRoomCode(classId) {
   const rand = crypto.randomBytes(5).toString('hex');
@@ -54,6 +56,15 @@ const createSession = async (req, res) => {
       [class_id, title.trim(), roomCode, req.user.id]
     );
 
+    await logAction({
+      actorId: req.user.id,
+      action: 'create',
+      resourceType: 'online_session',
+      resourceId: result.insertId,
+      resourceLabel: title.trim(),
+      metadata: { class_id: Number(class_id) },
+    });
+
     res.status(201).json({
       message: 'Tạo phòng học online thành công',
       id: result.insertId,
@@ -93,16 +104,22 @@ const endSession = async (req, res) => {
 const deleteSession = async (req, res) => {
   try {
     const [sessions] = await pool.query(
-      'SELECT class_id FROM online_sessions WHERE id = ?',
+      'SELECT id, title, class_id FROM online_sessions WHERE id = ?',
       [req.params.id]
     );
     if (sessions.length === 0) {
       return res.status(404).json({ message: 'Không tìm thấy phòng học' });
     }
-    if (!(await assertClassAccess(req.user, sessions[0].class_id, res, { manage: true }))) return;
+    const session = sessions[0];
+    if (!(await assertClassAccess(req.user, session.class_id, res, { manage: true }))) return;
 
-    await pool.query('DELETE FROM online_sessions WHERE id = ?', [req.params.id]);
-    res.json({ message: 'Xóa phòng học thành công' });
+    return handleDeletion(req, res, {
+      resourceType: 'online_session',
+      resourceId: session.id,
+      resourceLabel: session.title,
+      metadata: { class_id: session.class_id },
+      successMessage: 'Xóa phòng học thành công',
+    });
   } catch (err) {
     res.status(500).json({ message: 'Lỗi hệ thống', error: err.message });
   }

@@ -1,5 +1,7 @@
 const pool = require('../config/db');
 const { assertClassAccess, getLessonClassId } = require('../middleware/classAccess');
+const { handleDeletion } = require('../utils/deletionPolicy');
+const { logAction } = require('../utils/auditLog');
 
 function isValidUrl(url) {
   try {
@@ -61,6 +63,14 @@ const createLesson = async (req, res) => {
       'INSERT INTO lessons (class_id, title, description, file_url, file_type) VALUES (?, ?, ?, ?, ?)',
       [req.params.classId, title.trim(), description || null, file_url, file_type]
     );
+    await logAction({
+      actorId: req.user.id,
+      action: 'create',
+      resourceType: 'lesson',
+      resourceId: result.insertId,
+      resourceLabel: title.trim(),
+      metadata: { class_id: Number(req.params.classId) },
+    });
     res.status(201).json({ message: 'Đăng tài liệu thành công', id: result.insertId });
   } catch (err) {
     res.status(500).json({ message: 'Lỗi hệ thống', error: err.message });
@@ -69,14 +79,22 @@ const createLesson = async (req, res) => {
 
 const deleteLesson = async (req, res) => {
   try {
-    const classId = await getLessonClassId(req.params.id);
-    if (!classId) {
+    const [lessons] = await pool.query('SELECT id, title, class_id FROM lessons WHERE id = ?', [
+      req.params.id,
+    ]);
+    if (lessons.length === 0) {
       return res.status(404).json({ message: 'Không tìm thấy bài giảng' });
     }
-    if (!(await assertClassAccess(req.user, classId, res, { manage: true }))) return;
+    const lesson = lessons[0];
+    if (!(await assertClassAccess(req.user, lesson.class_id, res, { manage: true }))) return;
 
-    await pool.query('DELETE FROM lessons WHERE id = ?', [req.params.id]);
-    res.json({ message: 'Xóa bài giảng thành công' });
+    return handleDeletion(req, res, {
+      resourceType: 'lesson',
+      resourceId: lesson.id,
+      resourceLabel: lesson.title,
+      metadata: { class_id: lesson.class_id },
+      successMessage: 'Xóa bài giảng thành công',
+    });
   } catch (err) {
     res.status(500).json({ message: 'Lỗi hệ thống', error: err.message });
   }

@@ -2,6 +2,8 @@ const pool = require('../config/db');
 const {
   assertClassAccess, getAssignmentClassId, getSubmissionClassId,
 } = require('../middleware/classAccess');
+const { handleDeletion } = require('../utils/deletionPolicy');
+const { logAction } = require('../utils/auditLog');
 
 function isValidUrl(url) {
   try {
@@ -109,6 +111,14 @@ const createAssignment = async (req, res) => {
        VALUES (?, ?, ?, ?, ?, ?)`,
       [class_id, title.trim(), description || null, attachment.file_url, attachment.file_type, deadline || null]
     );
+    await logAction({
+      actorId: req.user.id,
+      action: 'create',
+      resourceType: 'assignment',
+      resourceId: result.insertId,
+      resourceLabel: title.trim(),
+      metadata: { class_id: Number(class_id) },
+    });
     res.status(201).json({ message: 'Giao bài tập thành công', id: result.insertId });
   } catch (err) {
     res.status(400).json({ message: err.message || 'Không thể tạo bài tập' });
@@ -138,6 +148,14 @@ const updateAssignment = async (req, res) => {
     if (result.affectedRows === 0) {
       return res.status(404).json({ message: 'Không tìm thấy bài tập' });
     }
+    await logAction({
+      actorId: req.user.id,
+      action: 'update',
+      resourceType: 'assignment',
+      resourceId: Number(req.params.id),
+      resourceLabel: title,
+      metadata: { class_id: classId },
+    });
     res.json({ message: 'Cập nhật bài tập thành công' });
   } catch (err) {
     res.status(400).json({ message: err.message || 'Không thể cập nhật bài tập' });
@@ -146,17 +164,22 @@ const updateAssignment = async (req, res) => {
 
 const deleteAssignment = async (req, res) => {
   try {
-    const classId = await getAssignmentClassId(req.params.id);
-    if (!classId) {
+    const [rows] = await pool.query('SELECT id, title, class_id FROM assignments WHERE id = ?', [
+      req.params.id,
+    ]);
+    if (rows.length === 0) {
       return res.status(404).json({ message: 'Không tìm thấy bài tập' });
     }
-    if (!(await assertClassAccess(req.user, classId, res, { manage: true }))) return;
+    const assignment = rows[0];
+    if (!(await assertClassAccess(req.user, assignment.class_id, res, { manage: true }))) return;
 
-    const [result] = await pool.query('DELETE FROM assignments WHERE id = ?', [req.params.id]);
-    if (result.affectedRows === 0) {
-      return res.status(404).json({ message: 'Không tìm thấy bài tập' });
-    }
-    res.json({ message: 'Xóa bài tập thành công' });
+    return handleDeletion(req, res, {
+      resourceType: 'assignment',
+      resourceId: assignment.id,
+      resourceLabel: assignment.title,
+      metadata: { class_id: assignment.class_id },
+      successMessage: 'Xóa bài tập thành công',
+    });
   } catch (err) {
     res.status(500).json({ message: 'Lỗi hệ thống', error: err.message });
   }

@@ -7,6 +7,8 @@ const { parseAmount, SUBJECTS } = require('../utils/tuitionHelpers');
 const { getNextStudentCode, inferSubjectFromClassName } = require('../utils/studentCode');
 const { addMonthsToDate } = require('../utils/dateHelpers');
 const { insertTuitionProfile } = require('../utils/tuitionProfileDb');
+const { handleDeletion } = require('../utils/deletionPolicy');
+const { logAction } = require('../utils/auditLog');
 
 async function getClassRow(conn, classId) {
   const [classes] = await conn.query('SELECT * FROM classes WHERE id = ?', [classId]);
@@ -106,6 +108,13 @@ const createClass = async (req, res) => {
       'INSERT INTO classes (name, description, subject) VALUES (?, ?, ?)',
       [name, description, resolvedSubject]
     );
+    await logAction({
+      actorId: req.user.id,
+      action: 'create',
+      resourceType: 'class',
+      resourceId: result.insertId,
+      resourceLabel: name,
+    });
     res.status(201).json({ message: 'Tạo lớp học thành công', id: result.insertId });
   } catch (err) {
     res.status(500).json({ message: 'Lỗi hệ thống', error: err.message });
@@ -119,6 +128,13 @@ const updateClass = async (req, res) => {
     await pool.query('UPDATE classes SET name=?, description=?, subject=? WHERE id=?', [
       name, description, resolvedSubject, req.params.id,
     ]);
+    await logAction({
+      actorId: req.user.id,
+      action: 'update',
+      resourceType: 'class',
+      resourceId: Number(req.params.id),
+      resourceLabel: name,
+    });
     res.json({ message: 'Cập nhật thành công' });
   } catch (err) {
     res.status(500).json({ message: 'Lỗi hệ thống', error: err.message });
@@ -323,6 +339,16 @@ const createStudentMember = async (req, res) => {
     await regenerateClassUsernames(conn, req.params.id);
 
     await conn.commit();
+
+    await logAction({
+      actorId: req.user.id,
+      action: 'create',
+      resourceType: 'class_member',
+      resourceId: userId,
+      resourceLabel: fullname.trim(),
+      metadata: { class_id: classRow.id, student_code: code.trim() },
+    });
+
     res.status(201).json({
       message: isAdmin ? 'Thêm học viên và hồ sơ học phí thành công' : 'Thêm học viên thành công',
       id: userId,
@@ -379,6 +405,16 @@ const updateStudentMember = async (req, res) => {
     await regenerateClassUsernames(conn, req.params.id);
 
     await conn.commit();
+
+    await logAction({
+      actorId: req.user.id,
+      action: 'update',
+      resourceType: 'class_member',
+      resourceId: Number(userId),
+      resourceLabel: fullname.trim(),
+      metadata: { class_id: Number(req.params.id) },
+    });
+
     res.json({ message: 'Cập nhật học viên thành công' });
   } catch (err) {
     await conn.rollback();
@@ -416,29 +452,29 @@ const removeMember = async (req, res) => {
       if (!(await isClassTeacher(req.user.id, classId))) {
         return res.status(403).json({ message: 'Bạn không được phân công quản lý lớp học này' });
       }
-      const [member] = await conn.query(
-        `SELECT u.role FROM class_members cm
-         JOIN users u ON cm.user_id = u.id
-         WHERE cm.class_id = ? AND cm.user_id = ?`,
-        [classId, userId]
-      );
-      if (member.length === 0) {
-        return res.status(404).json({ message: 'Không tìm thấy thành viên trong lớp' });
-      }
-      if (member[0].role !== 'student') {
-        return res.status(403).json({ message: 'Giáo viên chỉ có thể xóa học viên khỏi lớp' });
-      }
     }
 
-    await conn.beginTransaction();
-    await conn.query('DELETE FROM class_members WHERE class_id=? AND user_id=?', [
-      classId, userId,
-    ]);
-    await regenerateClassUsernames(conn, req.params.id);
-    await conn.commit();
-    res.json({ message: 'Xóa thành viên thành công' });
+    const [member] = await conn.query(
+      `SELECT u.id, u.fullname, u.role FROM class_members cm
+       JOIN users u ON cm.user_id = u.id
+       WHERE cm.class_id = ? AND cm.user_id = ?`,
+      [classId, userId]
+    );
+    if (member.length === 0) {
+      return res.status(404).json({ message: 'Không tìm thấy thành viên trong lớp' });
+    }
+    if (req.user.role === 'teacher' && member[0].role !== 'student') {
+      return res.status(403).json({ message: 'Giáo viên chỉ có thể xóa học viên khỏi lớp' });
+    }
+
+    return handleDeletion(req, res, {
+      resourceType: 'class_member',
+      resourceId: Number(userId),
+      resourceLabel: member[0].fullname,
+      metadata: { class_id: Number(classId), user_id: Number(userId) },
+      successMessage: 'Xóa thành viên thành công',
+    });
   } catch (err) {
-    await conn.rollback();
     res.status(500).json({ message: 'Lỗi hệ thống', error: err.message });
   } finally {
     conn.release();
@@ -447,10 +483,18 @@ const removeMember = async (req, res) => {
 
 const deleteClass = async (req, res) => {
   try {
-    const [result] = await pool.query('DELETE FROM classes WHERE id = ?', [req.params.id]);
-    if (result.affectedRows === 0) {
+    const [classes] = await pool.query('SELECT id, name FROM classes WHERE id = ?', [req.params.id]);
+    if (classes.length === 0) {
       return res.status(404).json({ message: 'Không tìm thấy lớp học' });
     }
+    await pool.query('DELETE FROM classes WHERE id = ?', [req.params.id]);
+    await logAction({
+      actorId: req.user.id,
+      action: 'delete',
+      resourceType: 'class',
+      resourceId: classes[0].id,
+      resourceLabel: classes[0].name,
+    });
     res.json({ message: 'Xóa lớp học thành công' });
   } catch (err) {
     res.status(500).json({ message: 'Lỗi hệ thống', error: err.message });

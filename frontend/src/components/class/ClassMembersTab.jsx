@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Modal, Form, Button, Alert, Spinner, InputGroup, ListGroup, Badge,
 } from 'react-bootstrap';
+import { notifyDeleteResult } from '../../utils/deleteHelpers';
 import { classService, tuitionService, studentService } from '../../services';
 import DataTable, { DataTableEmpty } from '../common/DataTable';
 import AddStudentModal, { emptyStudentFields, emptyTuitionFields } from './AddStudentModal';
@@ -199,8 +200,8 @@ export default function ClassMembersTab({ classId, className, members, isTeacher
   const handleRemove = async (userId, name) => {
     if (!window.confirm(`Xóa "${name}" khỏi lớp?`)) return;
     try {
-      await classService.removeMember(classId, userId);
-      onUpdated();
+      const res = await classService.removeMember(classId, userId);
+      if (!notifyDeleteResult(res)) onUpdated();
     } catch (err) {
       alert(err.response?.data?.message || 'Không thể xóa học viên');
     }

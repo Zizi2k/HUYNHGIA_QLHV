@@ -130,3 +130,11 @@ export const studentService = {
   createEnrollment: (data) => api.post('/students/enroll', data),
   updateEnrollment: (id, data) => api.put(`/students/enroll/${id}`, data),
 };
+
+export const auditService = {
+  getLogs: (params) => api.get('/audit/logs', { params }),
+  getDeletionRequests: (params) => api.get('/audit/deletion-requests', { params }),
+  getPendingCount: () => api.get('/audit/deletion-requests/pending-count'),
+  approveDeletion: (id, data) => api.post(`/audit/deletion-requests/${id}/approve`, data),
+  rejectDeletion: (id, data) => api.post(`/audit/deletion-requests/${id}/reject`, data),
+};

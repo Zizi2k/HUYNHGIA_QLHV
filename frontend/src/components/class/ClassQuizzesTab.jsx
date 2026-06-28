@@ -4,6 +4,7 @@ import {
   Button, Card, Modal, Form, Alert, Badge, Spinner, Table, Collapse,
 } from 'react-bootstrap';
 import { quizService } from '../../services';
+import { notifyDeleteResult } from '../../utils/deleteHelpers';
 
 const emptyQuestion = {
   question: '', optionA: '', optionB: '', optionC: '', optionD: '', answer: 'A',
@@ -154,8 +155,8 @@ export default function ClassQuizzesTab({
   const handleDelete = async (id, title) => {
     if (!window.confirm(`Xóa bài kiểm tra "${title}"?`)) return;
     try {
-      await quizService.delete(id);
-      onUpdated();
+      const res = await quizService.delete(id);
+      if (!notifyDeleteResult(res)) onUpdated();
     } catch (err) {
       alert(err.response?.data?.message || 'Không thể xóa bài kiểm tra');
     }

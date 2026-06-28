@@ -17,6 +17,7 @@ import ClassAttendanceTab from '../components/class/ClassAttendanceTab';
 import ClassAssignmentsTab from '../components/class/ClassAssignmentsTab';
 import ClassQuizzesTab from '../components/class/ClassQuizzesTab';
 import ClassOnlineTab from '../components/class/ClassOnlineTab';
+import { notifyDeleteResult } from '../utils/deleteHelpers';
 
 const API_BASE = import.meta.env.VITE_API_URL?.replace('/api', '') || 'http://localhost:5000';
 
@@ -216,8 +217,8 @@ export default function ClassDetailPage() {
   const handleDeleteLesson = async (lessonId) => {
     if (!window.confirm('Xóa bài giảng này?')) return;
     try {
-      await lessonService.delete(lessonId);
-      loadData();
+      const res = await lessonService.delete(lessonId);
+      if (!notifyDeleteResult(res)) loadData();
     } catch (err) {
       alert(err.response?.data?.message || 'Không thể xóa bài giảng');
     }

@@ -1,4 +1,5 @@
 const pool = require('../config/db');
+const { logAction } = require('../utils/auditLog');
 
 const getDiscounts = async (_req, res) => {
   try {
@@ -52,10 +53,18 @@ const updateDiscount = async (req, res) => {
 
 const deleteDiscount = async (req, res) => {
   try {
-    const [result] = await pool.query('DELETE FROM fee_discounts WHERE id = ?', [req.params.id]);
-    if (result.affectedRows === 0) {
+    const [rows] = await pool.query('SELECT id, name FROM fee_discounts WHERE id = ?', [req.params.id]);
+    if (rows.length === 0) {
       return res.status(404).json({ message: 'Không tìm thấy mức giảm' });
     }
+    await pool.query('DELETE FROM fee_discounts WHERE id = ?', [req.params.id]);
+    await logAction({
+      actorId: req.user.id,
+      action: 'delete',
+      resourceType: 'tuition_discount',
+      resourceId: rows[0].id,
+      resourceLabel: rows[0].name,
+    });
     res.json({ message: 'Xóa mức giảm thành công' });
   } catch (err) {
     res.status(500).json({ message: 'Lỗi hệ thống', error: err.message });

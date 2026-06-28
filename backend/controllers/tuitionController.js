@@ -2,6 +2,7 @@ const pool = require('../config/db');
 const { enrichProfile, parseAmount, SUBJECTS } = require('../utils/tuitionHelpers');
 const { PROFILE_SELECT } = require('../utils/tuitionProfileDb');
 const { addMonthsToDate } = require('../utils/dateHelpers');
+const { logAction } = require('../utils/auditLog');
 
 async function linkUserAndClass(conn, studentCode, classLabel) {
   let userId = null;
@@ -220,10 +221,21 @@ const updateProfile = async (req, res) => {
 
 const deleteProfile = async (req, res) => {
   try {
-    const [result] = await pool.query('DELETE FROM tuition_profiles WHERE id = ?', [req.params.id]);
-    if (result.affectedRows === 0) {
+    const [profiles] = await pool.query(
+      'SELECT id, fullname, student_code FROM tuition_profiles WHERE id = ?',
+      [req.params.id]
+    );
+    if (profiles.length === 0) {
       return res.status(404).json({ message: 'Không tìm thấy hồ sơ' });
     }
+    await pool.query('DELETE FROM tuition_profiles WHERE id = ?', [req.params.id]);
+    await logAction({
+      actorId: req.user.id,
+      action: 'delete',
+      resourceType: 'tuition_profile',
+      resourceId: profiles[0].id,
+      resourceLabel: `${profiles[0].fullname} (${profiles[0].student_code})`,
+    });
     res.json({ message: 'Xóa hồ sơ thành công' });
   } catch (err) {
     res.status(500).json({ message: 'Lỗi hệ thống', error: err.message });
@@ -261,10 +273,22 @@ const createPayment = async (req, res) => {
 
 const deletePayment = async (req, res) => {
   try {
-    const [result] = await pool.query('DELETE FROM tuition_payments WHERE id = ?', [req.params.id]);
-    if (result.affectedRows === 0) {
+    const [payments] = await pool.query(
+      'SELECT id, profile_id, amount FROM tuition_payments WHERE id = ?',
+      [req.params.id]
+    );
+    if (payments.length === 0) {
       return res.status(404).json({ message: 'Không tìm thấy phiếu thu' });
     }
+    await pool.query('DELETE FROM tuition_payments WHERE id = ?', [req.params.id]);
+    await logAction({
+      actorId: req.user.id,
+      action: 'delete',
+      resourceType: 'tuition_payment',
+      resourceId: payments[0].id,
+      resourceLabel: `Phiếu thu #${payments[0].id}`,
+      metadata: { profile_id: payments[0].profile_id, amount: payments[0].amount },
+    });
     res.json({ message: 'Xóa phiếu thu thành công' });
   } catch (err) {
     res.status(500).json({ message: 'Lỗi hệ thống', error: err.message });

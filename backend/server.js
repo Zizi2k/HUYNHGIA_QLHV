@@ -16,6 +16,7 @@ const dashboardRoutes = require('./routes/dashboardRoutes');
 const onlineSessionRoutes = require('./routes/onlineSessionRoutes');
 const tuitionRoutes = require('./routes/tuitionRoutes');
 const studentRoutes = require('./routes/studentRoutes');
+const auditRoutes = require('./routes/auditRoutes');
 const { ensureSchema } = require('./config/ensureSchema');
 const pool = require('./config/db');
 
@@ -44,6 +45,7 @@ app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/online-sessions', onlineSessionRoutes);
 app.use('/api/tuition', tuitionRoutes);
 app.use('/api/students', studentRoutes);
+app.use('/api/audit', auditRoutes);
 
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'OK', message: 'API học trực tuyến đang hoạt động' });

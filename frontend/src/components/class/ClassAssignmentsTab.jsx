@@ -3,6 +3,7 @@ import {
   Button, Card, Modal, Form, Alert, Badge, Spinner, Table,
 } from 'react-bootstrap';
 import { assignmentService } from '../../services';
+import { notifyDeleteResult } from '../../utils/deleteHelpers';
 import {
   LESSON_FILE_ACCEPT, LESSON_IMAGE_ACCEPT,
   isLessonFileAllowed, isLessonImageAllowed,
@@ -219,8 +220,8 @@ export default function ClassAssignmentsTab({
   const handleDelete = async (id, title) => {
     if (!window.confirm(`Xóa bài tập "${title}"?`)) return;
     try {
-      await assignmentService.delete(id);
-      onUpdated();
+      const res = await assignmentService.delete(id);
+      if (!notifyDeleteResult(res)) onUpdated();
     } catch (err) {
       alert(err.response?.data?.message || 'Không thể xóa bài tập');
     }

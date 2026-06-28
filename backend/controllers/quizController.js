@@ -1,5 +1,7 @@
 const pool = require('../config/db');
 const { assertClassAccess, getQuizClassId } = require('../middleware/classAccess');
+const { handleDeletion } = require('../utils/deletionPolicy');
+const { logAction } = require('../utils/auditLog');
 
 const getQuizzes = async (req, res) => {
   try {
@@ -106,6 +108,14 @@ const createQuiz = async (req, res) => {
     }
 
     await conn.commit();
+    await logAction({
+      actorId: req.user.id,
+      action: 'create',
+      resourceType: 'quiz',
+      resourceId: quizId,
+      resourceLabel: title,
+      metadata: { class_id: Number(class_id) },
+    });
     res.status(201).json({ message: 'Tạo bài kiểm tra thành công', id: quizId });
   } catch (err) {
     await conn.rollback();
@@ -167,6 +177,14 @@ const updateQuiz = async (req, res) => {
     }
 
     await conn.commit();
+    await logAction({
+      actorId: req.user.id,
+      action: 'update',
+      resourceType: 'quiz',
+      resourceId: Number(req.params.id),
+      resourceLabel: title,
+      metadata: { class_id: classId },
+    });
     res.json({ message: 'Cập nhật bài kiểm tra thành công' });
   } catch (err) {
     await conn.rollback();
@@ -178,17 +196,22 @@ const updateQuiz = async (req, res) => {
 
 const deleteQuiz = async (req, res) => {
   try {
-    const classId = await getQuizClassId(req.params.id);
-    if (!classId) {
+    const [rows] = await pool.query('SELECT id, title, class_id FROM quizzes WHERE id = ?', [
+      req.params.id,
+    ]);
+    if (rows.length === 0) {
       return res.status(404).json({ message: 'Không tìm thấy bài kiểm tra' });
     }
-    if (!(await assertClassAccess(req.user, classId, res, { manage: true }))) return;
+    const quiz = rows[0];
+    if (!(await assertClassAccess(req.user, quiz.class_id, res, { manage: true }))) return;
 
-    const [result] = await pool.query('DELETE FROM quizzes WHERE id = ?', [req.params.id]);
-    if (result.affectedRows === 0) {
-      return res.status(404).json({ message: 'Không tìm thấy bài kiểm tra' });
-    }
-    res.json({ message: 'Xóa bài kiểm tra thành công' });
+    return handleDeletion(req, res, {
+      resourceType: 'quiz',
+      resourceId: quiz.id,
+      resourceLabel: quiz.title,
+      metadata: { class_id: quiz.class_id },
+      successMessage: 'Xóa bài kiểm tra thành công',
+    });
   } catch (err) {
     res.status(500).json({ message: 'Lỗi hệ thống', error: err.message });
   }

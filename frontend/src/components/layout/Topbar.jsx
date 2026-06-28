@@ -1,7 +1,8 @@
-import { useState } from 'react';
-import { Dropdown } from 'react-bootstrap';
-import { useNavigate } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { Dropdown, Badge } from 'react-bootstrap';
+import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
+import { auditService } from '../../services';
 import UserAvatar from '../UserAvatar';
 import ProfileModal from '../ProfileModal';
 
@@ -9,6 +10,20 @@ export default function Topbar({ onToggleSidebar, onToggleMobile }) {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const [showProfile, setShowProfile] = useState(false);
+  const [pendingDeletes, setPendingDeletes] = useState(0);
+  const isAdmin = user?.role === 'admin';
+
+  useEffect(() => {
+    if (!isAdmin) return undefined;
+    const load = () => {
+      auditService.getPendingCount()
+        .then((res) => setPendingDeletes(res.data.count || 0))
+        .catch(() => {});
+    };
+    load();
+    const timer = setInterval(load, 60000);
+    return () => clearInterval(timer);
+  }, [isAdmin]);
 
   const handleLogout = () => {
     logout();
@@ -38,6 +53,25 @@ export default function Topbar({ onToggleSidebar, onToggleMobile }) {
         </div>
 
         <div className="app-topbar-right">
+          {isAdmin && (
+            <Link
+              to="/audit"
+              className="app-topbar-btn position-relative text-decoration-none"
+              title="Yêu cầu xóa chờ duyệt"
+            >
+              <i className="bi bi-bell" />
+              {pendingDeletes > 0 && (
+                <Badge
+                  bg="danger"
+                  pill
+                  className="position-absolute top-0 start-100 translate-middle"
+                  style={{ fontSize: '0.65rem' }}
+                >
+                  {pendingDeletes > 99 ? '99+' : pendingDeletes}
+                </Badge>
+              )}
+            </Link>
+          )}
           <Dropdown align="end">
             <Dropdown.Toggle as="button" className="app-topbar-user">
               <UserAvatar user={user} size={36} />

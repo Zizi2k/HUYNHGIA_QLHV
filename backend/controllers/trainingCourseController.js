@@ -1,5 +1,6 @@
 const pool = require('../config/db');
 const { SUBJECTS } = require('../utils/tuitionHelpers');
+const { logAction } = require('../utils/auditLog');
 
 const getCourses = async (req, res) => {
   try {
@@ -96,10 +97,19 @@ const deleteCourse = async (req, res) => {
       return res.status(409).json({ message: 'Khóa học đang được gán cho học viên, không thể xóa' });
     }
 
-    const [result] = await pool.query('DELETE FROM training_courses WHERE id = ?', [req.params.id]);
-    if (result.affectedRows === 0) {
+    const [courses] = await pool.query('SELECT id, name FROM training_courses WHERE id = ?', [req.params.id]);
+    if (courses.length === 0) {
       return res.status(404).json({ message: 'Không tìm thấy khóa học' });
     }
+
+    await pool.query('DELETE FROM training_courses WHERE id = ?', [req.params.id]);
+    await logAction({
+      actorId: req.user.id,
+      action: 'delete',
+      resourceType: 'training_course',
+      resourceId: courses[0].id,
+      resourceLabel: courses[0].name,
+    });
     res.json({ message: 'Xóa khóa học thành công' });
   } catch (err) {
     res.status(500).json({ message: 'Lỗi hệ thống', error: err.message });

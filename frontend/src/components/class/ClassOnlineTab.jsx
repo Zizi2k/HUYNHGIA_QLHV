@@ -3,6 +3,7 @@ import {
   Button, Card, Modal, Form, Alert, Spinner, Badge,
 } from 'react-bootstrap';
 import { onlineSessionService } from '../../services';
+import { notifyDeleteResult } from '../../utils/deleteHelpers';
 
 const JITSI_DOMAIN = import.meta.env.VITE_JITSI_DOMAIN || 'meet.jit.si';
 
@@ -170,7 +171,8 @@ export default function ClassOnlineTab({
   const handleDelete = async (sessionId) => {
     if (!window.confirm('Xóa lịch sử phòng học này?')) return;
     try {
-      await onlineSessionService.delete(sessionId);
+      const res = await onlineSessionService.delete(sessionId);
+      if (notifyDeleteResult(res)) return;
       if (joinedSession?.id === sessionId) setJoinedSession(null);
       loadSessions();
     } catch (err) {

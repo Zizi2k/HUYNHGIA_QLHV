@@ -1,5 +1,6 @@
 const pool = require('../config/db');
 const { assertClassAccess } = require('../middleware/classAccess');
+const { logAction } = require('../utils/auditLog');
 
 const getUsers = async (req, res) => {
   try {
@@ -46,6 +47,14 @@ const createUser = async (req, res) => {
       'INSERT INTO users (fullname, username, code, role) VALUES (?, ?, ?, ?)',
       [fullname, username, code, role || 'student']
     );
+    await logAction({
+      actorId: req.user.id,
+      action: 'create',
+      resourceType: 'user',
+      resourceId: result.insertId,
+      resourceLabel: fullname,
+      metadata: { username, role: role || 'student' },
+    });
     res.status(201).json({ message: 'Tạo tài khoản thành công', id: result.insertId });
   } catch (err) {
     res.status(500).json({ message: 'Lỗi hệ thống', error: err.message });
@@ -67,6 +76,13 @@ const updateUser = async (req, res) => {
       'UPDATE users SET fullname=?, username=?, code=?, role=?, status=? WHERE id=?',
       [fullname, username, code, role, status ?? true, req.params.id]
     );
+    await logAction({
+      actorId: req.user.id,
+      action: 'update',
+      resourceType: 'user',
+      resourceId: Number(req.params.id),
+      resourceLabel: fullname,
+    });
     res.json({ message: 'Cập nhật thành công' });
   } catch (err) {
     res.status(500).json({ message: 'Lỗi hệ thống', error: err.message });
@@ -75,7 +91,18 @@ const updateUser = async (req, res) => {
 
 const deleteUser = async (req, res) => {
   try {
+    const [users] = await pool.query('SELECT id, fullname FROM users WHERE id = ?', [req.params.id]);
+    if (users.length === 0) {
+      return res.status(404).json({ message: 'Không tìm thấy người dùng' });
+    }
     await pool.query('DELETE FROM users WHERE id = ?', [req.params.id]);
+    await logAction({
+      actorId: req.user.id,
+      action: 'delete',
+      resourceType: 'user',
+      resourceId: users[0].id,
+      resourceLabel: users[0].fullname,
+    });
     res.json({ message: 'Xóa thành công' });
   } catch (err) {
     res.status(500).json({ message: 'Lỗi hệ thống', error: err.message });
