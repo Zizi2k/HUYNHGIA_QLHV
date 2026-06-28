@@ -9,6 +9,7 @@ import QuizPage from './pages/QuizPage';
 import UsersPage from './pages/UsersPage';
 import HonorPage from './pages/HonorPage';
 import AttendancePage from './pages/AttendancePage';
+import TuitionPage from './pages/TuitionPage';
 
 function App() {
   return (
@@ -24,6 +25,7 @@ function App() {
             <Route path="/users" element={<UsersPage />} />
             <Route path="/honor" element={<HonorPage />} />
             <Route path="/attendance" element={<AttendancePage />} />
+            <Route path="/tuition" element={<TuitionPage />} />
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

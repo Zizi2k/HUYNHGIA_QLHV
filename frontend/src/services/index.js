@@ -90,3 +90,30 @@ export const onlineSessionService = {
   end: (id) => api.post(`/online-sessions/${id}/end`),
   delete: (id) => api.delete(`/online-sessions/${id}`),
 };
+
+export const tuitionService = {
+  getDiscounts: () => api.get('/tuition/discounts'),
+  createDiscount: (data) => api.post('/tuition/discounts', data),
+  updateDiscount: (id, data) => api.put(`/tuition/discounts/${id}`, data),
+  deleteDiscount: (id) => api.delete(`/tuition/discounts/${id}`),
+
+  getProfiles: (params) => api.get('/tuition/profiles', { params }),
+  getProfile: (id) => api.get(`/tuition/profiles/${id}`),
+  createProfile: (data) => api.post('/tuition/profiles', data),
+  updateProfile: (id, data) => api.put(`/tuition/profiles/${id}`, data),
+  deleteProfile: (id) => api.delete(`/tuition/profiles/${id}`),
+  importProfiles: (formData) => api.post('/tuition/profiles/import', formData),
+  downloadImportTemplate: () => api.get('/tuition/profiles/import-template', { responseType: 'blob' }),
+
+  createPayment: (data) => api.post('/tuition/payments', data),
+  deletePayment: (id) => api.delete(`/tuition/payments/${id}`),
+
+  getPeriods: (params) => api.get('/tuition/periods', { params }),
+  createPeriod: (data) => api.post('/tuition/periods', data),
+
+  getMonthlyReport: (subject, month) => api.get('/tuition/report/monthly', { params: { subject, month } }),
+  exportMonthlyPdf: (subject, month) => api.get('/tuition/report/monthly/pdf', {
+    params: { subject, month },
+    responseType: 'blob',
+  }),
+};

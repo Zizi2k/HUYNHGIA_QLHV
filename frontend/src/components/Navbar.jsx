@@ -33,6 +33,9 @@ export default function Navbar() {
               {user?.role === 'admin' && (
                 <Nav.Link as={Link} to="/users">Quản lý người dùng</Nav.Link>
               )}
+              {user?.role === 'admin' && (
+                <Nav.Link as={Link} to="/tuition">Học phí</Nav.Link>
+              )}
               {(user?.role === 'admin' || user?.role === 'teacher') && (
                 <Nav.Link as={Link} to="/attendance">Điểm danh</Nav.Link>
               )}

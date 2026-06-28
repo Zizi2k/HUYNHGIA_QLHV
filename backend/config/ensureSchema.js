@@ -1,4 +1,6 @@
 const pool = require('./db');
+const fs = require('fs');
+const path = require('path');
 
 const ONLINE_SESSIONS_SQL = `
 CREATE TABLE IF NOT EXISTS online_sessions (
@@ -14,8 +16,20 @@ CREATE TABLE IF NOT EXISTS online_sessions (
   FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE CASCADE
 )`;
 
+const TUITION_SQL = fs.readFileSync(
+  path.join(__dirname, '../../database/migration_tuition.sql'),
+  'utf8'
+);
+
 async function ensureSchema() {
   await pool.query(ONLINE_SESSIONS_SQL);
+  const statements = TUITION_SQL
+    .split(';')
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
+  for (const stmt of statements) {
+    await pool.query(stmt);
+  }
 }
 
 module.exports = { ensureSchema };
