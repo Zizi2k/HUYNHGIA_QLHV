@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
 import {
-  Container, Table, Badge, Spinner, Form, Modal, Button, Alert, Row, Col,
+  Table, Badge, Spinner, Form, Modal, Button, Alert, Row, Col,
 } from 'react-bootstrap';
 import { attendanceService, classService } from '../services';
 import { useAuth } from '../context/AuthContext';
+import PageHeader from '../components/layout/PageHeader';
 
 const STATUS_LABELS = {
   present: 'Có mặt',
@@ -88,37 +89,36 @@ export default function AttendancePage() {
   const canExport = user?.role === 'admin' || user?.role === 'teacher';
 
   if (loading && reports.length === 0) {
-    return <Container className="text-center py-5"><Spinner animation="border" /></Container>;
+    return <div className="page-container text-center py-5"><Spinner animation="border" /></div>;
   }
 
   return (
-    <Container>
-      <div className="d-flex justify-content-between align-items-start flex-wrap gap-3 mb-4">
-        <div>
-          <h2 className="mb-2">
-            <i className="bi bi-calendar-check me-2" />
-            Báo cáo điểm danh
-          </h2>
-          {user?.role === 'admin' && (
-            <p className="text-muted mb-0">
-              Tổng hợp kết quả điểm danh do giáo viên gửi từ các lớp học.
-            </p>
-          )}
-        </div>
-        {canExport && (
-          <Button
-            variant="danger"
-            onClick={handleExportPdf}
-            disabled={exporting || !classFilter}
-          >
-            {exporting ? (
-              <><Spinner size="sm" className="me-2" />Đang xuất...</>
-            ) : (
-              <><i className="bi bi-file-earmark-pdf me-1" />Xuất PDF theo tháng</>
-            )}
-          </Button>
-        )}
-      </div>
+    <div className="page-container">
+      <PageHeader
+        title="Báo cáo điểm danh"
+        subtitle={
+          user?.role === 'admin'
+            ? 'Tổng hợp kết quả điểm danh do giáo viên gửi từ các lớp học.'
+            : 'Theo dõi và xuất báo cáo điểm danh theo lớp và tháng.'
+        }
+        actions={
+          canExport ? (
+            <Button
+              variant="danger"
+              size="sm"
+              className="page-header-btn"
+              onClick={handleExportPdf}
+              disabled={exporting || !classFilter}
+            >
+              {exporting ? (
+                <><Spinner size="sm" className="me-2" />Đang xuất...</>
+              ) : (
+                <><i className="bi bi-file-earmark-pdf me-1" />Xuất PDF theo tháng</>
+              )}
+            </Button>
+          ) : null
+        }
+      />
 
       <Row className="mb-4 g-3">
         <Col md={4}>
@@ -227,6 +227,6 @@ export default function AttendancePage() {
           )}
         </Modal.Body>
       </Modal>
-    </Container>
+    </div>
   );
 }

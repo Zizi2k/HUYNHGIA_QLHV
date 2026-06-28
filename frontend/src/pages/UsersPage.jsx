@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
-import { Container, Table, Button, Modal, Form, Spinner, Badge, Alert, Row, Col } from 'react-bootstrap';
+import { Table, Button, Modal, Form, Spinner, Badge, Alert, Row, Col } from 'react-bootstrap';
 import { userService, classService } from '../services';
+import PageHeader from '../components/layout/PageHeader';
 
 const roleOptions = [
   { value: 'admin', label: 'Quản trị viên' },
@@ -164,20 +165,23 @@ export default function UsersPage() {
   };
 
   if (loadingClasses) {
-    return <Container className="text-center py-5"><Spinner animation="border" /></Container>;
+    return <div className="page-container text-center py-5"><Spinner animation="border" /></div>;
   }
 
   const selectedClass = classes.find((c) => String(c.id) === selectedClassId);
   const totalCount = members.length + unassignedTeachers.length;
 
   return (
-    <Container>
-      <div className="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
-        <h2 className="mb-0">Quản lý người dùng</h2>
-        <Button variant="primary" onClick={openCreateModal}>
-          <i className="bi bi-person-plus me-1" />Tạo tài khoản
-        </Button>
-      </div>
+    <div className="page-container">
+      <PageHeader
+        title="Quản lý người dùng"
+        subtitle="Tạo tài khoản và phân công giáo viên vào lớp học."
+        actions={
+          <Button variant="success" size="sm" className="page-header-btn" onClick={openCreateModal}>
+            <i className="bi bi-person-plus me-1" />Tạo tài khoản
+          </Button>
+        }
+      />
 
       <Row className="mb-4 g-3">
         <Col md={5} lg={4}>
@@ -381,6 +385,6 @@ export default function UsersPage() {
           </Modal.Footer>
         </Form>
       </Modal>
-    </Container>
+    </div>
   );
 }

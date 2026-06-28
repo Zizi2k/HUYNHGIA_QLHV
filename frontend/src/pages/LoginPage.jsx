@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Container, Card, Form, Button, Alert } from 'react-bootstrap';
+import { Form, Button, Alert } from 'react-bootstrap';
 import { useAuth } from '../context/AuthContext';
 
 export default function LoginPage() {
@@ -26,46 +26,52 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="login-page min-vh-100 d-flex align-items-center bg-light">
-      <Container style={{ maxWidth: 420 }}>
-        <Card className="shadow border-0">
-          <Card.Body className="p-4">
-            <div className="text-center mb-4">
-              <img src="/logo-login.png" alt="LHG Logo" className="login-logo mb-3" />
-              <h3 className="mt-2 fw-bold">LHG - Học trực tuyến</h3>
-              <p className="text-muted">Mở khóa thế giới bằng ngôn ngữ</p>
-            </div>
+    <div className="login-page">
+      <div className="login-page-inner">
+        <div className="login-brand-panel">
+          <img src="/logo-login.png" alt="LHG Logo" className="login-brand-logo" />
+          <h1 className="login-brand-title">LHG</h1>
+          <p className="login-brand-tagline">Hệ thống học trực tuyến</p>
+          <p className="login-brand-desc">Mở khóa thế giới bằng ngôn ngữ — quản lý lớp học, bài tập và điểm danh trên một nền tảng.</p>
+        </div>
 
-            {error && <Alert variant="danger">{error}</Alert>}
+        <div className="login-form-panel">
+          <div className="login-form-card">
+            <h2 className="login-form-title">Đăng nhập</h2>
+            <p className="login-form-subtitle">Nhập tên đăng nhập và mã người dùng để tiếp tục.</p>
+
+            {error && <Alert variant="danger" className="login-alert">{error}</Alert>}
 
             <Form onSubmit={handleSubmit}>
               <Form.Group className="mb-3">
-                <Form.Label>Tên đăng nhập</Form.Label>
+                <Form.Label className="login-label">Tên đăng nhập</Form.Label>
                 <Form.Control
                   type="text"
                   placeholder="nguyenvana"
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
+                  className="login-input"
                   required
                 />
               </Form.Group>
               <Form.Group className="mb-4">
-                <Form.Label>Mã người dùng</Form.Label>
+                <Form.Label className="login-label">Mã người dùng</Form.Label>
                 <Form.Control
                   type="text"
                   placeholder="HS001"
                   value={code}
                   onChange={(e) => setCode(e.target.value)}
+                  className="login-input"
                   required
                 />
               </Form.Group>
-              <Button type="submit" variant="primary" className="w-100" disabled={loading}>
+              <Button type="submit" variant="primary" className="login-submit-btn" disabled={loading}>
                 {loading ? 'Đang đăng nhập...' : 'Đăng nhập'}
               </Button>
             </Form>
-          </Card.Body>
-        </Card>
-      </Container>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

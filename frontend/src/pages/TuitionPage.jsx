@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
 import {
-  Container, Nav, Tab, Row, Col, Form, Button, Spinner, Alert, Table, Badge,
+  Nav, Tab, Row, Col, Form, Button, Spinner, Alert, Table, Badge,
 } from 'react-bootstrap';
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import PageHeader from '../components/layout/PageHeader';
 import { tuitionService, classService } from '../services';
 import TuitionProfileTable from '../components/tuition/TuitionProfileTable';
 import DiscountManager from '../components/tuition/DiscountManager';
@@ -123,13 +124,11 @@ export default function TuitionPage() {
   }
 
   return (
-    <Container fluid className="px-lg-4">
-      <div className="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-4">
-        <h2 className="mb-0">
-          <i className="bi bi-cash-stack me-2" />
-          Quản lý học phí
-        </h2>
-      </div>
+    <div className="page-container">
+      <PageHeader
+        title="Quản lý học phí"
+        subtitle="Theo dõi học phí, mức giảm giá và báo cáo thu theo tháng."
+      />
 
       <Tab.Container activeKey={activeTab} onSelect={(k) => setActiveTab(k || 'list')}>
         <Nav variant="tabs" className="mb-4">
@@ -323,6 +322,6 @@ export default function TuitionPage() {
         onHide={() => setShowImport(false)}
         onSuccess={loadProfiles}
       />
-    </Container>
+    </div>
   );
 }

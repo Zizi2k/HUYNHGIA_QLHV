@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
-import { Container, Table, Spinner, Badge, Alert, Form, Row, Col } from 'react-bootstrap';
+import { Table, Spinner, Badge, Alert, Form, Row, Col } from 'react-bootstrap';
 import { dashboardService, classService } from '../services';
+import PageHeader from '../components/layout/PageHeader';
 
 export default function HonorPage() {
   const [classes, setClasses] = useState([]);
@@ -33,20 +34,17 @@ export default function HonorPage() {
   }, [selectedClassId]);
 
   if (loadingClasses) {
-    return <Container className="text-center py-5"><Spinner animation="border" /></Container>;
+    return <div className="page-container text-center py-5"><Spinner animation="border" /></div>;
   }
 
   const selectedClass = classes.find((c) => String(c.id) === selectedClassId);
 
   return (
-    <Container>
-      <h2 className="mb-2">
-        <i className="bi bi-trophy text-warning me-2" />
-        Bảng vinh danh
-      </h2>
-      <p className="text-muted mb-4">
-        Xếp hạng học viên trong lớp theo điểm trung bình từ bài tập (giáo viên chấm) và bài kiểm tra trắc nghiệm.
-      </p>
+    <div className="page-container">
+      <PageHeader
+        title="Bảng vinh danh"
+        subtitle="Xếp hạng học viên trong lớp theo điểm trung bình từ bài tập và bài kiểm tra trắc nghiệm."
+      />
 
       <Row className="mb-4">
         <Col md={5} lg={4}>
@@ -114,6 +112,6 @@ export default function HonorPage() {
           )}
         </>
       )}
-    </Container>
+    </div>
   );
 }

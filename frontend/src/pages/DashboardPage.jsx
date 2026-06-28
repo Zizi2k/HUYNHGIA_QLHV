@@ -1,22 +1,28 @@
 import { useEffect, useState } from 'react';
-import { Container, Row, Col, Card, Spinner } from 'react-bootstrap';
+import { Row, Col, Spinner, Button } from 'react-bootstrap';
 import { Link } from 'react-router-dom';
 import { dashboardService, classService } from '../services';
 import { useAuth } from '../context/AuthContext';
+import PageHeader from '../components/layout/PageHeader';
+const metricStyles = [
+  { icon: 'collection', tone: 'orange', label: 'Số lớp học' },
+  { icon: 'journal-text', tone: 'red', label: 'Số bài tập' },
+  { icon: 'patch-question', tone: 'green', label: 'Số bài kiểm tra' },
+  { icon: 'star', tone: 'blue', label: 'Điểm trung bình' },
+];
 
-function StatCard({ icon, label, value, color }) {
+function MetricBlock({ icon, tone, label, value, hint }) {
   return (
-    <Card className="border-0 shadow-sm h-100">
-      <Card.Body className="d-flex align-items-center gap-3">
-        <div className={`rounded-circle bg-${color} bg-opacity-10 p-3`}>
-          <i className={`bi bi-${icon} text-${color} fs-4`} />
-        </div>
-        <div>
-          <div className="text-muted small">{label}</div>
-          <div className="fs-3 fw-bold">{value}</div>
-        </div>
-      </Card.Body>
-    </Card>
+    <div className="dash-metric">
+      <div className={`dash-metric-icon tone-${tone}`}>
+        <i className={`bi bi-${icon}`} />
+      </div>
+      <div className="dash-metric-body">
+        <div className="dash-metric-label">{label}</div>
+        <div className="dash-metric-value">{value}</div>
+        {hint && <div className="dash-metric-hint">{hint}</div>}
+      </div>
+    </div>
   );
 }
 
@@ -30,79 +36,144 @@ export default function DashboardPage() {
     Promise.all([dashboardService.getStats(), classService.getAll()])
       .then(([statsRes, classesRes]) => {
         setStats(statsRes.data);
-        setClasses(classesRes.data.slice(0, 4));
+        setClasses(classesRes.data.slice(0, 8));
       })
       .finally(() => setLoading(false));
   }, []);
 
+  const metrics = [
+    stats?.classCount ?? 0,
+    stats?.assignmentCount ?? 0,
+    stats?.quizCount ?? 0,
+    stats?.avgScore || (user?.role === 'student' ? '0' : '—'),
+  ];
+
   if (loading) {
     return (
-      <Container className="text-center py-5">
+      <div className="page-container text-center py-5">
         <Spinner animation="border" variant="primary" />
-      </Container>
+      </div>
     );
   }
 
   return (
-    <Container>
-      <h2 className="mb-4">Xin chào, {user?.fullname}!</h2>
+    <div className="page-container">
+      <PageHeader
+        title="Tổng quan"
+        subtitle={`Xin chào, ${user?.fullname}! Đây là bảng điều khiển học tập của bạn.`}
+        actions={
+          <Button as={Link} to="/classes" variant="success" size="sm" className="page-header-btn">
+            <i className="bi bi-plus-lg me-1" />
+            Xem lớp học
+          </Button>
+        }
+      />
 
-      <Row className="g-3 mb-4">
-        <Col md={3}>
-          <StatCard icon="collection" label="Số lớp học" value={stats?.classCount || 0} color="primary" />
-        </Col>
-        <Col md={3}>
-          <StatCard icon="journal-text" label="Số bài tập" value={stats?.assignmentCount || 0} color="success" />
-        </Col>
-        <Col md={3}>
-          <StatCard icon="patch-question" label="Số bài kiểm tra" value={stats?.quizCount || 0} color="warning" />
-        </Col>
-        <Col md={3}>
-          <StatCard
-            icon="star"
-            label="Điểm trung bình"
-            value={stats?.avgScore || (user?.role === 'student' ? '0' : '-')}
-            color="danger"
-          />
-        </Col>
-      </Row>
-
-      {user?.role === 'student' && (
-        <Row className="g-3 mb-4">
-          <Col md={6}>
-            <StatCard icon="check-circle" label="Bài đã nộp" value={stats?.submittedCount || 0} color="success" />
-          </Col>
-          <Col md={6}>
-            <StatCard icon="exclamation-circle" label="Bài còn thiếu" value={stats?.missingCount || 0} color="warning" />
-          </Col>
-        </Row>
-      )}
-
-      <Card className="border-0 shadow-sm">
-        <Card.Header className="bg-white fw-bold">Lớp học của bạn</Card.Header>
-        <Card.Body>
-          {classes.length === 0 ? (
-            <p className="text-muted mb-0">Chưa có lớp học nào.</p>
-          ) : (
-            <Row className="g-3">
-              {classes.map((cls) => (
-                <Col md={6} key={cls.id}>
-                  <Card as={Link} to={`/classes/${cls.id}`} className="text-decoration-none h-100 border">
-                    <Card.Body>
-                      <h5 className="text-primary">{cls.name}</h5>
-                      <p className="text-muted small mb-1">{cls.description}</p>
-                      <span className="badge bg-light text-dark">
-                        <i className="bi bi-people me-1" />
-                        {cls.member_count} thành viên
-                      </span>
-                    </Card.Body>
-                  </Card>
-                </Col>
-              ))}
+      <div className="dash-card mb-4">
+        <div className="dash-card-header">
+          <h2 className="dash-card-title">Tổng quan học tập</h2>
+        </div>
+        <div className="dash-card-body">
+          <Row className="g-0 dash-metrics-row">
+            {metricStyles.map((m, i) => (
+              <Col key={m.label} md={6} lg={3}>
+                <MetricBlock
+                  icon={m.icon}
+                  tone={m.tone}
+                  label={m.label}
+                  value={metrics[i]}
+                />
+              </Col>
+            ))}
+          </Row>
+          {user?.role === 'student' && (
+            <Row className="g-0 dash-metrics-row border-top mt-2 pt-2">
+              <Col md={6}>
+                <MetricBlock
+                  icon="check-circle"
+                  tone="green"
+                  label="Bài đã nộp"
+                  value={stats?.submittedCount ?? 0}
+                />
+              </Col>
+              <Col md={6}>
+                <MetricBlock
+                  icon="exclamation-circle"
+                  tone="orange"
+                  label="Bài còn thiếu"
+                  value={stats?.missingCount ?? 0}
+                />
+              </Col>
             </Row>
           )}
-        </Card.Body>
-      </Card>
-    </Container>
+          <div className="text-center mt-4">
+            <Button as={Link} to="/classes" variant="dark" size="sm" className="dash-report-btn">
+              Xem tất cả lớp học
+            </Button>
+          </div>
+        </div>
+      </div>
+
+      <div className="dash-card">
+        <div className="dash-card-header dash-card-header-split">
+          <h2 className="dash-card-title">Lớp học của bạn</h2>
+          <span className="pro-count-badge">{classes.length}</span>
+        </div>
+        <div className="pro-table-wrap">
+          {classes.length === 0 ? (
+            <div className="pro-table-empty">
+              <i className="bi bi-collection pro-table-empty-icon" />
+              Chưa có lớp học nào.
+            </div>
+          ) : (
+            <table className="pro-table">
+              <thead>
+                <tr>
+                  <th style={{ width: 48 }}>#</th>
+                  <th>Tên lớp</th>
+                  <th>Mô tả</th>
+                  <th>Thành viên</th>
+                  <th style={{ width: 100 }}>Thao tác</th>
+                </tr>
+              </thead>
+              <tbody>
+                {classes.map((cls, idx) => (
+                  <tr key={cls.id}>
+                    <td>
+                      <span className="pro-row-num">{idx + 1}</span>
+                    </td>
+                    <td>
+                      <Link to={`/classes/${cls.id}`} className="dash-class-link">
+                        {cls.name}
+                      </Link>
+                    </td>
+                    <td className="text-muted small">
+                      {cls.description || '—'}
+                    </td>
+                    <td>
+                      <span className="dash-member-badge">
+                        <i className="bi bi-people" />
+                        {cls.member_count} thành viên
+                      </span>
+                    </td>
+                    <td>
+                      <Button
+                        as={Link}
+                        to={`/classes/${cls.id}`}
+                        variant="dark"
+                        size="sm"
+                        className="dash-action-btn"
+                      >
+                        Xem
+                      </Button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </div>
+    </div>
   );
 }

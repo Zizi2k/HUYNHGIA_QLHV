@@ -1,8 +1,9 @@
 import { useEffect, useState, useCallback } from 'react';
-import { Container, Row, Col, Card, Button, Modal, Form, Spinner, Alert, InputGroup } from 'react-bootstrap';
+import { Row, Col, Card, Button, Modal, Form, Spinner, Alert, InputGroup } from 'react-bootstrap';
 import { Link } from 'react-router-dom';
 import { classService } from '../services';
 import { useAuth } from '../context/AuthContext';
+import PageHeader from '../components/layout/PageHeader';
 
 const emptyForm = { name: '', description: '' };
 
@@ -88,15 +89,18 @@ export default function ClassesPage() {
   };
 
   return (
-    <Container>
-      <div className="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
-        <h2 className="mb-0">Lớp học</h2>
-        {canManage && (
-          <Button variant="primary" onClick={openCreateModal}>
-            <i className="bi bi-plus-lg me-1" />Tạo lớp học
-          </Button>
-        )}
-      </div>
+    <div className="page-container">
+      <PageHeader
+        title="Lớp học"
+        subtitle="Danh sách và quản lý các lớp học trên hệ thống."
+        actions={
+          canManage ? (
+            <Button variant="success" size="sm" className="page-header-btn" onClick={openCreateModal}>
+              <i className="bi bi-plus-lg me-1" />Tạo lớp học
+            </Button>
+          ) : null
+        }
+      />
 
       <Row className="mb-4">
         <Col md={6} lg={5}>
@@ -210,6 +214,6 @@ export default function ClassesPage() {
           </Modal.Footer>
         </Form>
       </Modal>
-    </Container>
+    </div>
   );
 }
