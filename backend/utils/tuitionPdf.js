@@ -15,7 +15,7 @@ pdfmake.setFonts({
   },
 });
 
-function buildMonthlyTuitionPdf({ subjectLabel, month, students, summary }) {
+function buildMonthlyTuitionPdf({ subjectLabel, month, students, summary, classLabel }) {
   const header = [
     { text: 'STT', style: 'tableHeader', alignment: 'center' },
     { text: 'Mã HV', style: 'tableHeader' },
@@ -48,6 +48,7 @@ function buildMonthlyTuitionPdf({ subjectLabel, month, students, summary }) {
     content: [
       { text: 'BÁO CÁO HỌC PHÍ', style: 'title' },
       { text: `Môn: ${subjectLabel}`, style: 'subtitle' },
+      ...(classLabel ? [{ text: `Lớp: ${classLabel}`, style: 'subtitle' }] : []),
       { text: formatMonthYear(month), style: 'subtitle', margin: [0, 0, 0, 12] },
       {
         table: {

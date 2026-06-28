@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Nav, Tab, Row, Col, Form, Button, Spinner, Alert, Table, Badge,
 } from 'react-bootstrap';
@@ -36,6 +36,7 @@ export default function TuitionPage() {
 
   const [reportSubject, setReportSubject] = useState('english');
   const [reportMonth, setReportMonth] = useState(currentMonthValue());
+  const [reportClassIds, setReportClassIds] = useState([]);
   const [report, setReport] = useState(null);
   const [reportLoading, setReportLoading] = useState(false);
   const [exporting, setExporting] = useState(false);
@@ -66,22 +67,38 @@ export default function TuitionPage() {
     return () => clearTimeout(timer);
   }, [search]);
 
+  const reportClasses = useMemo(
+    () => classes.filter((c) => !c.subject || c.subject === reportSubject),
+    [classes, reportSubject]
+  );
+
+  const toggleReportClass = (classId) => {
+    const id = String(classId);
+    setReportClassIds((prev) => (
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+    ));
+  };
+
   const loadReport = () => {
     if (!reportSubject || !reportMonth) return;
     setReportLoading(true);
-    tuitionService.getMonthlyReport(reportSubject, reportMonth)
+    tuitionService.getMonthlyReport(reportSubject, reportMonth, reportClassIds)
       .then((res) => setReport(res.data))
       .finally(() => setReportLoading(false));
   };
 
   useEffect(() => {
+    setReportClassIds((prev) => prev.filter((id) => reportClasses.some((c) => String(c.id) === id)));
+  }, [reportSubject, reportClasses]);
+
+  useEffect(() => {
     if (activeTab === 'report') loadReport();
-  }, [activeTab, reportSubject, reportMonth]);
+  }, [activeTab, reportSubject, reportMonth, reportClassIds]);
 
   const handleExportPdf = async () => {
     setExporting(true);
     try {
-      const res = await tuitionService.exportMonthlyPdf(reportSubject, reportMonth);
+      const res = await tuitionService.exportMonthlyPdf(reportSubject, reportMonth, reportClassIds);
       const url = window.URL.createObjectURL(new Blob([res.data], { type: 'application/pdf' }));
       const link = document.createElement('a');
       link.href = url;
@@ -195,7 +212,7 @@ export default function TuitionPage() {
           </Tab.Pane>
 
           <Tab.Pane eventKey="report">
-            <Row className="g-3 mb-4">
+            <Row className="g-3 mb-3">
               <Col md={3}>
                 <Form.Group>
                   <Form.Label>Môn học</Form.Label>
@@ -222,14 +239,62 @@ export default function TuitionPage() {
 
             <Row className="g-3 mb-4">
               <Col md={8}>
+                <Form.Group>
+                  <div className="d-flex justify-content-between align-items-center mb-1">
+                    <Form.Label className="mb-0">Lớp báo cáo</Form.Label>
+                    <div className="d-flex gap-2">
+                      <Button
+                        variant="link"
+                        size="sm"
+                        className="p-0"
+                        onClick={() => setReportClassIds(reportClasses.map((c) => String(c.id)))}
+                      >
+                        Chọn tất cả
+                      </Button>
+                      <Button
+                        variant="link"
+                        size="sm"
+                        className="p-0 text-muted"
+                        onClick={() => setReportClassIds([])}
+                      >
+                        Bỏ chọn
+                      </Button>
+                    </div>
+                  </div>
+                  <div className="border rounded p-2 bg-white report-class-picker">
+                    {reportClasses.length === 0 ? (
+                      <div className="text-muted small py-2">Không có lớp cho môn này</div>
+                    ) : (
+                      reportClasses.map((c) => (
+                        <Form.Check
+                          key={c.id}
+                          type="checkbox"
+                          id={`report-class-${c.id}`}
+                          label={c.name}
+                          checked={reportClassIds.includes(String(c.id))}
+                          onChange={() => toggleReportClass(c.id)}
+                          className="mb-1"
+                        />
+                      ))
+                    )}
+                  </div>
+                  <Form.Text className="text-muted">
+                    Không chọn lớp nào = báo cáo tất cả lớp của môn. Chọn một hoặc nhiều lớp để lọc.
+                  </Form.Text>
+                </Form.Group>
+              </Col>
+              <Col md={4}>
                 <Form.Control
                   placeholder="Ghi chú kỳ báo cáo (tùy chọn)"
                   value={periodNote}
                   onChange={(e) => setPeriodNote(e.target.value)}
                 />
-              </Col>
-              <Col md={4}>
-                <Button variant="outline-secondary" onClick={handleCreatePeriod} disabled={creatingPeriod}>
+                <Button
+                  variant="outline-secondary"
+                  className="mt-2"
+                  onClick={handleCreatePeriod}
+                  disabled={creatingPeriod}
+                >
                   {creatingPeriod ? 'Đang tạo...' : 'Tạo kỳ báo cáo tháng'}
                 </Button>
               </Col>
@@ -239,6 +304,14 @@ export default function TuitionPage() {
               <>
                 <Alert variant="light" className="border">
                   <strong>{report.subject_label}</strong> — {report.month}
+                  {report.class_labels?.length > 0 && (
+                    <span className="ms-2 text-primary">
+                      | Lớp: {report.class_labels.join(', ')}
+                    </span>
+                  )}
+                  {(!report.class_labels || report.class_labels.length === 0) && (
+                    <span className="ms-2 text-muted">| Tất cả lớp</span>
+                  )}
                   <span className="ms-3">Tổng HV: {report.summary.total_students}</span>
                   <span className="ms-3">Đóng trong tháng: {report.summary.paid_in_month}</span>
                   <span className="ms-3">Còn nợ: {report.summary.still_in_debt}</span>

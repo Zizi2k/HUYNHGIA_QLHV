@@ -113,9 +113,19 @@ export const tuitionService = {
   getPeriods: (params) => api.get('/tuition/periods', { params }),
   createPeriod: (data) => api.post('/tuition/periods', data),
 
-  getMonthlyReport: (subject, month) => api.get('/tuition/report/monthly', { params: { subject, month } }),
-  exportMonthlyPdf: (subject, month) => api.get('/tuition/report/monthly/pdf', {
-    params: { subject, month },
+  getMonthlyReport: (subject, month, classIds) => api.get('/tuition/report/monthly', {
+    params: {
+      subject,
+      month,
+      class_ids: classIds?.length ? classIds.join(',') : undefined,
+    },
+  }),
+  exportMonthlyPdf: (subject, month, classIds) => api.get('/tuition/report/monthly/pdf', {
+    params: {
+      subject,
+      month,
+      class_ids: classIds?.length ? classIds.join(',') : undefined,
+    },
     responseType: 'blob',
   }),
 };

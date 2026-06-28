@@ -49,6 +49,92 @@ async function fetchPaymentsForProfiles(profileIds) {
   return map;
 }
 
+function parseClassIds(query) {
+  const raw = query.class_ids || query.class_id;
+  if (!raw) return [];
+  return String(raw)
+    .split(',')
+    .map((s) => parseInt(s.trim(), 10))
+    .filter((id) => Number.isFinite(id) && id > 0);
+}
+
+async function appendClassFilterSql(classIds) {
+  if (!classIds.length) {
+    return { sql: '', params: [], classLabels: [] };
+  }
+  const [classes] = await pool.query(
+    'SELECT id, name, code FROM classes WHERE id IN (?)',
+    [classIds]
+  );
+  const labelSet = [...new Set(classes.flatMap((c) => [c.name, c.code].filter(Boolean)))];
+  if (labelSet.length) {
+    return {
+      sql: ' AND (tp.class_id IN (?) OR tp.class_label IN (?))',
+      params: [classIds, labelSet],
+      classLabels: classes.map((c) => c.name),
+    };
+  }
+  return {
+    sql: ' AND tp.class_id IN (?)',
+    params: [classIds],
+    classLabels: classes.map((c) => c.name),
+  };
+}
+
+async function buildMonthlyReportStudents(subject, month, user, classIds = []) {
+  const scopeFilter = appendStudentCodeScopeSql(user);
+  const classFilter = await appendClassFilterSql(classIds);
+  const [rows] = await pool.query(
+    `${PROFILE_SELECT} WHERE tp.subject = ?${scopeFilter.sql}${classFilter.sql} ORDER BY tp.class_label, tp.fullname`,
+    [subject, ...scopeFilter.params, ...classFilter.params]
+  );
+  const paymentMap = await fetchPaymentsForProfiles(rows.map((r) => r.id));
+
+  const students = rows.map((row) => {
+    const payments = paymentMap[row.id] || [];
+    const enriched = enrichProfile(row, payments);
+    const monthPaid = payments
+      .filter((p) => p.period_month === month)
+      .reduce((acc, p) => {
+        acc[p.payment_type] += Number(p.amount);
+        acc.total += Number(p.amount);
+        if (p.method === 'cash') acc.cash += Number(p.amount);
+        else acc.transfer += Number(p.amount);
+        return acc;
+      }, { tuition: 0, book: 0, total: 0, cash: 0, transfer: 0 });
+
+    return {
+      id: row.id,
+      student_code: row.student_code,
+      fullname: row.fullname,
+      class_label: row.class_label,
+      class_id: row.class_id,
+      fee_after_discount: row.fee_after_discount,
+      book_fee: row.book_fee,
+      tuition_paid: enriched.tuition_paid,
+      book_paid: enriched.book_paid,
+      total_debt: enriched.total_debt,
+      status: enriched.status,
+      month_paid: monthPaid,
+    };
+  });
+
+  const paid = students.filter((s) => s.month_paid.total > 0);
+  return {
+    students,
+    classLabels: classFilter.classLabels,
+    summary: {
+      total_students: students.length,
+      paid_in_month: paid.length,
+      still_in_debt: students.filter((s) => s.total_debt > 0).length,
+      month_cash: paid.reduce((s, st) => s + st.month_paid.cash, 0),
+      month_transfer: paid.reduce((s, st) => s + st.month_paid.transfer, 0),
+      month_total: paid.reduce((s, st) => s + st.month_paid.total, 0),
+    },
+    paymentMap,
+  };
+}
+
 const getProfiles = async (req, res) => {
   try {
     const { subject, class_id, search, status, code_prefix } = req.query;
@@ -406,57 +492,19 @@ const getMonthlyReport = async (req, res) => {
       return res.status(400).json({ message: 'Thiếu môn học hoặc tháng' });
     }
 
-    const scopeFilter = appendStudentCodeScopeSql(req.user);
-    const [rows] = await pool.query(
-      `${PROFILE_SELECT} WHERE tp.subject = ?${scopeFilter.sql} ORDER BY tp.fullname`,
-      [subject, ...scopeFilter.params]
+    const classIds = parseClassIds(req.query);
+    const { students, summary, classLabels } = await buildMonthlyReportStudents(
+      subject, month, req.user, classIds
     );
-    const paymentMap = await fetchPaymentsForProfiles(rows.map((r) => r.id));
-
-    const students = rows.map((row) => {
-      const payments = paymentMap[row.id] || [];
-      const enriched = enrichProfile(row, payments);
-      const monthPaid = payments
-        .filter((p) => p.period_month === month)
-        .reduce((acc, p) => {
-          acc[p.payment_type] += Number(p.amount);
-          acc.total += Number(p.amount);
-          if (p.method === 'cash') acc.cash += Number(p.amount);
-          else acc.transfer += Number(p.amount);
-          return acc;
-        }, { tuition: 0, book: 0, total: 0, cash: 0, transfer: 0 });
-
-      return {
-        id: row.id,
-        student_code: row.student_code,
-        fullname: row.fullname,
-        class_label: row.class_label,
-        fee_after_discount: row.fee_after_discount,
-        book_fee: row.book_fee,
-        tuition_paid: enriched.tuition_paid,
-        book_paid: enriched.book_paid,
-        total_debt: enriched.total_debt,
-        status: enriched.status,
-        month_paid: monthPaid,
-      };
-    });
-
-    const paid = students.filter((s) => s.month_paid.total > 0);
-    const unpaid = students.filter((s) => s.total_debt > 0);
 
     res.json({
       subject,
       subject_label: SUBJECTS[subject],
       month,
+      class_ids: classIds,
+      class_labels: classLabels,
       students,
-      summary: {
-        total_students: students.length,
-        paid_in_month: paid.length,
-        still_in_debt: unpaid.length,
-        month_cash: paid.reduce((s, st) => s + st.month_paid.cash, 0),
-        month_transfer: paid.reduce((s, st) => s + st.month_paid.transfer, 0),
-        month_total: paid.reduce((s, st) => s + st.month_paid.total, 0),
-      },
+      summary,
     });
   } catch (err) {
     res.status(500).json({ message: 'Lỗi hệ thống', error: err.message });
@@ -471,61 +519,44 @@ const exportMonthlyPdf = async (req, res) => {
     }
 
     const { buildMonthlyTuitionPdf } = require('../utils/tuitionPdf');
-
-    const scopeFilter = appendStudentCodeScopeSql(req.user);
-    const [rows] = await pool.query(
-      `${PROFILE_SELECT} WHERE tp.subject = ?${scopeFilter.sql} ORDER BY tp.fullname`,
-      [subject, ...scopeFilter.params]
+    const classIds = parseClassIds(req.query);
+    const { students, summary, classLabels, paymentMap } = await buildMonthlyReportStudents(
+      subject, month, req.user, classIds
     );
-    const paymentMap = await fetchPaymentsForProfiles(rows.map((r) => r.id));
 
-    const students = rows.map((row) => {
-      const payments = paymentMap[row.id] || [];
-      const enriched = enrichProfile(row, payments);
-      const monthPaid = payments
-        .filter((p) => p.period_month === month)
-        .reduce((acc, p) => {
-          acc.total += Number(p.amount);
-          if (p.method === 'cash') acc.cash += Number(p.amount);
-          else acc.transfer += Number(p.amount);
-          return acc;
-        }, { total: 0, cash: 0, transfer: 0 });
-
-      return {
-        student_code: row.student_code,
-        fullname: row.fullname,
-        class_label: row.class_label || '—',
-        fee_after_discount: row.fee_after_discount,
-        book_fee: row.book_fee,
-        tuition_paid: enriched.tuition_paid,
-        book_paid: enriched.book_paid,
-        total_debt: enriched.total_debt,
-        month_paid: monthPaid.total,
-      };
-    });
-
-    const summary = {
-      month_cash: students.reduce((s, st) => s + (st.month_paid > 0 ? 0 : 0), 0),
-      month_transfer: 0,
-      month_total: students.reduce((s, st) => s + st.month_paid, 0),
-    };
+    const pdfStudents = students.map((s) => ({
+      student_code: s.student_code,
+      fullname: s.fullname,
+      class_label: s.class_label || '—',
+      fee_after_discount: s.fee_after_discount,
+      book_fee: s.book_fee,
+      tuition_paid: s.tuition_paid,
+      book_paid: s.book_paid,
+      total_debt: s.total_debt,
+      month_paid: s.month_paid.total,
+    }));
 
     const allMonthPayments = Object.values(paymentMap).flat()
       .filter((p) => p.period_month === month);
-    summary.month_cash = allMonthPayments.filter((p) => p.method === 'cash')
-      .reduce((s, p) => s + Number(p.amount), 0);
-    summary.month_transfer = allMonthPayments.filter((p) => p.method === 'transfer')
-      .reduce((s, p) => s + Number(p.amount), 0);
-    summary.month_total = summary.month_cash + summary.month_transfer;
+    const pdfSummary = {
+      month_cash: allMonthPayments.filter((p) => p.method === 'cash')
+        .reduce((s, p) => s + Number(p.amount), 0),
+      month_transfer: allMonthPayments.filter((p) => p.method === 'transfer')
+        .reduce((s, p) => s + Number(p.amount), 0),
+      month_total: summary.month_total,
+    };
 
+    const classLabelText = classLabels.length ? classLabels.join(', ') : null;
     const pdfBuffer = await buildMonthlyTuitionPdf({
       subjectLabel: SUBJECTS[subject],
       month,
-      students,
-      summary,
+      students: pdfStudents,
+      summary: pdfSummary,
+      classLabel: classLabelText,
     });
 
-    const filename = `hoc-phi-${subject}-${month}.pdf`;
+    const classSuffix = classIds.length ? `-lop-${classIds.join('-')}` : '';
+    const filename = `hoc-phi-${subject}-${month}${classSuffix}.pdf`;
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
     res.send(pdfBuffer);
