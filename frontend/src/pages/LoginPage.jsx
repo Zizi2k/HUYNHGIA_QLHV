@@ -37,53 +37,73 @@ export default function LoginPage() {
 
   return (
     <div className="login-page">
-      <div className="login-page-inner">
-        <div className="login-brand-panel">
-          <img src="/logo-login.png" alt="LHG Logo" className="login-brand-logo" />
-          <h1 className="login-brand-title">LHG</h1>
-          <p className="login-brand-tagline">Hệ thống học trực tuyến</p>
-          <p className="login-brand-desc">Mở khóa thế giới bằng ngôn ngữ — quản lý lớp học, bài tập và điểm danh trên một nền tảng.</p>
-        </div>
+      <div className="login-card">
+        <aside className="login-card-visual" aria-hidden="true">
+          <div className="login-visual-bg">
+            <span className="login-shape login-shape-1" />
+            <span className="login-shape login-shape-2" />
+            <span className="login-shape login-shape-3" />
+          </div>
+          <div className="login-visual-tab">ĐĂNG NHẬP</div>
+          <div className="login-visual-brand">
+            <img src="/logo-navbar.png" alt="" className="login-visual-logo" />
+            <span className="login-visual-name">LHG</span>
+          </div>
+        </aside>
 
-        <div className="login-form-panel">
-          <div className="login-form-card">
-            <h2 className="login-form-title">Đăng nhập</h2>
-            <p className="login-form-subtitle">
-              Nhập tên đăng nhập và mã người dùng để tiếp tục.
-              Học sinh học nhiều môn có thể dùng <strong>bất kỳ mã học viên</strong> nào (VD: HGTA0001, HGTIN0001).
-            </p>
+        <section className="login-card-form">
+          <div className="login-form-avatar">
+            <i className="bi bi-person-fill" aria-hidden />
+          </div>
+          <h1 className="login-form-heading">ĐĂNG NHẬP</h1>
 
-            {error && <Alert variant="danger" className="login-alert">{error}</Alert>}
+          {error && <Alert variant="danger" className="login-alert">{error}</Alert>}
 
-            <Form onSubmit={handleSubmit}>
-              <Form.Group className="mb-3">
-                <Form.Label className="login-label">Tên đăng nhập</Form.Label>
+          <Form onSubmit={handleSubmit} className="login-form">
+            <Form.Group className="login-field-line">
+              <div className="login-line-input">
+                <i className="bi bi-person login-line-icon" aria-hidden />
                 <Form.Control
                   type="text"
-                  placeholder="nguyenvana"
+                  placeholder="Tên đăng nhập"
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
-                  className="login-input"
+                  className="login-line-control"
+                  autoComplete="username"
                   required
                 />
-              </Form.Group>
-              <Form.Group className="mb-4">
-                <Form.Label className="login-label">Mã người dùng</Form.Label>
+              </div>
+            </Form.Group>
+
+            <Form.Group className="login-field-line">
+              <div className="login-line-input">
+                <i className="bi bi-shield-lock login-line-icon" aria-hidden />
                 <Form.Control
                   type="text"
-                  placeholder="HS001"
+                  placeholder="Mã người dùng"
                   value={code}
                   onChange={(e) => setCode(e.target.value)}
-                  className="login-input"
+                  className="login-line-control"
+                  autoComplete="off"
                   required
                 />
-              </Form.Group>
-              <Button type="submit" variant="primary" className="login-submit-btn" disabled={loading}>
-                {loading ? 'Đang đăng nhập...' : 'Đăng nhập'}
+              </div>
+            </Form.Group>
+
+            <div className="login-form-actions">
+              <Button type="submit" className="login-pill-btn" disabled={loading}>
+                {loading ? (
+                  <>
+                    <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden />
+                    ĐANG XỬ LÝ...
+                  </>
+                ) : (
+                  'ĐĂNG NHẬP'
+                )}
               </Button>
-            </Form>
-          </div>
-        </div>
+            </div>
+          </Form>
+        </section>
       </div>
     </div>
   );
