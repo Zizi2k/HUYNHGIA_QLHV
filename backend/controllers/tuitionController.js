@@ -277,6 +277,11 @@ const deleteProfile = async (req, res) => {
     if (profiles.length === 0) {
       return res.status(404).json({ message: 'Không tìm thấy hồ sơ' });
     }
+    try {
+      assertStudentCodeInScope(req.user, profiles[0].student_code);
+    } catch (scopeErr) {
+      return res.status(scopeErr.status || 403).json({ message: scopeErr.message });
+    }
     await pool.query('DELETE FROM tuition_profiles WHERE id = ?', [req.params.id]);
     await logAction({
       actorId: req.user.id,
@@ -298,9 +303,14 @@ const createPayment = async (req, res) => {
       return res.status(400).json({ message: 'Thiếu thông tin thanh toán' });
     }
 
-    const [profiles] = await pool.query('SELECT id FROM tuition_profiles WHERE id = ?', [profile_id]);
+    const [profiles] = await pool.query('SELECT id, student_code FROM tuition_profiles WHERE id = ?', [profile_id]);
     if (profiles.length === 0) {
       return res.status(404).json({ message: 'Không tìm thấy hồ sơ học phí' });
+    }
+    try {
+      assertStudentCodeInScope(req.user, profiles[0].student_code);
+    } catch (scopeErr) {
+      return res.status(scopeErr.status || 403).json({ message: scopeErr.message });
     }
 
     const [result] = await pool.query(
@@ -323,11 +333,19 @@ const createPayment = async (req, res) => {
 const deletePayment = async (req, res) => {
   try {
     const [payments] = await pool.query(
-      'SELECT id, profile_id, amount FROM tuition_payments WHERE id = ?',
+      `SELECT tp.id, tp.profile_id, tp.amount, p.student_code
+       FROM tuition_payments tp
+       JOIN tuition_profiles p ON tp.profile_id = p.id
+       WHERE tp.id = ?`,
       [req.params.id]
     );
     if (payments.length === 0) {
       return res.status(404).json({ message: 'Không tìm thấy phiếu thu' });
+    }
+    try {
+      assertStudentCodeInScope(req.user, payments[0].student_code);
+    } catch (scopeErr) {
+      return res.status(scopeErr.status || 403).json({ message: scopeErr.message });
     }
     await pool.query('DELETE FROM tuition_payments WHERE id = ?', [req.params.id]);
     await logAction({
@@ -388,9 +406,10 @@ const getMonthlyReport = async (req, res) => {
       return res.status(400).json({ message: 'Thiếu môn học hoặc tháng' });
     }
 
+    const scopeFilter = appendStudentCodeScopeSql(req.user);
     const [rows] = await pool.query(
-      `${PROFILE_SELECT} WHERE tp.subject = ? ORDER BY tp.fullname`,
-      [subject]
+      `${PROFILE_SELECT} WHERE tp.subject = ?${scopeFilter.sql} ORDER BY tp.fullname`,
+      [subject, ...scopeFilter.params]
     );
     const paymentMap = await fetchPaymentsForProfiles(rows.map((r) => r.id));
 
@@ -453,9 +472,10 @@ const exportMonthlyPdf = async (req, res) => {
 
     const { buildMonthlyTuitionPdf } = require('../utils/tuitionPdf');
 
+    const scopeFilter = appendStudentCodeScopeSql(req.user);
     const [rows] = await pool.query(
-      `${PROFILE_SELECT} WHERE tp.subject = ? ORDER BY tp.fullname`,
-      [subject]
+      `${PROFILE_SELECT} WHERE tp.subject = ?${scopeFilter.sql} ORDER BY tp.fullname`,
+      [subject, ...scopeFilter.params]
     );
     const paymentMap = await fetchPaymentsForProfiles(rows.map((r) => r.id));
 

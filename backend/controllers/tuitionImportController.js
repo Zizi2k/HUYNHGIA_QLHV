@@ -2,6 +2,7 @@ const XLSX = require('xlsx');
 const fs = require('fs');
 const pool = require('../config/db');
 const { normalizeHeader, parseSubject, parseAmount, resolveTuitionAmounts } = require('../utils/tuitionHelpers');
+const { assertStudentCodeInScope } = require('../utils/adminScope');
 
 const HEADER_MAP = {
   'ma hoc vien': 'student_code',
@@ -125,6 +126,14 @@ const importProfiles = async (req, res) => {
         }
         if (!row.fullname) {
           result.errors.push({ row: row.rowNumber, message: 'Thiếu họ tên' });
+          result.skipped++;
+          continue;
+        }
+
+        try {
+          assertStudentCodeInScope(req.user, row.student_code);
+        } catch (scopeErr) {
+          result.errors.push({ row: row.rowNumber, message: scopeErr.message });
           result.skipped++;
           continue;
         }

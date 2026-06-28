@@ -5,7 +5,12 @@ const {
 const { assertClassAccess, isClassTeacher } = require('../middleware/classAccess');
 const { parseAmount, SUBJECTS } = require('../utils/tuitionHelpers');
 const { getNextStudentCode, inferSubjectFromClassName, validateStudentCodeFormat } = require('../utils/studentCode');
-const { assertStudentCodeInScope, getAdminScope } = require('../utils/adminScope');
+const {
+  assertStudentCodeInScope,
+  getUserScope,
+  filterMembersByScope,
+  appendStudentCodeScopeSql,
+} = require('../utils/adminScope');
 const { addMonthsToDate } = require('../utils/dateHelpers');
 const { insertTuitionProfile } = require('../utils/tuitionProfileDb');
 const { handleDeletion } = require('../utils/deletionPolicy');
@@ -96,7 +101,7 @@ const getClassById = async (req, res) => {
       [classId]
     );
 
-    res.json({ ...classes[0], members: mapPublicMembers(members, req.user) });
+    res.json({ ...classes[0], members: mapPublicMembers(filterMembersByScope(req.user, members), req.user) });
   } catch (err) {
     res.status(500).json({ message: 'Lỗi hệ thống', error: err.message });
   }
@@ -147,7 +152,7 @@ const addMember = async (req, res) => {
   try {
     const { user_id } = req.body;
     const [users] = await pool.query(
-      'SELECT id, role FROM users WHERE id = ? AND status = TRUE',
+      'SELECT id, role, code FROM users WHERE id = ? AND status = TRUE',
       [user_id]
     );
     if (users.length === 0) {
@@ -155,6 +160,11 @@ const addMember = async (req, res) => {
     }
     if (users[0].role !== 'student') {
       return res.status(400).json({ message: 'Chỉ có thể thêm học viên vào lớp' });
+    }
+    try {
+      assertStudentCodeInScope(req.user, users[0].code);
+    } catch (scopeErr) {
+      return res.status(scopeErr.status || 403).json({ message: scopeErr.message });
     }
 
     await pool.query('INSERT INTO class_members (class_id, user_id) VALUES (?, ?)', [
@@ -171,15 +181,16 @@ const addMember = async (req, res) => {
 
 const getAvailableStudents = async (req, res) => {
   try {
+    const scopeFilter = appendStudentCodeScopeSql(req.user, 'u.code');
     const [rows] = await pool.query(
       `SELECT u.id, u.fullname, u.username, u.code
        FROM users u
        WHERE u.role = 'student' AND u.status = TRUE
          AND u.id NOT IN (
            SELECT user_id FROM class_members WHERE class_id = ?
-         )
+         )${scopeFilter.sql}
        ORDER BY u.fullname`,
-      [req.params.id]
+      [req.params.id, ...scopeFilter.params]
     );
     res.json(rows);
   } catch (err) {
@@ -203,7 +214,7 @@ const getNextStudentCodeForClass = async (req, res) => {
     }
 
     const { prefix } = req.query;
-    const scope = getAdminScope(req.user);
+    const scope = getUserScope(req.user);
     const nextCode = await getNextStudentCode(conn, subject, scope || prefix);
     res.json({
       next_code: nextCode,
@@ -255,17 +266,18 @@ const createStudentMember = async (req, res) => {
     }
 
     if (!code?.trim()) {
-      code = await getNextStudentCode(conn, subject);
+      const scope = getUserScope(req.user);
+      code = await getNextStudentCode(conn, subject, scope);
     } else {
       code = code.trim().toUpperCase();
       if (!validateStudentCodeFormat(code)) {
         return res.status(400).json({ message: 'Mã học viên không hợp lệ (ví dụ: HGTA0001, EGTA0001)' });
       }
-      try {
-        assertStudentCodeInScope(req.user, code);
-      } catch (scopeErr) {
-        return res.status(scopeErr.status || 403).json({ message: scopeErr.message });
-      }
+    }
+    try {
+      assertStudentCodeInScope(req.user, code);
+    } catch (scopeErr) {
+      return res.status(scopeErr.status || 403).json({ message: scopeErr.message });
     }
 
     await conn.beginTransaction();
@@ -389,7 +401,7 @@ const updateStudentMember = async (req, res) => {
 
     const userId = req.params.userId;
     const [member] = await conn.query(
-      `SELECT u.id, u.role FROM class_members cm
+      `SELECT u.id, u.role, u.code FROM class_members cm
        JOIN users u ON cm.user_id = u.id
        WHERE cm.class_id = ? AND cm.user_id = ?`,
       [req.params.id, userId]
@@ -399,6 +411,12 @@ const updateStudentMember = async (req, res) => {
     }
     if (member[0].role !== 'student') {
       return res.status(400).json({ message: 'Chỉ có thể sửa thông tin học viên' });
+    }
+    try {
+      assertStudentCodeInScope(req.user, member[0].code);
+      assertStudentCodeInScope(req.user, code.trim());
+    } catch (scopeErr) {
+      return res.status(scopeErr.status || 403).json({ message: scopeErr.message });
     }
 
     const [dupCode] = await conn.query(
@@ -469,7 +487,7 @@ const removeMember = async (req, res) => {
     }
 
     const [member] = await conn.query(
-      `SELECT u.id, u.fullname, u.role FROM class_members cm
+      `SELECT u.id, u.fullname, u.role, u.code FROM class_members cm
        JOIN users u ON cm.user_id = u.id
        WHERE cm.class_id = ? AND cm.user_id = ?`,
       [classId, userId]
@@ -479,6 +497,13 @@ const removeMember = async (req, res) => {
     }
     if (req.user.role === 'teacher' && member[0].role !== 'student') {
       return res.status(403).json({ message: 'Giáo viên chỉ có thể xóa học viên khỏi lớp' });
+    }
+    if (member[0].role === 'student') {
+      try {
+        assertStudentCodeInScope(req.user, member[0].code);
+      } catch (scopeErr) {
+        return res.status(scopeErr.status || 403).json({ message: scopeErr.message });
+      }
     }
 
     return handleDeletion(req, res, {

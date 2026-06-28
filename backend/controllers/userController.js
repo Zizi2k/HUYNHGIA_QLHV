@@ -1,7 +1,7 @@
 const pool = require('../config/db');
 const { assertClassAccess } = require('../middleware/classAccess');
 const { logAction } = require('../utils/auditLog');
-const { isSuperAdmin, getAdminScope, studentCodeMatchesScope } = require('../utils/adminScope');
+const { isSuperAdmin, getUserScope, studentCodeMatchesScope } = require('../utils/adminScope');
 
 const listAdmins = async (req, res) => {
   try {
@@ -28,7 +28,7 @@ const getUsers = async (req, res) => {
       if (!(await assertClassAccess(req.user, classId, res, { manage: true }))) return;
     }
 
-    const scope = getAdminScope(req.user);
+    const scope = getUserScope(req.user);
 
     const [members] = await pool.query(
       `SELECT u.id, u.fullname, u.username, u.code, u.role, u.status, u.created_at
@@ -55,6 +55,13 @@ const getUsers = async (req, res) => {
     res.status(500).json({ message: 'Lỗi hệ thống', error: err.message });
   }
 };
+
+function resolveUserScope(role, adminScope, existingScope) {
+  if (role === 'admin') return adminScope ?? existingScope ?? 'all';
+  if (role === 'teacher' && (adminScope === 'HG' || adminScope === 'EG')) return adminScope;
+  if (role === 'teacher' && adminScope === undefined) return existingScope ?? null;
+  return null;
+}
 
 function validateAdminPayload(req, role, adminScope, targetUserId) {
   if (role !== 'admin') return null;
@@ -87,7 +94,7 @@ const createUser = async (req, res) => {
       return res.status(409).json({ message: 'Tên đăng nhập đã tồn tại' });
     }
 
-    const resolvedScope = role === 'admin' ? adminScope : null;
+    const resolvedScope = resolveUserScope(role || 'student', adminScope);
     const [result] = await pool.query(
       'INSERT INTO users (fullname, username, code, role, admin_scope) VALUES (?, ?, ?, ?, ?)',
       [fullname, username, code, role || 'student', resolvedScope]
@@ -123,7 +130,7 @@ const updateUser = async (req, res) => {
       if (adminError) {
         return res.status(adminError.includes('Chỉ admin') ? 403 : 400).json({ message: adminError });
       }
-    } else if (!isSuperAdmin(req.user) && getAdminScope(req.user)) {
+    } else if (!isSuperAdmin(req.user) && getUserScope(req.user)) {
       return res.status(403).json({ message: 'Admin phụ không được sửa tài khoản người dùng tại đây' });
     }
 
@@ -135,9 +142,8 @@ const updateUser = async (req, res) => {
       return res.status(409).json({ message: 'Tên đăng nhập đã tồn tại' });
     }
 
-    const resolvedScope = (role || target.role) === 'admin'
-      ? (adminScope ?? target.admin_scope ?? 'all')
-      : null;
+    const effectiveRole = role || target.role;
+    const resolvedScope = resolveUserScope(effectiveRole, adminScope, target.admin_scope);
 
     await pool.query(
       'UPDATE users SET fullname=?, username=?, code=?, role=?, status=?, admin_scope=? WHERE id=?',

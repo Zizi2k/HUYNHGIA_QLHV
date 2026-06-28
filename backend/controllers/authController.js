@@ -24,6 +24,7 @@ const login = async (req, res) => {
         username: user.username,
         role: user.role,
         fullname: user.fullname,
+        code: user.code,
         admin_scope: user.admin_scope || (user.role === 'admin' ? 'all' : null),
       },
       process.env.JWT_SECRET,

@@ -13,7 +13,7 @@ import CourseManager from '../components/students/CourseManager';
 import {
   SUBJECT_OPTIONS, ENROLLMENT_STATUS_LABELS, CODE_PREFIX_OPTIONS, subjectLabel,
 } from '../components/students/studentConstants';
-import { isScopedAdmin, lockedCodePrefix, scopeLabel } from '../utils/adminScope';
+import { isScopedUser, lockedCodePrefix, scopeLabel } from '../utils/adminScope';
 
 const emptySummary = { total: 0, active: 0, expiring: 0, expired: 0 };
 
@@ -37,7 +37,7 @@ export default function StudentsPage() {
   const [transferStudent, setTransferStudent] = useState(null);
 
   const scopedPrefix = lockedCodePrefix(user);
-  const scopeLocked = isScopedAdmin(user);
+  const scopeLocked = isScopedUser(user);
 
   const loadMeta = () => {
     classService.getAll().then((res) => setClasses(res.data));

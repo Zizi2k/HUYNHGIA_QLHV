@@ -1,6 +1,7 @@
 const XLSX = require('xlsx');
 const pool = require('../config/db');
 const { buildStudentUsername, extractStudentNumber, ensureUniqueUsername, regenerateClassUsernames } = require('../utils/username');
+const { assertStudentCodeInScope } = require('../utils/adminScope');
 
 const HEADER_MAP = {
   'ma hoc vien': 'code',
@@ -113,6 +114,14 @@ const importStudents = async (req, res) => {
         }
 
         await matchClass(req.params.id, row.classCode, currentClass);
+
+        try {
+          assertStudentCodeInScope(req.user, row.code);
+        } catch (scopeErr) {
+          results.errors.push({ row: row.rowNumber, message: scopeErr.message });
+          results.skipped++;
+          continue;
+        }
 
         const [existing] = await conn.query('SELECT id FROM users WHERE code = ?', [row.code]);
         let userId;

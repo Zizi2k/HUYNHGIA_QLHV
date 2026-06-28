@@ -11,7 +11,7 @@ const {
   resolveCodePrefixFilter,
   appendStudentCodeScopeSql,
   assertStudentCodeInScope,
-  getAdminScope,
+  getUserScope,
 } = require('../utils/adminScope');
 
 function resolveClassSubject(classRow) {
@@ -126,7 +126,7 @@ const getNextCode = async (req, res) => {
     if (!subject || !SUBJECTS[subject]) {
       return res.status(400).json({ message: 'Môn học không hợp lệ' });
     }
-    const scope = getAdminScope(req.user);
+    const scope = getUserScope(req.user);
     const nextCode = await getNextStudentCode(conn, subject, scope || prefix);
     res.json({
       next_code: nextCode,
@@ -198,7 +198,8 @@ const createEnrollment = async (req, res) => {
 
     let studentCode = code?.trim()?.toUpperCase();
     if (!studentCode) {
-      studentCode = await getNextStudentCode(conn, subject);
+      const scope = getUserScope(req.user);
+      studentCode = await getNextStudentCode(conn, subject, scope);
     }
     if (!validateStudentCodeFormat(studentCode)) {
       return res.status(400).json({ message: 'Mã học viên không hợp lệ (ví dụ: HGTA0001, EGTA0001)' });

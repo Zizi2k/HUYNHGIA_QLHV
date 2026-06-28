@@ -8,7 +8,7 @@ import {
   SUBJECT_OPTIONS, CODE_PREFIX_OPTIONS, calcEndDate, formatDateVi, todayDateValue,
 } from './studentConstants';
 import { applyTuitionFieldChange, isFeeAfterAutoCalculated } from '../tuition/tuitionDiscountCalc';
-import { lockedCodePrefix, isScopedAdmin } from '../../utils/adminScope';
+import { lockedCodePrefix, isScopedUser } from '../../utils/adminScope';
 
 const emptyTuition = {
   enrichment_class: '',
@@ -44,7 +44,7 @@ export default function AddEnrollmentModal({
 }) {
   const { user } = useAuth();
   const forcedPrefix = lockedCodePrefix(user);
-  const prefixLocked = isScopedAdmin(user);
+  const prefixLocked = isScopedUser(user);
 
   const [form, setForm] = useState(emptyForm);
   const [discounts, setDiscounts] = useState([]);
