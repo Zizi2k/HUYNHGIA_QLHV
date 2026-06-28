@@ -15,7 +15,7 @@ const PROFILE_SELECT = `
 
 async function insertTuitionProfile(conn, {
   studentCode, userId, fullname, subject, classId, classLabel,
-  phone, zalo, tuition, courseId, startDate, endDate, centerId,
+  phone, zalo, tuition, courseId, startDate, endDate,
 }) {
   const { feeBefore, feeAfter } = await resolveTuitionAmounts(conn, {
     fee_before_discount: tuition.fee_before_discount,
@@ -27,8 +27,8 @@ async function insertTuitionProfile(conn, {
     `INSERT INTO tuition_profiles
      (student_code, user_id, fullname, subject, course_id, class_id, class_label,
       enrichment_class, current_class, phone, zalo, base_fee, fee_before_discount,
-      fee_after_discount, book_fee, discount_id, discount_reason, start_date, end_date, center_id)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      fee_after_discount, book_fee, discount_id, discount_reason, start_date, end_date)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       studentCode.trim(),
       userId,
@@ -49,7 +49,6 @@ async function insertTuitionProfile(conn, {
       tuition.discount_reason?.trim() || null,
       startDate || null,
       endDate || null,
-      centerId || null,
     ]
   );
   return result.insertId;

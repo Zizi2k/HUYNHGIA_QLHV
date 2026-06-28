@@ -40,9 +40,9 @@ export default function LoginPage() {
       <div className="login-page-inner">
         <div className="login-brand-panel">
           <img src="/logo-login.png" alt="LHG Logo" className="login-brand-logo" />
-          <h1 className="login-brand-title">LHG & EGC</h1>
+          <h1 className="login-brand-title">LHG</h1>
           <p className="login-brand-tagline">Hệ thống học trực tuyến</p>
-          <p className="login-brand-desc">Quản lý hai trung tâm LHG và EGC trên một nền tảng — lớp học, bài tập, học phí và điểm danh tách biệt theo trung tâm.</p>
+          <p className="login-brand-desc">Mở khóa thế giới bằng ngôn ngữ — quản lý lớp học, bài tập và điểm danh trên một nền tảng.</p>
         </div>
 
         <div className="login-form-panel">

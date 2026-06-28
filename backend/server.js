@@ -18,7 +18,6 @@ const tuitionRoutes = require('./routes/tuitionRoutes');
 const studentRoutes = require('./routes/studentRoutes');
 const auditRoutes = require('./routes/auditRoutes');
 const fileRoutes = require('./routes/fileRoutes');
-const centerRoutes = require('./routes/centerRoutes');
 const { ensureSchema } = require('./config/ensureSchema');
 const pool = require('./config/db');
 
@@ -27,7 +26,7 @@ const PORT = process.env.PORT || 5000;
 
 app.use(cors({
   origin: true,
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Center-Id'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
 }));
 app.use((req, res, next) => {
   const contentType = req.headers['content-type'] || '';
@@ -52,7 +51,6 @@ app.use('/api/tuition', tuitionRoutes);
 app.use('/api/students', studentRoutes);
 app.use('/api/audit', auditRoutes);
 app.use('/api/files', fileRoutes);
-app.use('/api/centers', centerRoutes);
 
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'OK', message: 'API học trực tuyến đang hoạt động' });
@@ -61,8 +59,7 @@ app.get('/api/health', (_req, res) => {
 app.get('/api/health/db', async (_req, res) => {
   try {
     await pool.query('SELECT 1');
-    const [[centers]] = await pool.query('SELECT COUNT(*) AS c FROM centers').catch(() => [[{ c: null }]]);
-    res.json({ status: 'OK', db: 'connected', centers: centers?.c ?? null });
+    res.json({ status: 'OK', db: 'connected' });
   } catch (err) {
     res.status(503).json({ status: 'ERROR', db: 'failed', error: err.message });
   }

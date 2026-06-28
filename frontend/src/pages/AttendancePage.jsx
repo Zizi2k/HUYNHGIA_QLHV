@@ -4,7 +4,6 @@ import {
 } from 'react-bootstrap';
 import { attendanceService, classService } from '../services';
 import { useAuth } from '../context/AuthContext';
-import { useCenter } from '../context/CenterContext';
 import PageHeader from '../components/layout/PageHeader';
 
 const STATUS_LABELS = {
@@ -23,7 +22,6 @@ function currentMonthValue() {
 
 export default function AttendancePage() {
   const { user } = useAuth();
-  const { centerKey } = useCenter() || {};
   const [reports, setReports] = useState([]);
   const [classes, setClasses] = useState([]);
   const [classFilter, setClassFilter] = useState('');
@@ -49,11 +47,9 @@ export default function AttendancePage() {
       setClasses(list);
       if (list.length === 1) {
         setClassFilter(String(list[0].id));
-      } else {
-        setClassFilter('');
       }
     });
-  }, [centerKey]);
+  }, []);
 
   useEffect(() => { loadReports(); }, [classFilter, monthFilter]);
 

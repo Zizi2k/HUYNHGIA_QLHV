@@ -1,13 +1,10 @@
 const pool = require('../config/db');
 const { logAction } = require('../utils/auditLog');
-const { adminCenterFilter } = require('../utils/centerQuery');
 
-const getDiscounts = async (req, res) => {
+const getDiscounts = async (_req, res) => {
   try {
-    const centerFilter = adminCenterFilter(req, 'fee_discounts');
     const [rows] = await pool.query(
-      `SELECT * FROM fee_discounts WHERE 1=1${centerFilter.sql} ORDER BY is_active DESC, name`,
-      centerFilter.params
+      'SELECT * FROM fee_discounts ORDER BY is_active DESC, name'
     );
     res.json(rows);
   } catch (err) {
@@ -21,15 +18,14 @@ const createDiscount = async (req, res) => {
     if (!name) return res.status(400).json({ message: 'Thiếu tên mức giảm' });
 
     const [result] = await pool.query(
-      `INSERT INTO fee_discounts (name, discount_type, discount_value, default_reason, is_active, center_id)
-       VALUES (?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO fee_discounts (name, discount_type, discount_value, default_reason, is_active)
+       VALUES (?, ?, ?, ?, ?)`,
       [
         name,
         discount_type || 'fixed',
         discount_value || 0,
         default_reason || null,
         is_active !== false,
-        req.centerId || null,
       ]
     );
     res.status(201).json({ id: result.insertId, message: 'Tạo mức giảm thành công' });

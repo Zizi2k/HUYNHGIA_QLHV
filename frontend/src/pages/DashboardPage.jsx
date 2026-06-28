@@ -3,7 +3,6 @@ import { Row, Col, Spinner, Button } from 'react-bootstrap';
 import { Link } from 'react-router-dom';
 import { dashboardService, classService } from '../services';
 import { useAuth } from '../context/AuthContext';
-import { useCenter } from '../context/CenterContext';
 import PageHeader from '../components/layout/PageHeader';
 const metricStyles = [
   { icon: 'collection', tone: 'orange', label: 'Số lớp học' },
@@ -29,7 +28,6 @@ function MetricBlock({ icon, tone, label, value, hint }) {
 
 export default function DashboardPage() {
   const { user } = useAuth();
-  const { centerKey, activeCenter } = useCenter() || {};
   const [stats, setStats] = useState(null);
   const [classes, setClasses] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -41,7 +39,7 @@ export default function DashboardPage() {
         setClasses(classesRes.data.slice(0, 8));
       })
       .finally(() => setLoading(false));
-  }, [centerKey]);
+  }, []);
 
   const metrics = [
     stats?.classCount ?? 0,

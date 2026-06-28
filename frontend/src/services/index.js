@@ -7,10 +7,6 @@ export const authService = {
   updateProfile: (formData) => api.put('/auth/profile', formData),
 };
 
-export const centerService = {
-  getAll: () => api.get('/centers'),
-};
-
 export const userService = {
   getAll: (classId) => api.get('/users', { params: classId ? { class_id: classId } : {} }),
   create: (data) => api.post('/users', data),

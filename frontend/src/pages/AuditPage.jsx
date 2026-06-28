@@ -4,7 +4,6 @@ import {
 } from 'react-bootstrap';
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { useCenter } from '../context/CenterContext';
 import PageHeader from '../components/layout/PageHeader';
 import { auditService } from '../services';
 import {
@@ -25,7 +24,6 @@ function actionBadge(action) {
 
 export default function AuditPage() {
   const { user } = useAuth();
-  const { centerKey } = useCenter() || {};
   const [activeTab, setActiveTab] = useState('logs');
 
   const [logs, setLogs] = useState([]);
@@ -52,7 +50,7 @@ export default function AuditPage() {
 
   useEffect(() => {
     refreshPendingCount();
-  }, [centerKey]);
+  }, []);
 
   const loadLogs = () => {
     setLoadingLogs(true);
@@ -75,7 +73,7 @@ export default function AuditPage() {
 
   useEffect(() => {
     loadLogs();
-  }, [actionFilter, resourceFilter, actorRoleFilter, centerKey]);
+  }, [actionFilter, resourceFilter, actorRoleFilter]);
 
   useEffect(() => {
     const timer = setTimeout(loadLogs, 300);
@@ -84,7 +82,7 @@ export default function AuditPage() {
 
   useEffect(() => {
     if (activeTab === 'requests') loadRequests();
-  }, [activeTab, requestStatus, centerKey]);
+  }, [activeTab, requestStatus]);
 
   const handleApprove = async () => {
     setReviewing(true);

@@ -1,6 +1,5 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
-import { CenterProvider } from './context/CenterContext';
 import MainLayout from './layouts/MainLayout';
 import LoginPage from './pages/LoginPage';
 import DashboardPage from './pages/DashboardPage';
@@ -17,8 +16,7 @@ import AuditPage from './pages/AuditPage';
 function App() {
   return (
     <AuthProvider>
-      <CenterProvider>
-        <BrowserRouter>
+      <BrowserRouter>
         <Routes>
           <Route path="/login" element={<LoginPage />} />
           <Route element={<MainLayout />}>
@@ -35,8 +33,7 @@ function App() {
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
-        </BrowserRouter>
-      </CenterProvider>
+      </BrowserRouter>
     </AuthProvider>
   );
 }

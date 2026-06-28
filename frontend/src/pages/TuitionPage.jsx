@@ -4,7 +4,6 @@ import {
 } from 'react-bootstrap';
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { useCenter } from '../context/CenterContext';
 import PageHeader from '../components/layout/PageHeader';
 import { tuitionService, classService } from '../services';
 import TuitionProfileTable from '../components/tuition/TuitionProfileTable';
@@ -18,7 +17,6 @@ import {
 
 export default function TuitionPage() {
   const { user } = useAuth();
-  const { centerKey } = useCenter() || {};
   const [activeTab, setActiveTab] = useState('list');
 
   const [profiles, setProfiles] = useState([]);
@@ -59,9 +57,9 @@ export default function TuitionPage() {
   useEffect(() => {
     tuitionService.getDiscounts().then((res) => setDiscounts(res.data));
     classService.getAll().then((res) => setClasses(res.data));
-  }, [centerKey]);
+  }, []);
 
-  useEffect(() => { loadProfiles(); }, [subjectFilter, classFilter, statusFilter, centerKey]);
+  useEffect(() => { loadProfiles(); }, [subjectFilter, classFilter, statusFilter]);
 
   useEffect(() => {
     const timer = setTimeout(loadProfiles, 300);
@@ -78,7 +76,7 @@ export default function TuitionPage() {
 
   useEffect(() => {
     if (activeTab === 'report') loadReport();
-  }, [activeTab, reportSubject, reportMonth, centerKey]);
+  }, [activeTab, reportSubject, reportMonth]);
 
   const handleExportPdf = async () => {
     setExporting(true);

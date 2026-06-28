@@ -1,6 +1,5 @@
 import { NavLink } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import { useCenter } from '../../context/CenterContext';
 
 function NavItem({ to, icon, label, end = false }) {
   return (
@@ -19,8 +18,6 @@ function NavItem({ to, icon, label, end = false }) {
 
 export default function Sidebar({ collapsed, mobileOpen, onNavigate }) {
   const { user } = useAuth();
-  const { activeCenter } = useCenter() || {};
-  const brandName = activeCenter?.short_name || 'LHG';
   const isAdmin = user?.role === 'admin';
   const isTeacherOrAdmin = user?.role === 'admin' || user?.role === 'teacher';
 
@@ -33,8 +30,8 @@ export default function Sidebar({ collapsed, mobileOpen, onNavigate }) {
       className={`app-sidebar${collapsed ? ' collapsed' : ''}${mobileOpen ? ' mobile-open' : ''}`}
     >
       <div className="app-sidebar-brand">
-        <img src="/logo-navbar.png" alt={brandName} className="app-sidebar-logo" />
-        {!collapsed && <span className="app-sidebar-brand-text">{brandName}</span>}
+        <img src="/logo-navbar.png" alt="LHG" className="app-sidebar-logo" />
+        {!collapsed && <span className="app-sidebar-brand-text">LHG</span>}
       </div>
 
       <nav className="app-sidebar-nav" onClick={handleClick}>

@@ -10,7 +10,6 @@ const { insertTuitionProfile } = require('../utils/tuitionProfileDb');
 const { handleDeletion } = require('../utils/deletionPolicy');
 const { logAction } = require('../utils/auditLog');
 const { mapPublicMembers } = require('../utils/userProjection');
-const { adminCenterFilter } = require('../utils/centerQuery');
 
 async function getClassRow(conn, classId) {
   const [classes] = await conn.query('SELECT * FROM classes WHERE id = ?', [classId]);
@@ -56,14 +55,13 @@ const getClasses = async (req, res) => {
     let params = [];
 
     if (req.user.role === 'admin') {
-      const centerFilter = adminCenterFilter(req, 'c');
       query = `
         SELECT c.*, COUNT(cm.id) AS member_count
         FROM classes c
         LEFT JOIN class_members cm ON c.id = cm.class_id
-        WHERE 1=1${centerFilter.sql}${searchClause}
+        WHERE 1=1${searchClause}
         GROUP BY c.id ORDER BY c.created_at DESC`;
-      params = [...centerFilter.params, ...searchParams];
+      params = [...searchParams];
     } else {
       query = `
         SELECT c.*, COUNT(cm2.id) AS member_count
@@ -107,12 +105,9 @@ const createClass = async (req, res) => {
   try {
     const { name, description, subject } = req.body;
     const resolvedSubject = subject || inferSubjectFromClassName(name) || null;
-    if (!req.centerId) {
-      return res.status(400).json({ message: 'Vui lòng chọn trung tâm quản lý' });
-    }
     const [result] = await pool.query(
-      'INSERT INTO classes (name, description, subject, center_id) VALUES (?, ?, ?, ?)',
-      [name, description, resolvedSubject, req.centerId]
+      'INSERT INTO classes (name, description, subject) VALUES (?, ?, ?)',
+      [name, description, resolvedSubject]
     );
     await logAction({
       actorId: req.user.id,
@@ -206,7 +201,7 @@ const getNextStudentCodeForClass = async (req, res) => {
       });
     }
 
-    const nextCode = await getNextStudentCode(conn, subject, classRow.center_id);
+    const nextCode = await getNextStudentCode(conn, subject);
     res.json({
       next_code: nextCode,
       subject,
@@ -257,7 +252,7 @@ const createStudentMember = async (req, res) => {
     }
 
     if (!code?.trim()) {
-      code = await getNextStudentCode(conn, subject, classRow.center_id);
+      code = await getNextStudentCode(conn, subject);
     }
 
     await conn.beginTransaction();
@@ -318,8 +313,8 @@ const createStudentMember = async (req, res) => {
       const endDate = addMonthsToDate(tuition.start_date, courses[0].duration_months);
 
       const [dupProfile] = await conn.query(
-        'SELECT id FROM tuition_profiles WHERE student_code = ? AND subject = ? AND center_id = ?',
-        [code.trim(), subject, classRow.center_id]
+        'SELECT id FROM tuition_profiles WHERE student_code = ? AND subject = ?',
+        [code.trim(), subject]
       );
       if (dupProfile.length > 0) {
         await conn.rollback();
@@ -339,7 +334,6 @@ const createStudentMember = async (req, res) => {
         courseId: tuition.course_id,
         startDate: tuition.start_date,
         endDate,
-        centerId: classRow.center_id,
       });
     }
 

@@ -11,7 +11,6 @@ const router = express.Router();
 
 router.use(authenticate);
 router.use(authorize('admin'));
-router.use(resolveCenter);
 
 router.get('/courses', getCourses);
 router.post('/courses', createCourse);

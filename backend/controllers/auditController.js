@@ -1,7 +1,6 @@
 const pool = require('../config/db');
 const { logAction, labelForAction, labelForResource } = require('../utils/auditLog');
 const { executeDeletion } = require('../utils/deletionPolicy');
-const { adminCenterFilter } = require('../utils/centerQuery');
 
 const getAuditLogs = async (req, res) => {
   try {
@@ -16,9 +15,6 @@ const getAuditLogs = async (req, res) => {
       WHERE 1=1
     `;
     const params = [];
-    const centerFilter = adminCenterFilter(req, 'al');
-    sql += centerFilter.sql;
-    params.push(...centerFilter.params);
 
     if (actor_id) {
       sql += ' AND al.actor_id = ?';
@@ -72,9 +68,6 @@ const getDeletionRequests = async (req, res) => {
       WHERE 1=1
     `;
     const params = [];
-    const centerFilter = adminCenterFilter(req, 'dr');
-    sql += centerFilter.sql;
-    params.push(...centerFilter.params);
 
     if (status && status !== 'all') {
       sql += ' AND dr.status = ?';
@@ -94,12 +87,10 @@ const getDeletionRequests = async (req, res) => {
   }
 };
 
-const getPendingCount = async (req, res) => {
+const getPendingCount = async (_req, res) => {
   try {
-    const centerFilter = adminCenterFilter(req, 'deletion_requests');
     const [rows] = await pool.query(
-      `SELECT COUNT(*) AS count FROM deletion_requests WHERE status = 'pending'${centerFilter.sql}`,
-      centerFilter.params
+      `SELECT COUNT(*) AS count FROM deletion_requests WHERE status = 'pending'`
     );
     res.json({ count: rows[0].count });
   } catch (err) {
