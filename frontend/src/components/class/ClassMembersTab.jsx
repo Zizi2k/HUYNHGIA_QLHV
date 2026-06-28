@@ -21,7 +21,7 @@ function avatarColor(id) {
   return AVATAR_COLORS[id % AVATAR_COLORS.length];
 }
 
-export default function ClassMembersTab({ classId, className, members, isTeacher, isAdmin, onUpdated }) {
+export default function ClassMembersTab({ classId, className, members, isTeacher, isAdmin, isStudent, onUpdated }) {
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
@@ -47,12 +47,15 @@ export default function ClassMembersTab({ classId, className, members, isTeacher
   const filteredStudents = useMemo(() => {
     const q = search.trim().toLowerCase();
     if (!q) return students;
+    if (isStudent) {
+      return students.filter((s) => s.fullname?.toLowerCase().includes(q));
+    }
     return students.filter((s) =>
       s.fullname?.toLowerCase().includes(q)
       || s.code?.toLowerCase().includes(q)
       || s.phone?.includes(q)
       || s.zalo?.toLowerCase().includes(q));
-  }, [students, search]);
+  }, [students, search, isStudent]);
 
   const openAddModal = async () => {
     setError('');
@@ -387,7 +390,7 @@ export default function ClassMembersTab({ classId, className, members, isTeacher
               <i className="bi bi-search text-muted" />
             </InputGroup.Text>
             <Form.Control
-              placeholder="Tìm theo tên, mã, SĐT..."
+              placeholder={isStudent ? 'Tìm theo tên...' : 'Tìm theo tên, mã, SĐT...'}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
@@ -429,10 +432,14 @@ export default function ClassMembersTab({ classId, className, members, isTeacher
             <tr>
               <th style={{ width: 56 }}>#</th>
               <th>Học viên</th>
-              <th style={{ width: 120 }}>Mã HV</th>
-              <th>Tên đăng nhập</th>
-              <th>Số điện thoại</th>
-              <th>Zalo</th>
+              {!isStudent && (
+                <>
+                  <th style={{ width: 120 }}>Mã HV</th>
+                  <th>Tên đăng nhập</th>
+                  <th>Số điện thoại</th>
+                  <th>Zalo</th>
+                </>
+              )}
               {isTeacher && <th style={{ width: 100 }} className="text-center">Thao tác</th>}
             </tr>
           </thead>
@@ -451,22 +458,26 @@ export default function ClassMembersTab({ classId, className, members, isTeacher
                     <span className="pro-student-name">{m.fullname}</span>
                   </div>
                 </td>
-                <td><span className="pro-badge-code">{m.code}</span></td>
-                <td><code className="small">{m.username}</code></td>
-                <td>
-                  {m.phone ? (
-                    <span><i className="bi bi-telephone me-1 text-muted small" />{m.phone}</span>
-                  ) : (
-                    <span className="text-muted">—</span>
-                  )}
-                </td>
-                <td>
-                  {m.zalo ? (
-                    <span><i className="bi bi-chat-dots me-1 text-muted small" />{m.zalo}</span>
-                  ) : (
-                    <span className="text-muted">—</span>
-                  )}
-                </td>
+                {!isStudent && (
+                  <>
+                    <td><span className="pro-badge-code">{m.code}</span></td>
+                    <td><code className="small">{m.username}</code></td>
+                    <td>
+                      {m.phone ? (
+                        <span><i className="bi bi-telephone me-1 text-muted small" />{m.phone}</span>
+                      ) : (
+                        <span className="text-muted">—</span>
+                      )}
+                    </td>
+                    <td>
+                      {m.zalo ? (
+                        <span><i className="bi bi-chat-dots me-1 text-muted small" />{m.zalo}</span>
+                      ) : (
+                        <span className="text-muted">—</span>
+                      )}
+                    </td>
+                  </>
+                )}
                 {isTeacher && (
                   <td className="text-center">
                     <div className="pro-action-group">

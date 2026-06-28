@@ -2,6 +2,7 @@ const pool = require('../config/db');
 const { assertClassAccess, getLessonClassId } = require('../middleware/classAccess');
 const { handleDeletion } = require('../utils/deletionPolicy');
 const { logAction } = require('../utils/auditLog');
+const { saveMulterFile } = require('../utils/fileStorage');
 
 function isValidUrl(url) {
   try {
@@ -39,8 +40,9 @@ const createLesson = async (req, res) => {
     let file_type;
 
     if (req.file) {
-      file_url = `/uploads/${req.file.filename}`;
-      file_type = req.file.mimetype;
+      const saved = await saveMulterFile(req);
+      file_url = saved.file_url;
+      file_type = saved.file_type;
     } else if (link_url?.trim()) {
       const url = link_url.trim();
       if (!isValidUrl(url)) {

@@ -416,6 +416,7 @@ export default function ClassDetailPage() {
               members={classData.members}
               isTeacher={canManageClass}
               isAdmin={isAdmin}
+              isStudent={isStudent}
               onUpdated={loadData}
             />
           </Tab.Pane>

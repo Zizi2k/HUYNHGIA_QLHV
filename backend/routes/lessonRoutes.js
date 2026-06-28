@@ -1,7 +1,7 @@
 const express = require('express');
 const { getLessons, createLesson, deleteLesson } = require('../controllers/lessonController');
 const { authenticate, authorize } = require('../middleware/auth');
-const upload = require('../middleware/upload');
+const { uploadMemory } = require('../middleware/upload');
 
 const router = express.Router();
 
@@ -10,7 +10,7 @@ router.get('/:classId', getLessons);
 router.post('/:classId', authorize('admin', 'teacher'), (req, res, next) => {
   const contentType = req.headers['content-type'] || '';
   if (contentType.includes('multipart/form-data')) {
-    upload.single('file')(req, res, (err) => {
+    uploadMemory.single('file')(req, res, (err) => {
       if (err) return next(err);
       createLesson(req, res);
     });

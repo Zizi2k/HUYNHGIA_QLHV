@@ -1,4 +1,5 @@
 const pool = require('../config/db');
+const { mapPublicStudentRecords } = require('../utils/userProjection');
 const { assertClassAccess } = require('../middleware/classAccess');
 const { buildMonthlyPdf } = require('../utils/attendancePdf');
 const { handleDeletion } = require('../utils/deletionPolicy');
@@ -125,7 +126,7 @@ const getSessionDetail = async (req, res) => {
       [req.params.sessionId]
     );
 
-    res.json({ ...sessions[0], records });
+    res.json({ ...sessions[0], records: mapPublicStudentRecords(records, req.user) });
   } catch (err) {
     res.status(500).json({ message: 'Lỗi hệ thống', error: err.message });
   }

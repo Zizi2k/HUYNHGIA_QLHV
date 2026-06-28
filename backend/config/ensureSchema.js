@@ -144,6 +144,16 @@ async function ensureSchema() {
     INDEX idx_audit_action (action)
   )`);
 
+  await pool.query(`CREATE TABLE IF NOT EXISTS file_assets (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    token VARCHAR(64) NOT NULL UNIQUE,
+    original_name VARCHAR(255) NOT NULL,
+    mime_type VARCHAR(127) NOT NULL,
+    data LONGBLOB NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_file_assets_created (created_at)
+  )`);
+
   await pool.query(`CREATE TABLE IF NOT EXISTS deletion_requests (
     id INT PRIMARY KEY AUTO_INCREMENT,
     requested_by INT NOT NULL,

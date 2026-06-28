@@ -4,6 +4,7 @@ const {
 } = require('../middleware/classAccess');
 const { handleDeletion } = require('../utils/deletionPolicy');
 const { logAction } = require('../utils/auditLog');
+const { saveMulterFile } = require('../utils/fileStorage');
 
 function isValidUrl(url) {
   try {
@@ -14,7 +15,7 @@ function isValidUrl(url) {
   }
 }
 
-function resolveAttachment(req, existing = {}) {
+async function resolveAttachment(req, existing = {}) {
   const { link_url, link_type, remove_attachment } = req.body;
 
   if (remove_attachment === 'true' || remove_attachment === true) {
@@ -22,9 +23,10 @@ function resolveAttachment(req, existing = {}) {
   }
 
   if (req.file) {
+    const saved = await saveMulterFile(req);
     return {
-      file_url: `/uploads/${req.file.filename}`,
-      file_type: req.file.mimetype,
+      file_url: saved.file_url,
+      file_type: saved.file_type,
     };
   }
 
@@ -104,7 +106,7 @@ const createAssignment = async (req, res) => {
     }
     if (!(await assertClassAccess(req.user, class_id, res, { manage: true }))) return;
 
-    const attachment = resolveAttachment(req);
+    const attachment = await resolveAttachment(req);
 
     const [result] = await pool.query(
       `INSERT INTO assignments (class_id, title, description, file_url, file_type, deadline)
@@ -139,7 +141,7 @@ const updateAssignment = async (req, res) => {
       return res.status(404).json({ message: 'Không tìm thấy bài tập' });
     }
 
-    const attachment = resolveAttachment(req, existing[0]);
+    const attachment = await resolveAttachment(req, existing[0]);
 
     const [result] = await pool.query(
       `UPDATE assignments SET title=?, description=?, file_url=?, file_type=?, deadline=? WHERE id=?`,
@@ -198,7 +200,8 @@ const uploadSubmission = async (req, res) => {
     }
     if (!(await assertClassAccess(req.user, classId, res))) return;
 
-    const file_url = `/uploads/${req.file.filename}`;
+    const saved = await saveMulterFile(req);
+    const file_url = saved.file_url;
     const student_id = req.user.id;
 
     const [existing] = await pool.query(

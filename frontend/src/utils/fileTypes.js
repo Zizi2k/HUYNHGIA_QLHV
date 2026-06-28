@@ -65,7 +65,8 @@ export function isExternalLessonUrl(fileUrl) {
 export function getLessonResourceUrl(fileUrl, apiBase) {
   if (!fileUrl) return '';
   if (isExternalLessonUrl(fileUrl)) return fileUrl;
-  return `${apiBase}${fileUrl}`;
+  const base = (apiBase || '').replace(/\/$/, '');
+  return `${base}${fileUrl.startsWith('/') ? fileUrl : `/${fileUrl}`}`;
 }
 
 export function getLessonLinkLabel(fileType, lesson) {

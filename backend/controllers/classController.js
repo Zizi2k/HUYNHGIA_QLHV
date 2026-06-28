@@ -9,6 +9,7 @@ const { addMonthsToDate } = require('../utils/dateHelpers');
 const { insertTuitionProfile } = require('../utils/tuitionProfileDb');
 const { handleDeletion } = require('../utils/deletionPolicy');
 const { logAction } = require('../utils/auditLog');
+const { mapPublicMembers } = require('../utils/userProjection');
 
 async function getClassRow(conn, classId) {
   const [classes] = await conn.query('SELECT * FROM classes WHERE id = ?', [classId]);
@@ -94,7 +95,7 @@ const getClassById = async (req, res) => {
       [classId]
     );
 
-    res.json({ ...classes[0], members });
+    res.json({ ...classes[0], members: mapPublicMembers(members, req.user) });
   } catch (err) {
     res.status(500).json({ message: 'Lỗi hệ thống', error: err.message });
   }

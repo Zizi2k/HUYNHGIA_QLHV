@@ -386,7 +386,7 @@ export default function ClassAssignmentsTab({
                   {a.submission_url && (
                     <div className="mt-2 small">
                       <a
-                        href={`${API_BASE}${a.submission_url}`}
+                        href={getResourceUrl(a.submission_url)}
                         target="_blank"
                         rel="noopener noreferrer"
                       >
@@ -616,7 +616,7 @@ export default function ClassAssignmentsTab({
                     </td>
                     <td>
                       {s.file_url ? (
-                        <a href={`${API_BASE}${s.file_url}`} target="_blank" rel="noopener noreferrer">
+                        <a href={getResourceUrl(s.file_url)} target="_blank" rel="noopener noreferrer">
                           Tải về
                         </a>
                       ) : '—'}

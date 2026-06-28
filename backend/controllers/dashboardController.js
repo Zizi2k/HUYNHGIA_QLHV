@@ -1,4 +1,5 @@
 const pool = require('../config/db');
+const { mapPublicHonorEntries } = require('../utils/userProjection');
 const { assertClassAccess } = require('../middleware/classAccess');
 
 const getDashboard = async (req, res) => {
@@ -121,7 +122,7 @@ const getHonorBoard = async (req, res) => {
        LIMIT 20`,
       [classId, classId, classId]
     );
-    res.json(rows);
+    res.json(mapPublicHonorEntries(rows, req.user));
   } catch (err) {
     res.status(500).json({ message: 'Lỗi hệ thống', error: err.message });
   }
