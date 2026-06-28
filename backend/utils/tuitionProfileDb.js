@@ -1,4 +1,4 @@
-const { parseAmount } = require('./tuitionHelpers');
+const { parseAmount, resolveTuitionAmounts } = require('./tuitionHelpers');
 
 const PROFILE_SELECT = `
   SELECT tp.*,
@@ -17,6 +17,12 @@ async function insertTuitionProfile(conn, {
   studentCode, userId, fullname, subject, classId, classLabel,
   phone, zalo, tuition, courseId, startDate, endDate,
 }) {
+  const { feeBefore, feeAfter } = await resolveTuitionAmounts(conn, {
+    fee_before_discount: tuition.fee_before_discount,
+    fee_after_discount: tuition.fee_after_discount,
+    discount_id: tuition.discount_id,
+  });
+
   const [result] = await conn.query(
     `INSERT INTO tuition_profiles
      (student_code, user_id, fullname, subject, course_id, class_id, class_label,
@@ -36,8 +42,8 @@ async function insertTuitionProfile(conn, {
       phone?.trim() || null,
       zalo?.trim() || null,
       parseAmount(tuition.base_fee),
-      parseAmount(tuition.fee_before_discount),
-      parseAmount(tuition.fee_after_discount),
+      feeBefore,
+      feeAfter,
       parseAmount(tuition.book_fee),
       tuition.discount_id || null,
       tuition.discount_reason?.trim() || null,

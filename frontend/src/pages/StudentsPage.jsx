@@ -8,6 +8,7 @@ import PageHeader from '../components/layout/PageHeader';
 import { studentService, classService } from '../services';
 import EnrollmentOverviewTable from '../components/students/EnrollmentOverviewTable';
 import AddEnrollmentModal from '../components/students/AddEnrollmentModal';
+import TransferClassModal from '../components/students/TransferClassModal';
 import CourseManager from '../components/students/CourseManager';
 import {
   SUBJECT_OPTIONS, ENROLLMENT_STATUS_LABELS, subjectLabel,
@@ -31,6 +32,7 @@ export default function StudentsPage() {
   const [showAdd, setShowAdd] = useState(false);
   const [showCourses, setShowCourses] = useState(false);
   const [editStudent, setEditStudent] = useState(null);
+  const [transferStudent, setTransferStudent] = useState(null);
 
   const loadMeta = () => {
     classService.getAll().then((res) => setClasses(res.data));
@@ -65,6 +67,10 @@ export default function StudentsPage() {
     const timer = setTimeout(loadOverview, 300);
     return () => clearTimeout(timer);
   }, [search]);
+
+  const handleTransfer = (student) => {
+    setTransferStudent(student);
+  };
 
   const handleOpenAdd = () => {
     setEditStudent(null);
@@ -197,7 +203,11 @@ export default function StudentsPage() {
       {loading ? (
         <div className="text-center py-5"><Spinner animation="border" /></div>
       ) : (
-        <EnrollmentOverviewTable students={students} onEdit={handleEdit} />
+        <EnrollmentOverviewTable
+          students={students}
+          onEdit={handleEdit}
+          onTransfer={handleTransfer}
+        />
       )}
 
       <AddEnrollmentModal
@@ -207,6 +217,14 @@ export default function StudentsPage() {
         classes={classes}
         courses={courses}
         editStudent={editStudent}
+      />
+
+      <TransferClassModal
+        show={!!transferStudent}
+        onHide={() => setTransferStudent(null)}
+        student={transferStudent}
+        classes={classes}
+        onSuccess={loadOverview}
       />
 
       <CourseManager

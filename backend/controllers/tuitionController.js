@@ -1,5 +1,5 @@
 const pool = require('../config/db');
-const { enrichProfile, parseAmount, SUBJECTS } = require('../utils/tuitionHelpers');
+const { enrichProfile, parseAmount, SUBJECTS, resolveTuitionAmounts } = require('../utils/tuitionHelpers');
 const { PROFILE_SELECT } = require('../utils/tuitionProfileDb');
 const { addMonthsToDate } = require('../utils/dateHelpers');
 const { logAction } = require('../utils/auditLog');
@@ -118,6 +118,12 @@ const createProfile = async (req, res) => {
 
     const { userId, classId } = await linkUserAndClass(conn, student_code, class_label);
 
+    const { feeBefore, feeAfter } = await resolveTuitionAmounts(conn, {
+      fee_before_discount,
+      fee_after_discount,
+      discount_id,
+    });
+
     let endDate = null;
     let courseId = course_id || null;
     if (course_id && start_date) {
@@ -139,7 +145,7 @@ const createProfile = async (req, res) => {
         student_code.trim(), userId, fullname.trim(), subject, courseId, classId,
         class_label || null, enrichment_class || null, current_class || null,
         phone || null, zalo || null,
-        parseAmount(base_fee), parseAmount(fee_before_discount), parseAmount(fee_after_discount),
+        parseAmount(base_fee), feeBefore, feeAfter,
         parseAmount(book_fee), discount_id || null, discount_reason || null,
         start_date || null, endDate,
       ]
@@ -174,6 +180,12 @@ const updateProfile = async (req, res) => {
 
     const { userId, classId } = await linkUserAndClass(conn, student_code, class_label);
 
+    const { feeBefore, feeAfter } = await resolveTuitionAmounts(conn, {
+      fee_before_discount,
+      fee_after_discount,
+      discount_id,
+    });
+
     const [existing] = await conn.query('SELECT course_id, start_date, end_date FROM tuition_profiles WHERE id = ?', [
       req.params.id,
     ]);
@@ -201,7 +213,7 @@ const updateProfile = async (req, res) => {
       [
         student_code, userId, fullname, subject, courseId, classId, class_label || null,
         enrichment_class || null, current_class || null, phone || null, zalo || null,
-        parseAmount(base_fee), parseAmount(fee_before_discount), parseAmount(fee_after_discount),
+        parseAmount(base_fee), feeBefore, feeAfter,
         parseAmount(book_fee), discount_id || null, discount_reason || null,
         startDate, endDate,
         req.params.id,

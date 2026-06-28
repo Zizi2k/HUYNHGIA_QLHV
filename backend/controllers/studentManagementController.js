@@ -2,10 +2,11 @@ const pool = require('../config/db');
 const {
   buildStudentUsername, extractStudentNumber, ensureUniqueUsername, regenerateClassUsernames,
 } = require('../utils/username');
-const { parseAmount, SUBJECTS, enrichProfile } = require('../utils/tuitionHelpers');
+const { parseAmount, SUBJECTS, enrichProfile, resolveTuitionAmounts } = require('../utils/tuitionHelpers');
 const { getNextStudentCode, inferSubjectFromClassName } = require('../utils/studentCode');
 const { addMonthsToDate, getEnrollmentStatus } = require('../utils/dateHelpers');
 const { PROFILE_SELECT, insertTuitionProfile } = require('../utils/tuitionProfileDb');
+const { logAction } = require('../utils/auditLog');
 
 function resolveClassSubject(classRow) {
   if (classRow?.subject) return classRow.subject;
@@ -329,6 +330,24 @@ const updateEnrollment = async (req, res) => {
     }
 
     if (class_id && class_id !== profile.class_id && profile.user_id) {
+      const [newClasses] = await conn.query('SELECT * FROM classes WHERE id = ?', [class_id]);
+      if (newClasses.length === 0) {
+        await conn.rollback();
+        return res.status(404).json({ message: 'Không tìm thấy lớp học' });
+      }
+      const newSubject = resolveClassSubject(newClasses[0]);
+      if (newSubject && newSubject !== profile.subject) {
+        await conn.rollback();
+        return res.status(400).json({ message: 'Lớp học không cùng môn' });
+      }
+
+      if (profile.class_id) {
+        await conn.query('DELETE FROM class_members WHERE class_id = ? AND user_id = ?', [
+          profile.class_id, profile.user_id,
+        ]);
+        await regenerateClassUsernames(conn, profile.class_id);
+      }
+
       const [inClass] = await conn.query(
         'SELECT id FROM class_members WHERE class_id = ? AND user_id = ?',
         [class_id, profile.user_id]
@@ -338,11 +357,25 @@ const updateEnrollment = async (req, res) => {
           class_id, profile.user_id,
         ]);
       }
+      await regenerateClassUsernames(conn, class_id);
     }
 
     const [classes] = class_id
       ? await conn.query('SELECT name FROM classes WHERE id = ?', [class_id])
       : [[]];
+
+    let feeBefore = tuition ? parseAmount(tuition.fee_before_discount) : profile.fee_before_discount;
+    let feeAfter = tuition ? parseAmount(tuition.fee_after_discount) : profile.fee_after_discount;
+    const discountIdForFee = tuition?.discount_id ?? profile.discount_id;
+    if (tuition) {
+      const resolved = await resolveTuitionAmounts(conn, {
+        fee_before_discount: tuition.fee_before_discount,
+        fee_after_discount: tuition.fee_after_discount,
+        discount_id: discountIdForFee,
+      });
+      feeBefore = resolved.feeBefore;
+      feeAfter = resolved.feeAfter;
+    }
 
     await conn.query(
       `UPDATE tuition_profiles SET
@@ -367,8 +400,8 @@ const updateEnrollment = async (req, res) => {
         phone?.trim() ?? profile.phone,
         zalo?.trim() ?? profile.zalo,
         tuition ? parseAmount(tuition.base_fee) : profile.base_fee,
-        tuition ? parseAmount(tuition.fee_before_discount) : profile.fee_before_discount,
-        tuition ? parseAmount(tuition.fee_after_discount) : profile.fee_after_discount,
+        feeBefore,
+        feeAfter,
         tuition ? parseAmount(tuition.book_fee) : profile.book_fee,
         tuition?.discount_id ?? profile.discount_id,
         tuition?.discount_reason?.trim() ?? profile.discount_reason,
@@ -388,9 +421,107 @@ const updateEnrollment = async (req, res) => {
   }
 };
 
+const transferStudent = async (req, res) => {
+  const conn = await pool.getConnection();
+  try {
+    const { class_id: newClassId } = req.body;
+    if (!newClassId) {
+      return res.status(400).json({ message: 'Vui lòng chọn lớp mới' });
+    }
+
+    const [profiles] = await conn.query('SELECT * FROM tuition_profiles WHERE id = ?', [req.params.id]);
+    if (profiles.length === 0) {
+      return res.status(404).json({ message: 'Không tìm thấy học viên' });
+    }
+    const profile = profiles[0];
+
+    if (!profile.user_id) {
+      return res.status(400).json({ message: 'Học viên chưa có tài khoản trong hệ thống' });
+    }
+
+    if (Number(newClassId) === Number(profile.class_id)) {
+      return res.status(400).json({ message: 'Học viên đã ở lớp này' });
+    }
+
+    const [newClasses] = await conn.query('SELECT * FROM classes WHERE id = ?', [newClassId]);
+    if (newClasses.length === 0) {
+      return res.status(404).json({ message: 'Không tìm thấy lớp đích' });
+    }
+    const newClass = newClasses[0];
+    const newSubject = resolveClassSubject(newClass);
+    if (newSubject && newSubject !== profile.subject) {
+      return res.status(400).json({
+        message: 'Lớp đích phải cùng môn học với hồ sơ học viên',
+      });
+    }
+
+    const oldClassId = profile.class_id;
+    let oldClassName = profile.class_label;
+
+    await conn.beginTransaction();
+
+    if (oldClassId) {
+      const [oldClasses] = await conn.query('SELECT name FROM classes WHERE id = ?', [oldClassId]);
+      oldClassName = oldClasses[0]?.name || oldClassName;
+      await conn.query('DELETE FROM class_members WHERE class_id = ? AND user_id = ?', [
+        oldClassId, profile.user_id,
+      ]);
+    }
+
+    const [inNew] = await conn.query(
+      'SELECT id FROM class_members WHERE class_id = ? AND user_id = ?',
+      [newClassId, profile.user_id]
+    );
+    if (inNew.length === 0) {
+      await conn.query('INSERT INTO class_members (class_id, user_id) VALUES (?, ?)', [
+        newClassId, profile.user_id,
+      ]);
+    }
+
+    await conn.query(
+      `UPDATE tuition_profiles SET class_id = ?, class_label = ?, current_class = ? WHERE id = ?`,
+      [newClassId, newClass.name, newClass.name, profile.id]
+    );
+
+    if (oldClassId) await regenerateClassUsernames(conn, oldClassId);
+    await regenerateClassUsernames(conn, newClassId);
+
+    await logAction({
+      actorId: req.user.id,
+      action: 'update',
+      resourceType: 'class_member',
+      resourceId: profile.user_id,
+      resourceLabel: profile.fullname,
+      metadata: {
+        transfer: true,
+        profile_id: profile.id,
+        student_code: profile.student_code,
+        from_class_id: oldClassId,
+        from_class_name: oldClassName,
+        to_class_id: Number(newClassId),
+        to_class_name: newClass.name,
+      },
+      conn,
+    });
+
+    await conn.commit();
+    res.json({
+      message: `Đã chuyển "${profile.fullname}" sang lớp "${newClass.name}"`,
+      class_id: Number(newClassId),
+      class_name: newClass.name,
+    });
+  } catch (err) {
+    await conn.rollback();
+    res.status(500).json({ message: 'Lỗi hệ thống', error: err.message });
+  } finally {
+    conn.release();
+  }
+};
+
 module.exports = {
   getOverview,
   getNextCode,
   createEnrollment,
   updateEnrollment,
+  transferStudent,
 };

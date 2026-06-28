@@ -129,6 +129,7 @@ export const studentService = {
   getNextCode: (subject) => api.get('/students/next-code', { params: { subject } }),
   createEnrollment: (data) => api.post('/students/enroll', data),
   updateEnrollment: (id, data) => api.put(`/students/enroll/${id}`, data),
+  transferClass: (id, data) => api.post(`/students/enroll/${id}/transfer`, data),
 };
 
 export const auditService = {

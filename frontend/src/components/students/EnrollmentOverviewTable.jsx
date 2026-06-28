@@ -5,7 +5,7 @@ import {
   ENROLLMENT_STATUS_LABELS, STATUS_LABELS, formatMoney, formatDateVi, subjectLabel,
 } from './studentConstants';
 
-export default function EnrollmentOverviewTable({ students, onEdit }) {
+export default function EnrollmentOverviewTable({ students, onEdit, onTransfer }) {
   if (!students.length) {
     return (
       <DataTable>
@@ -39,7 +39,7 @@ export default function EnrollmentOverviewTable({ students, onEdit }) {
           <th>TT khóa</th>
           <th className="text-end">Còn nợ</th>
           <th>TT HP</th>
-          <th style={{ width: 90 }} className="text-center">Thao tác</th>
+          <th style={{ width: 120 }} className="text-center">Thao tác</th>
         </tr>
       </thead>
       <tbody>
@@ -81,6 +81,14 @@ export default function EnrollmentOverviewTable({ students, onEdit }) {
               <td><Badge bg={paySt.bg}>{paySt.label}</Badge></td>
               <td className="text-center">
                 <div className="pro-action-group">
+                  <Button
+                    variant="light"
+                    size="sm"
+                    title="Chuyển lớp"
+                    onClick={() => onTransfer(s)}
+                  >
+                    <i className="bi bi-arrow-left-right text-info" />
+                  </Button>
                   <Button
                     variant="light"
                     size="sm"

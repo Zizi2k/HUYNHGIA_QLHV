@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Modal, Form, Button, Row, Col } from 'react-bootstrap';
 import { tuitionService } from '../../services';
 import { SUBJECT_OPTIONS } from './tuitionConstants';
+import { applyTuitionFieldChange, isFeeAfterAutoCalculated } from './tuitionDiscountCalc';
 
 const emptyForm = {
   student_code: '', fullname: '', subject: 'english',
@@ -39,6 +40,12 @@ export default function ProfileEditModal({ show, onHide, profile, discounts, onS
     }
     setError('');
   }, [profile, show]);
+
+  const handleChange = (field, value) => {
+    setForm((prev) => applyTuitionFieldChange(prev, field, value, discounts));
+  };
+
+  const feeAfterAuto = isFeeAfterAutoCalculated(form.discount_id);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -79,45 +86,57 @@ export default function ProfileEditModal({ show, onHide, profile, discounts, onS
             <Col md={4}>
               <Form.Group>
                 <Form.Label>Mã học viên</Form.Label>
-                <Form.Control value={form.student_code} onChange={(e) => setForm({ ...form, student_code: e.target.value })} required disabled={!!profile} />
+                <Form.Control value={form.student_code} onChange={(e) => handleChange('student_code', e.target.value)} required disabled={!!profile} />
               </Form.Group>
             </Col>
             <Col md={4}>
               <Form.Group>
                 <Form.Label>Họ tên</Form.Label>
-                <Form.Control value={form.fullname} onChange={(e) => setForm({ ...form, fullname: e.target.value })} required />
+                <Form.Control value={form.fullname} onChange={(e) => handleChange('fullname', e.target.value)} required />
               </Form.Group>
             </Col>
             <Col md={4}>
               <Form.Group>
                 <Form.Label>Môn học</Form.Label>
-                <Form.Select value={form.subject} onChange={(e) => setForm({ ...form, subject: e.target.value })} disabled={!!profile}>
+                <Form.Select value={form.subject} onChange={(e) => handleChange('subject', e.target.value)} disabled={!!profile}>
                   {SUBJECT_OPTIONS.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
                 </Form.Select>
               </Form.Group>
             </Col>
-            <Col md={4}><Form.Group><Form.Label>Lớp học</Form.Label><Form.Control value={form.class_label} onChange={(e) => setForm({ ...form, class_label: e.target.value })} /></Form.Group></Col>
-            <Col md={4}><Form.Group><Form.Label>Lớp tăng cường</Form.Label><Form.Control value={form.enrichment_class} onChange={(e) => setForm({ ...form, enrichment_class: e.target.value })} /></Form.Group></Col>
-            <Col md={4}><Form.Group><Form.Label>Đang học lớp</Form.Label><Form.Control value={form.current_class} onChange={(e) => setForm({ ...form, current_class: e.target.value })} /></Form.Group></Col>
-            <Col md={4}><Form.Group><Form.Label>SĐT</Form.Label><Form.Control value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} /></Form.Group></Col>
-            <Col md={4}><Form.Group><Form.Label>Zalo</Form.Label><Form.Control value={form.zalo} onChange={(e) => setForm({ ...form, zalo: e.target.value })} /></Form.Group></Col>
+            <Col md={4}><Form.Group><Form.Label>Lớp học</Form.Label><Form.Control value={form.class_label} onChange={(e) => handleChange('class_label', e.target.value)} /></Form.Group></Col>
+            <Col md={4}><Form.Group><Form.Label>Lớp tăng cường</Form.Label><Form.Control value={form.enrichment_class} onChange={(e) => handleChange('enrichment_class', e.target.value)} /></Form.Group></Col>
+            <Col md={4}><Form.Group><Form.Label>Đang học lớp</Form.Label><Form.Control value={form.current_class} onChange={(e) => handleChange('current_class', e.target.value)} /></Form.Group></Col>
+            <Col md={4}><Form.Group><Form.Label>SĐT</Form.Label><Form.Control value={form.phone} onChange={(e) => handleChange('phone', e.target.value)} /></Form.Group></Col>
+            <Col md={4}><Form.Group><Form.Label>Zalo</Form.Label><Form.Control value={form.zalo} onChange={(e) => handleChange('zalo', e.target.value)} /></Form.Group></Col>
             <Col md={4}>
               <Form.Group>
                 <Form.Label>Mức giảm</Form.Label>
-                <Form.Select value={form.discount_id} onChange={(e) => setForm({ ...form, discount_id: e.target.value })}>
+                <Form.Select value={form.discount_id} onChange={(e) => handleChange('discount_id', e.target.value)}>
                   <option value="">— Không —</option>
                   {discounts.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
                 </Form.Select>
               </Form.Group>
             </Col>
-            <Col md={6}><Form.Group><Form.Label>HP ban đầu</Form.Label><Form.Control type="number" min="0" value={form.base_fee} onChange={(e) => setForm({ ...form, base_fee: e.target.value })} /></Form.Group></Col>
-            <Col md={6}><Form.Group><Form.Label>HP trước giảm</Form.Label><Form.Control type="number" min="0" value={form.fee_before_discount} onChange={(e) => setForm({ ...form, fee_before_discount: e.target.value })} /></Form.Group></Col>
-            <Col md={6}><Form.Group><Form.Label>HP sau giảm</Form.Label><Form.Control type="number" min="0" value={form.fee_after_discount} onChange={(e) => setForm({ ...form, fee_after_discount: e.target.value })} /></Form.Group></Col>
-            <Col md={6}><Form.Group><Form.Label>Phí sách</Form.Label><Form.Control type="number" min="0" value={form.book_fee} onChange={(e) => setForm({ ...form, book_fee: e.target.value })} /></Form.Group></Col>
+            <Col md={6}><Form.Group><Form.Label>HP ban đầu</Form.Label><Form.Control type="number" min="0" value={form.base_fee} onChange={(e) => handleChange('base_fee', e.target.value)} /></Form.Group></Col>
+            <Col md={6}><Form.Group><Form.Label>HP trước giảm</Form.Label><Form.Control type="number" min="0" value={form.fee_before_discount} onChange={(e) => handleChange('fee_before_discount', e.target.value)} /></Form.Group></Col>
+            <Col md={6}>
+              <Form.Group>
+                <Form.Label>HP sau giảm {feeAfterAuto && <small className="text-muted">(tự tính)</small>}</Form.Label>
+                <Form.Control
+                  type="number"
+                  min="0"
+                  value={form.fee_after_discount}
+                  onChange={(e) => handleChange('fee_after_discount', e.target.value)}
+                  readOnly={feeAfterAuto}
+                  className={feeAfterAuto ? 'bg-light' : ''}
+                />
+              </Form.Group>
+            </Col>
+            <Col md={6}><Form.Group><Form.Label>Phí sách</Form.Label><Form.Control type="number" min="0" value={form.book_fee} onChange={(e) => handleChange('book_fee', e.target.value)} /></Form.Group></Col>
             <Col md={12}>
               <Form.Group>
-                <Form.Label>Lý do giảm</Form.Label>
-                <Form.Control as="textarea" rows={2} value={form.discount_reason} onChange={(e) => setForm({ ...form, discount_reason: e.target.value })} />
+                <Form.Label>Lý do giảm {form.discount_id ? <span className="text-danger">*</span> : null}</Form.Label>
+                <Form.Control as="textarea" rows={2} value={form.discount_reason} onChange={(e) => handleChange('discount_reason', e.target.value)} required={!!form.discount_id} />
               </Form.Group>
             </Col>
           </Row>

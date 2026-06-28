@@ -1,7 +1,7 @@
 const XLSX = require('xlsx');
 const fs = require('fs');
 const pool = require('../config/db');
-const { normalizeHeader, parseSubject, parseAmount } = require('../utils/tuitionHelpers');
+const { normalizeHeader, parseSubject, parseAmount, resolveTuitionAmounts } = require('../utils/tuitionHelpers');
 
 const HEADER_MAP = {
   'ma hoc vien': 'student_code',
@@ -138,6 +138,11 @@ const importProfiles = async (req, res) => {
 
         const { userId, classId } = await linkUserAndClass(conn, row.student_code, row.class_label);
         const discountId = await lookupDiscount(conn, row.discount_name);
+        const { feeBefore, feeAfter } = await resolveTuitionAmounts(conn, {
+          fee_before_discount: row.fee_before_discount,
+          fee_after_discount: row.fee_after_discount,
+          discount_id: discountId,
+        });
 
         const [existing] = await conn.query(
           'SELECT id FROM tuition_profiles WHERE student_code = ? AND subject = ?',
@@ -148,8 +153,7 @@ const importProfiles = async (req, res) => {
           row.student_code, userId, row.fullname, subject, classId,
           row.class_label || null, row.enrichment_class || null, row.current_class || null,
           row.phone || null, row.zalo || null,
-          parseAmount(row.base_fee), parseAmount(row.fee_before_discount),
-          parseAmount(row.fee_after_discount), parseAmount(row.book_fee),
+          parseAmount(row.base_fee), feeBefore, feeAfter, parseAmount(row.book_fee),
           discountId, row.discount_reason || null,
         ];
 
@@ -164,8 +168,7 @@ const importProfiles = async (req, res) => {
               userId, row.fullname, classId,
               row.class_label || null, row.enrichment_class || null, row.current_class || null,
               row.phone || null, row.zalo || null,
-              parseAmount(row.base_fee), parseAmount(row.fee_before_discount),
-              parseAmount(row.fee_after_discount), parseAmount(row.book_fee),
+              parseAmount(row.base_fee), feeBefore, feeAfter, parseAmount(row.book_fee),
               discountId, row.discount_reason || null,
               existing[0].id,
             ]

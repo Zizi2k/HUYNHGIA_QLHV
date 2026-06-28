@@ -3,6 +3,7 @@ import { Modal, Form, Button, Alert, Spinner, InputGroup, ListGroup, Badge,
 } from 'react-bootstrap';
 import { notifyDeleteResult } from '../../utils/deleteHelpers';
 import { classService, tuitionService, studentService } from '../../services';
+import { applyTuitionFieldChange } from '../tuition/tuitionDiscountCalc';
 import DataTable, { DataTableEmpty } from '../common/DataTable';
 import AddStudentModal, { emptyStudentFields, emptyTuitionFields } from './AddStudentModal';
 
@@ -505,7 +506,7 @@ export default function ClassMembersTab({ classId, className, members, isTeacher
         form={form}
         discounts={discounts}
         courses={courses}
-        onChange={(field, value) => setForm((prev) => ({ ...prev, [field]: value }))}
+        onChange={(field, value) => setForm((prev) => applyTuitionFieldChange(prev, field, value, discounts))}
         onSubmit={handleAdd}
       />
 

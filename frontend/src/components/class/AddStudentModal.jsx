@@ -1,5 +1,6 @@
 import { Modal, Form, Button, Alert, Spinner, Row, Col } from 'react-bootstrap';
 import { calcEndDate, formatDateVi } from '../students/studentConstants';
+import { isFeeAfterAutoCalculated } from '../tuition/tuitionDiscountCalc';
 
 const emptyStudentFields = {
   code: '',
@@ -37,6 +38,7 @@ export default function AddStudentModal({
 }) {
   const selectedCourse = courses.find((c) => String(c.id) === String(form.course_id));
   const endDatePreview = calcEndDate(form.start_date, selectedCourse?.duration_months);
+  const feeAfterAuto = isFeeAfterAutoCalculated(form.discount_id);
   return (
     <Modal show={show} onHide={onHide} size={isAdmin ? 'lg' : undefined} className={isAdmin ? 'scrollable-form-modal' : ''}>
       <Modal.Header closeButton>
@@ -186,12 +188,17 @@ export default function AddStudentModal({
                     </Col>
                     <Col md={6}>
                       <Form.Group>
-                        <Form.Label>HP sau giảm <span className="text-danger">*</span></Form.Label>
+                        <Form.Label>
+                          HP sau giảm <span className="text-danger">*</span>
+                          {feeAfterAuto && <small className="text-muted ms-1">(tự tính)</small>}
+                        </Form.Label>
                         <Form.Control
                           type="number"
                           min="0"
                           value={form.fee_after_discount}
                           onChange={(e) => onChange('fee_after_discount', e.target.value)}
+                          readOnly={feeAfterAuto}
+                          className={feeAfterAuto ? 'bg-light' : ''}
                           required
                         />
                       </Form.Group>

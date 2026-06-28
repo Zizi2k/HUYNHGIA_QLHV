@@ -4,7 +4,7 @@ const {
   getCourses, createCourse, updateCourse, deleteCourse,
 } = require('../controllers/trainingCourseController');
 const {
-  getOverview, getNextCode, createEnrollment, updateEnrollment,
+  getOverview, getNextCode, createEnrollment, updateEnrollment, transferStudent,
 } = require('../controllers/studentManagementController');
 
 const router = express.Router();
@@ -21,5 +21,6 @@ router.get('/overview', getOverview);
 router.get('/next-code', getNextCode);
 router.post('/enroll', createEnrollment);
 router.put('/enroll/:id', updateEnrollment);
+router.post('/enroll/:id/transfer', transferStudent);
 
 module.exports = router;

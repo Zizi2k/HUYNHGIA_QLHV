@@ -6,6 +6,7 @@ import { studentService, tuitionService } from '../../services';
 import {
   SUBJECT_OPTIONS, calcEndDate, formatDateVi, todayDateValue,
 } from './studentConstants';
+import { applyTuitionFieldChange, isFeeAfterAutoCalculated } from '../tuition/tuitionDiscountCalc';
 
 const emptyTuition = {
   enrichment_class: '',
@@ -131,8 +132,10 @@ export default function AddEnrollmentModal({
   };
 
   const handleChange = (field, value) => {
-    setForm((prev) => ({ ...prev, [field]: value }));
+    setForm((prev) => applyTuitionFieldChange(prev, field, value, discounts));
   };
+
+  const feeAfterAuto = isFeeAfterAutoCalculated(form.discount_id);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -351,12 +354,17 @@ export default function AddEnrollmentModal({
                 </Col>
                 <Col md={6}>
                   <Form.Group>
-                    <Form.Label>HP sau giảm <span className="text-danger">*</span></Form.Label>
+                    <Form.Label>
+                      HP sau giảm <span className="text-danger">*</span>
+                      {feeAfterAuto && <small className="text-muted ms-1">(tự tính)</small>}
+                    </Form.Label>
                     <Form.Control
                       type="number"
                       min="0"
                       value={form.fee_after_discount}
                       onChange={(e) => handleChange('fee_after_discount', e.target.value)}
+                      readOnly={feeAfterAuto}
+                      className={feeAfterAuto ? 'bg-light' : ''}
                       required
                     />
                   </Form.Group>

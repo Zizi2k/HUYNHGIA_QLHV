@@ -37,6 +37,42 @@ function parseAmount(value) {
   return Number.isFinite(num) ? num : 0;
 }
 
+function calculateFeeAfterDiscount(feeBefore, discount) {
+  const before = parseAmount(feeBefore);
+  if (!discount) return before;
+
+  const value = Number(discount.discount_value) || 0;
+  if (discount.discount_type === 'percent') {
+    const pct = Math.min(Math.max(value, 0), 100);
+    return Math.max(0, Math.round(before - (before * pct) / 100));
+  }
+  return Math.max(0, before - value);
+}
+
+async function resolveFeeAfterWithDiscount(conn, feeBefore, discountId) {
+  if (!discountId) return parseAmount(feeBefore);
+  const [rows] = await conn.query(
+    'SELECT discount_type, discount_value FROM fee_discounts WHERE id = ? AND is_active = TRUE',
+    [discountId]
+  );
+  if (!rows.length) return parseAmount(feeBefore);
+  return calculateFeeAfterDiscount(feeBefore, rows[0]);
+}
+
+async function resolveTuitionAmounts(conn, {
+  fee_before_discount, fee_after_discount, discount_id,
+}) {
+  const feeBefore = parseAmount(fee_before_discount);
+  if (discount_id) {
+    const feeAfter = await resolveFeeAfterWithDiscount(conn, feeBefore, discount_id);
+    return { feeBefore, feeAfter };
+  }
+  return {
+    feeBefore,
+    feeAfter: parseAmount(fee_after_discount ?? fee_before_discount),
+  };
+}
+
 function computeDebt(profile, payments = []) {
   const tuitionPaid = payments
     .filter((p) => p.payment_type === 'tuition')
@@ -103,6 +139,9 @@ module.exports = {
   normalizeHeader,
   parseSubject,
   parseAmount,
+  calculateFeeAfterDiscount,
+  resolveFeeAfterWithDiscount,
+  resolveTuitionAmounts,
   computeDebt,
   enrichProfile,
   formatMonthYear,
