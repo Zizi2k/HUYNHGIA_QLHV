@@ -2,6 +2,12 @@ import { SUBJECT_OPTIONS, STATUS_LABELS, formatMoney, subjectLabel } from '../tu
 
 export { SUBJECT_OPTIONS, STATUS_LABELS, formatMoney, subjectLabel };
 
+export const CODE_PREFIX_OPTIONS = [
+  { value: '', label: 'Tất cả tiền tố' },
+  { value: 'HG', label: 'HG (LHG)' },
+  { value: 'EG', label: 'EG (EGC)' },
+];
+
 export const ENROLLMENT_STATUS_LABELS = {
   active: { label: 'Đang học', bg: 'success' },
   expiring: { label: 'Sắp kết thúc', bg: 'warning' },

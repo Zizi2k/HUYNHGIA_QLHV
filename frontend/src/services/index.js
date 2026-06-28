@@ -126,7 +126,7 @@ export const studentService = {
   deleteCourse: (id) => api.delete(`/students/courses/${id}`),
 
   getOverview: (params) => api.get('/students/overview', { params }),
-  getNextCode: (subject) => api.get('/students/next-code', { params: { subject } }),
+  getNextCode: (subject, prefix) => api.get('/students/next-code', { params: { subject, prefix: prefix || undefined } }),
   createEnrollment: (data) => api.post('/students/enroll', data),
   updateEnrollment: (id, data) => api.put(`/students/enroll/${id}`, data),
   transferClass: (id, data) => api.post(`/students/enroll/${id}/transfer`, data),

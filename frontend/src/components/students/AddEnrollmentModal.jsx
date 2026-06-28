@@ -4,7 +4,7 @@ import {
 } from 'react-bootstrap';
 import { studentService, tuitionService } from '../../services';
 import {
-  SUBJECT_OPTIONS, calcEndDate, formatDateVi, todayDateValue,
+  SUBJECT_OPTIONS, CODE_PREFIX_OPTIONS, calcEndDate, formatDateVi, todayDateValue,
 } from './studentConstants';
 import { applyTuitionFieldChange, isFeeAfterAutoCalculated } from '../tuition/tuitionDiscountCalc';
 
@@ -21,6 +21,7 @@ const emptyTuition = {
 
 const emptyForm = {
   subject: 'english',
+  code_prefix: 'HG',
   class_id: '',
   course_id: '',
   start_date: todayDateValue(),
@@ -74,6 +75,7 @@ export default function AddEnrollmentModal({
     if (editStudent) {
       setForm({
         subject: editStudent.subject,
+        code_prefix: editStudent.student_code?.toUpperCase().startsWith('EG') ? 'EG' : 'HG',
         class_id: editStudent.class_id || '',
         course_id: editStudent.course_id || '',
         start_date: editStudent.start_date?.slice(0, 10) || todayDateValue(),
@@ -98,7 +100,7 @@ export default function AddEnrollmentModal({
     setLoadingMeta(true);
     Promise.all([
       tuitionService.getDiscounts(),
-      studentService.getNextCode('english'),
+      studentService.getNextCode('english', 'HG'),
     ])
       .then(([discountRes, codeRes]) => {
         setDiscounts(discountRes.data);
@@ -106,16 +108,17 @@ export default function AddEnrollmentModal({
           ...prev,
           code: codeRes.data.next_code,
           subject: codeRes.data.subject,
+          code_prefix: 'HG',
         }));
       })
       .catch(() => setError('Không thể tải dữ liệu ban đầu'))
       .finally(() => setLoadingMeta(false));
   }, [show, editStudent]);
 
-  const loadNextCode = async (subject) => {
+  const loadNextCode = async (subject, codePrefix = form.code_prefix) => {
     try {
-      const res = await studentService.getNextCode(subject);
-      setForm((prev) => ({ ...prev, code: res.data.next_code, subject }));
+      const res = await studentService.getNextCode(subject, codePrefix);
+      setForm((prev) => ({ ...prev, code: res.data.next_code, subject, code_prefix: codePrefix }));
     } catch {
       setError('Không thể lấy mã học viên tiếp theo');
     }
@@ -128,7 +131,12 @@ export default function AddEnrollmentModal({
       class_id: '',
       course_id: '',
     }));
-    if (!isEdit) loadNextCode(subject);
+    if (!isEdit) loadNextCode(subject, form.code_prefix);
+  };
+
+  const handlePrefixChange = (codePrefix) => {
+    setForm((prev) => ({ ...prev, code_prefix: codePrefix }));
+    if (!isEdit) loadNextCode(form.subject, codePrefix);
   };
 
   const handleChange = (field, value) => {
@@ -161,6 +169,7 @@ export default function AddEnrollmentModal({
           fullname: form.fullname,
           phone: form.phone,
           zalo: form.zalo,
+          student_code: form.code.trim().toUpperCase(),
           tuition,
         });
       } else {
@@ -271,13 +280,37 @@ export default function AddEnrollmentModal({
               <hr />
               <h6 className="fw-bold mb-3">Thông tin học viên</h6>
               <Row className="g-3">
-                <Col md={6}>
+                <Col md={4}>
                   <Form.Group>
-                    <Form.Label>Mã học viên <span className="text-danger">*</span></Form.Label>
-                    <Form.Control value={form.code} readOnly={!isEdit} className="bg-light" required />
+                    <Form.Label>Tiền tố mã</Form.Label>
+                    <Form.Select
+                      value={form.code_prefix}
+                      onChange={(e) => handlePrefixChange(e.target.value)}
+                      disabled={isEdit}
+                    >
+                      {CODE_PREFIX_OPTIONS.filter((p) => p.value).map((p) => (
+                        <option key={p.value} value={p.value}>{p.label}</option>
+                      ))}
+                    </Form.Select>
                   </Form.Group>
                 </Col>
-                <Col md={6}>
+                <Col md={4}>
+                  <Form.Group>
+                    <Form.Label>Mã học viên <span className="text-danger">*</span></Form.Label>
+                    <Form.Control
+                      value={form.code}
+                      onChange={(e) => handleChange('code', e.target.value.toUpperCase())}
+                      placeholder="HGTA0001"
+                      required
+                    />
+                    {!isEdit && (
+                      <Form.Text className="text-muted">
+                        Có thể sửa tay — ví dụ đổi HG thành EG.
+                      </Form.Text>
+                    )}
+                  </Form.Group>
+                </Col>
+                <Col md={4}>
                   <Form.Group>
                     <Form.Label>Họ tên <span className="text-danger">*</span></Form.Label>
                     <Form.Control

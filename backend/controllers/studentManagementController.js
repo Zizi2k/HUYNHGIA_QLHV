@@ -3,7 +3,7 @@ const {
   buildStudentUsername, extractStudentNumber, ensureUniqueUsername, regenerateClassUsernames,
 } = require('../utils/username');
 const { parseAmount, SUBJECTS, enrichProfile, resolveTuitionAmounts } = require('../utils/tuitionHelpers');
-const { getNextStudentCode, inferSubjectFromClassName } = require('../utils/studentCode');
+const { getNextStudentCode, inferSubjectFromClassName, validateStudentCodeFormat } = require('../utils/studentCode');
 const { addMonthsToDate, getEnrollmentStatus } = require('../utils/dateHelpers');
 const { PROFILE_SELECT, insertTuitionProfile } = require('../utils/tuitionProfileDb');
 const { logAction } = require('../utils/auditLog');
@@ -51,7 +51,7 @@ async function fetchPaymentsForProfiles(profileIds) {
 
 const getOverview = async (req, res) => {
   try {
-    const { subject, class_id, search, enrollment_status } = req.query;
+    const { subject, class_id, search, enrollment_status, code_prefix } = req.query;
     let sql = `${PROFILE_SELECT} WHERE 1=1`;
     const params = [];
 
@@ -67,6 +67,10 @@ const getOverview = async (req, res) => {
       sql += ' AND (tp.student_code LIKE ? OR tp.fullname LIKE ? OR tp.phone LIKE ?)';
       const q = `%${search.trim()}%`;
       params.push(q, q, q);
+    }
+    if (code_prefix?.trim()) {
+      sql += ' AND UPPER(tp.student_code) LIKE ?';
+      params.push(`${code_prefix.trim().toUpperCase()}%`);
     }
     sql += ' ORDER BY tp.subject, tp.start_date DESC, tp.fullname';
 
@@ -105,15 +109,16 @@ const getOverview = async (req, res) => {
 const getNextCode = async (req, res) => {
   const conn = await pool.getConnection();
   try {
-    const { subject } = req.query;
+    const { subject, prefix } = req.query;
     if (!subject || !SUBJECTS[subject]) {
       return res.status(400).json({ message: 'Môn học không hợp lệ' });
     }
-    const nextCode = await getNextStudentCode(conn, subject);
+    const nextCode = await getNextStudentCode(conn, subject, prefix);
     res.json({
       next_code: nextCode,
       subject,
       subject_label: SUBJECTS[subject],
+      prefix: prefix || 'HG',
     });
   } catch (err) {
     res.status(500).json({ message: 'Lỗi hệ thống', error: err.message });
@@ -177,9 +182,12 @@ const createEnrollment = async (req, res) => {
       return res.status(400).json({ message: 'Ngày bắt đầu không hợp lệ' });
     }
 
-    let studentCode = code?.trim();
+    let studentCode = code?.trim()?.toUpperCase();
     if (!studentCode) {
       studentCode = await getNextStudentCode(conn, subject);
+    }
+    if (!validateStudentCodeFormat(studentCode)) {
+      return res.status(400).json({ message: 'Mã học viên không hợp lệ (ví dụ: HGTA0001, EGTA0001)' });
     }
 
     await conn.beginTransaction();
@@ -276,7 +284,7 @@ const updateEnrollment = async (req, res) => {
   const conn = await pool.getConnection();
   try {
     const {
-      course_id, start_date, class_id, fullname, phone, zalo, tuition,
+      course_id, start_date, class_id, fullname, phone, zalo, tuition, code, student_code,
     } = req.body;
 
     const [profiles] = await conn.query('SELECT * FROM tuition_profiles WHERE id = ?', [req.params.id]);
@@ -316,6 +324,42 @@ const updateEnrollment = async (req, res) => {
     }
 
     await conn.beginTransaction();
+
+    const newCodeRaw = (student_code || code)?.trim()?.toUpperCase();
+    if (newCodeRaw && newCodeRaw !== profile.student_code) {
+      if (!validateStudentCodeFormat(newCodeRaw)) {
+        await conn.rollback();
+        return res.status(400).json({ message: 'Mã học viên không hợp lệ (ví dụ: HGTA0001, EGTA0001)' });
+      }
+
+      const [dupUser] = profile.user_id
+        ? await conn.query(
+          'SELECT id FROM users WHERE code = ? AND id != ?',
+          [newCodeRaw, profile.user_id]
+        )
+        : await conn.query('SELECT id FROM users WHERE code = ?', [newCodeRaw]);
+      if (dupUser.length > 0) {
+        await conn.rollback();
+        return res.status(409).json({ message: 'Mã học viên đã tồn tại' });
+      }
+
+      const [dupProfile] = await conn.query(
+        'SELECT id FROM tuition_profiles WHERE student_code = ? AND subject = ? AND id != ?',
+        [newCodeRaw, profile.subject, profile.id]
+      );
+      if (dupProfile.length > 0) {
+        await conn.rollback();
+        return res.status(409).json({ message: 'Mã học viên đã có hồ sơ cho môn này' });
+      }
+
+      await conn.query('UPDATE tuition_profiles SET student_code = ? WHERE id = ?', [
+        newCodeRaw, profile.id,
+      ]);
+
+      if (profile.user_id) {
+        await conn.query('UPDATE users SET code = ? WHERE id = ?', [newCodeRaw, profile.user_id]);
+      }
+    }
 
     if (fullname?.trim() && profile.user_id) {
       await conn.query(
@@ -358,6 +402,8 @@ const updateEnrollment = async (req, res) => {
         ]);
       }
       await regenerateClassUsernames(conn, class_id);
+    } else if (newCodeRaw && newCodeRaw !== profile.student_code && profile.class_id) {
+      await regenerateClassUsernames(conn, profile.class_id);
     }
 
     const [classes] = class_id
@@ -412,7 +458,11 @@ const updateEnrollment = async (req, res) => {
     );
 
     await conn.commit();
-    res.json({ message: 'Cập nhật học viên thành công', end_date: endDate });
+    res.json({
+      message: 'Cập nhật học viên thành công',
+      end_date: endDate,
+      student_code: newCodeRaw || profile.student_code,
+    });
   } catch (err) {
     await conn.rollback();
     res.status(500).json({ message: 'Lỗi hệ thống', error: err.message });

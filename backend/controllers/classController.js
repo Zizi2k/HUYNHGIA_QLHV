@@ -4,7 +4,7 @@ const {
 } = require('../utils/username');
 const { assertClassAccess, isClassTeacher } = require('../middleware/classAccess');
 const { parseAmount, SUBJECTS } = require('../utils/tuitionHelpers');
-const { getNextStudentCode, inferSubjectFromClassName } = require('../utils/studentCode');
+const { getNextStudentCode, inferSubjectFromClassName, validateStudentCodeFormat } = require('../utils/studentCode');
 const { addMonthsToDate } = require('../utils/dateHelpers');
 const { insertTuitionProfile } = require('../utils/tuitionProfileDb');
 const { handleDeletion } = require('../utils/deletionPolicy');
@@ -201,7 +201,8 @@ const getNextStudentCodeForClass = async (req, res) => {
       });
     }
 
-    const nextCode = await getNextStudentCode(conn, subject);
+    const { prefix } = req.query;
+    const nextCode = await getNextStudentCode(conn, subject, prefix);
     res.json({
       next_code: nextCode,
       subject,
@@ -253,6 +254,11 @@ const createStudentMember = async (req, res) => {
 
     if (!code?.trim()) {
       code = await getNextStudentCode(conn, subject);
+    } else {
+      code = code.trim().toUpperCase();
+      if (!validateStudentCodeFormat(code)) {
+        return res.status(400).json({ message: 'Mã học viên không hợp lệ (ví dụ: HGTA0001, EGTA0001)' });
+      }
     }
 
     await conn.beginTransaction();

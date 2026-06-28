@@ -11,7 +11,7 @@ import AddEnrollmentModal from '../components/students/AddEnrollmentModal';
 import TransferClassModal from '../components/students/TransferClassModal';
 import CourseManager from '../components/students/CourseManager';
 import {
-  SUBJECT_OPTIONS, ENROLLMENT_STATUS_LABELS, subjectLabel,
+  SUBJECT_OPTIONS, ENROLLMENT_STATUS_LABELS, CODE_PREFIX_OPTIONS, subjectLabel,
 } from '../components/students/studentConstants';
 
 const emptySummary = { total: 0, active: 0, expiring: 0, expired: 0 };
@@ -27,7 +27,7 @@ export default function StudentsPage() {
   const [subjectFilter, setSubjectFilter] = useState('');
   const [classFilter, setClassFilter] = useState('');
   const [enrollmentFilter, setEnrollmentFilter] = useState('');
-  const [search, setSearch] = useState('');
+  const [codePrefixFilter, setCodePrefixFilter] = useState('');
 
   const [showAdd, setShowAdd] = useState(false);
   const [showCourses, setShowCourses] = useState(false);
@@ -46,6 +46,7 @@ export default function StudentsPage() {
     if (classFilter) params.class_id = classFilter;
     if (enrollmentFilter) params.enrollment_status = enrollmentFilter;
     if (search.trim()) params.search = search.trim();
+    if (codePrefixFilter) params.code_prefix = codePrefixFilter;
 
     studentService.getOverview(params)
       .then((res) => {
@@ -61,7 +62,7 @@ export default function StudentsPage() {
 
   useEffect(() => {
     loadOverview();
-  }, [subjectFilter, classFilter, enrollmentFilter]);
+  }, [subjectFilter, classFilter, enrollmentFilter, codePrefixFilter]);
 
   useEffect(() => {
     const timer = setTimeout(loadOverview, 300);
@@ -85,6 +86,11 @@ export default function StudentsPage() {
   const subjectCounts = SUBJECT_OPTIONS.map((s) => ({
     ...s,
     count: students.filter((st) => st.subject === s.value).length,
+  }));
+
+  const prefixCounts = CODE_PREFIX_OPTIONS.filter((p) => p.value).map((p) => ({
+    ...p,
+    count: students.filter((st) => st.student_code?.toUpperCase().startsWith(p.value)).length,
   }));
 
   if (user?.role !== 'admin') {
@@ -160,7 +166,29 @@ export default function StudentsPage() {
         ))}
       </div>
 
+      <div className="d-flex flex-wrap gap-2 mb-3">
+        {prefixCounts.map((p) => (
+          <Badge
+            key={p.value}
+            bg={codePrefixFilter === p.value ? 'dark' : 'light'}
+            text={codePrefixFilter === p.value ? 'white' : 'dark'}
+            className="px-3 py-2"
+            style={{ cursor: 'pointer' }}
+            onClick={() => setCodePrefixFilter(codePrefixFilter === p.value ? '' : p.value)}
+          >
+            {p.label}: {p.count}
+          </Badge>
+        ))}
+      </div>
+
       <Row className="g-2 mb-3">
+        <Col md={2}>
+          <Form.Select value={codePrefixFilter} onChange={(e) => setCodePrefixFilter(e.target.value)}>
+            {CODE_PREFIX_OPTIONS.map((p) => (
+              <option key={p.value || 'all'} value={p.value}>{p.label}</option>
+            ))}
+          </Form.Select>
+        </Col>
         <Col md={2}>
           <Form.Select value={subjectFilter} onChange={(e) => setSubjectFilter(e.target.value)}>
             <option value="">Tất cả môn</option>
@@ -185,7 +213,7 @@ export default function StudentsPage() {
             ))}
           </Form.Select>
         </Col>
-        <Col md={4}>
+        <Col md={3}>
           <Form.Control
             type="search"
             placeholder="Tìm mã HV, tên, SĐT..."
@@ -193,7 +221,7 @@ export default function StudentsPage() {
             onChange={(e) => setSearch(e.target.value)}
           />
         </Col>
-        <Col md={2} className="d-flex align-items-center">
+        <Col md={1} className="d-flex align-items-center">
           <small className="text-muted">
             {subjectFilter ? subjectLabel(subjectFilter) : '4 môn'} · {students.length} HV
           </small>
