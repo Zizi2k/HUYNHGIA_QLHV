@@ -6,9 +6,8 @@ const router = express.Router();
 
 router.use(authenticate);
 router.use(authorize('admin'));
-router.use(requireSuperAdmin);
 
-router.get('/admins', listAdmins);
+router.get('/admins', requireSuperAdmin, listAdmins);
 router.get('/', getUsers);
 router.post('/', createUser);
 router.put('/:id', updateUser);

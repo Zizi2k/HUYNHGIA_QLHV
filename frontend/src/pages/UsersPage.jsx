@@ -4,17 +4,23 @@ import { Navigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { userService, classService } from '../services';
 import PageHeader from '../components/layout/PageHeader';
-import { isSuperAdmin } from '../utils/adminScope';
+import { isSuperAdmin, isScopedAdmin, lockedCodePrefix, scopeLabel } from '../utils/adminScope';
 
-const roleOptions = [
+const allRoleOptions = [
   { value: 'admin', label: 'Quản trị viên' },
+  { value: 'teacher', label: 'Giáo viên' },
+  { value: 'student', label: 'Học sinh' },
+];
+
+const scopedRoleOptions = [
   { value: 'teacher', label: 'Giáo viên' },
   { value: 'student', label: 'Học sinh' },
 ];
 
 const emptyForm = { fullname: '', username: '', code: '', role: 'student', status: true };
 
-function UserTableRow({ user, onEdit, onDelete, extraActions }) {
+function UserTableRow({ user, onEdit, onDelete, extraActions, canManage = true }) {
+  const roleOptions = allRoleOptions;
   return (
     <tr>
       <td>{user.fullname}</td>
@@ -32,17 +38,21 @@ function UserTableRow({ user, onEdit, onDelete, extraActions }) {
       </td>
       <td>
         {extraActions}
-        <Button
-          variant="outline-primary"
-          size="sm"
-          className="me-1"
-          onClick={() => onEdit(user)}
-        >
-          <i className="bi bi-pencil me-1" />Sửa
-        </Button>
-        <Button variant="outline-danger" size="sm" onClick={() => onDelete(user.id)}>
-          Xóa
-        </Button>
+        {canManage && (
+          <>
+            <Button
+              variant="outline-primary"
+              size="sm"
+              className="me-1"
+              onClick={() => onEdit(user)}
+            >
+              <i className="bi bi-pencil me-1" />Sửa
+            </Button>
+            <Button variant="outline-danger" size="sm" onClick={() => onDelete(user.id)}>
+              Xóa
+            </Button>
+          </>
+        )}
       </td>
     </tr>
   );
@@ -168,7 +178,17 @@ export default function UsersPage() {
     }
   };
 
-  if (!isSuperAdmin(user)) {
+  const canManageUser = (targetUser) => {
+    if (isSuperAdmin(user)) return true;
+    if (!isScopedAdmin(user)) return false;
+    if (targetUser.role === 'admin') return false;
+    return targetUser.role === 'teacher' || targetUser.role === 'student';
+  };
+
+  const roleOptions = isSuperAdmin(user) ? allRoleOptions : scopedRoleOptions;
+  const codePrefix = lockedCodePrefix(user);
+
+  if (user?.role !== 'admin') {
     return <Navigate to="/" replace />;
   }
 
@@ -183,7 +203,11 @@ export default function UsersPage() {
     <div className="page-container">
       <PageHeader
         title="Quản lý người dùng"
-        subtitle="Tạo tài khoản và phân công giáo viên vào lớp học."
+        subtitle={
+          isScopedAdmin(user)
+            ? `Tạo tài khoản giáo viên và học sinh nhánh ${scopeLabel(codePrefix)}. Không tạo được tài khoản admin.`
+            : 'Tạo tài khoản và phân công giáo viên vào lớp học.'
+        }
         actions={
           <Button variant="success" size="sm" className="page-header-btn" onClick={openCreateModal}>
             <i className="bi bi-person-plus me-1" />Tạo tài khoản
@@ -268,6 +292,7 @@ export default function UsersPage() {
                           user={u}
                           onEdit={openEditModal}
                           onDelete={handleDelete}
+                          canManage={canManageUser(u)}
                         />
                       ))}
                     </tbody>
@@ -301,6 +326,7 @@ export default function UsersPage() {
                           user={u}
                           onEdit={openEditModal}
                           onDelete={handleDelete}
+                          canManage={canManageUser(u)}
                           extraActions={(
                             <Button
                               variant="outline-success"
@@ -361,6 +387,11 @@ export default function UsersPage() {
                 onChange={(e) => setForm({ ...form, code: e.target.value })}
                 required
               />
+              {codePrefix && form.role === 'student' && (
+                <Form.Text className="text-muted">
+                  Mã học sinh nên bắt đầu bằng <strong>{codePrefix}</strong>
+                </Form.Text>
+              )}
             </Form.Group>
             <Form.Group className="mb-3">
               <Form.Label>Vai trò</Form.Label>

@@ -55,7 +55,7 @@ export default function Sidebar({ collapsed, mobileOpen, onNavigate }) {
           <div className="app-sidebar-section">
             {!collapsed && <div className="app-sidebar-section-label">Quản trị</div>}
             {isSuper && <NavItem to="/admin-staff" icon="shield-lock" label="Phân quyền admin" />}
-            {isSuper && <NavItem to="/users" icon="people" label="Người dùng" />}
+            {isAdmin && <NavItem to="/users" icon="people" label="Người dùng" />}
             <NavItem to="/students" icon="person-lines-fill" label="Quản lý học viên" />
             {isSuper && <NavItem to="/audit" icon="journal-text" label="Nhật ký & duyệt" />}
             <NavItem to="/tuition" icon="cash-coin" label="Học phí" />
