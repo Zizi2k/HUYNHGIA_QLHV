@@ -25,7 +25,10 @@ const pool = require('./config/db');
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-app.use(cors());
+app.use(cors({
+  origin: true,
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Center-Id'],
+}));
 app.use((req, res, next) => {
   const contentType = req.headers['content-type'] || '';
   if (contentType.includes('multipart/form-data')) {
@@ -58,9 +61,10 @@ app.get('/api/health', (_req, res) => {
 app.get('/api/health/db', async (_req, res) => {
   try {
     await pool.query('SELECT 1');
-    res.json({ status: 'OK', db: 'connected' });
+    const [[centers]] = await pool.query('SELECT COUNT(*) AS c FROM centers').catch(() => [[{ c: null }]]);
+    res.json({ status: 'OK', db: 'connected', centers: centers?.c ?? null });
   } catch (err) {
-    res.status(500).json({ status: 'ERROR', db: 'failed', error: err.message });
+    res.status(503).json({ status: 'ERROR', db: 'failed', error: err.message });
   }
 });
 

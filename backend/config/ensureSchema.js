@@ -77,6 +77,7 @@ const TUITION_STATEMENTS = [
 ];
 
 async function ensureSchema() {
+  try {
   await pool.query(ONLINE_SESSIONS_SQL);
   for (const stmt of TUITION_STATEMENTS) {
     await pool.query(stmt);
@@ -234,7 +235,7 @@ async function ensureSchema() {
       'ALTER TABLE tuition_profiles ADD UNIQUE KEY unique_center_student_subject (center_id, student_code, subject)'
     );
   } catch (err) {
-    if (err.code !== 'ER_DUP_KEYNAME') throw err;
+    if (err.code !== 'ER_DUP_KEYNAME' && err.code !== 'ER_DUP_ENTRY') throw err;
   }
 
   try {
@@ -247,7 +248,7 @@ async function ensureSchema() {
       'ALTER TABLE tuition_periods ADD UNIQUE KEY unique_center_period_subject (center_id, period_month, subject)'
     );
   } catch (err) {
-    if (err.code !== 'ER_DUP_KEYNAME') throw err;
+    if (err.code !== 'ER_DUP_KEYNAME' && err.code !== 'ER_DUP_ENTRY') throw err;
   }
 
   if (egcId) {
@@ -270,6 +271,9 @@ async function ensureSchema() {
 
   const { invalidateCenterCache } = require('../utils/centerCache');
   invalidateCenterCache();
+  } catch (err) {
+    console.warn('ensureSchema:', err.message);
+  }
 }
 
 module.exports = { ensureSchema };

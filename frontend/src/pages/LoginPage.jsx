@@ -19,7 +19,14 @@ export default function LoginPage() {
       await login(username, code);
       navigate('/');
     } catch (err) {
-      setError(err.response?.data?.message || 'Đăng nhập thất bại');
+      const serverMsg = err.response?.data?.message;
+      if (!err.response) {
+        setError('Không kết nối được máy chủ. Vui lòng thử lại sau vài giây.');
+      } else if (serverMsg) {
+        setError(serverMsg);
+      } else {
+        setError('Đăng nhập thất bại');
+      }
     } finally {
       setLoading(false);
     }

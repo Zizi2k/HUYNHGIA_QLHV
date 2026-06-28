@@ -37,6 +37,12 @@ const login = async (req, res) => {
       },
     });
   } catch (err) {
+    const code = err.code || '';
+    if (code === 'ETIMEDOUT' || code === 'ECONNREFUSED' || code === 'ENOTFOUND') {
+      return res.status(503).json({
+        message: 'Không kết nối được cơ sở dữ liệu. Vui lòng thử lại sau hoặc liên hệ quản trị viên.',
+      });
+    }
     res.status(500).json({ message: 'Lỗi hệ thống', error: err.message });
   }
 };
