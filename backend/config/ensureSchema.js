@@ -189,6 +189,28 @@ async function ensureSchema() {
     `UPDATE users SET admin_scope = 'all' WHERE role = 'admin' AND (admin_scope IS NULL OR admin_scope = '')`
   ).catch(() => {});
 
+  try {
+    await pool.query(
+      `CREATE TABLE IF NOT EXISTS app_meta (
+        meta_key VARCHAR(64) PRIMARY KEY,
+        meta_value VARCHAR(255),
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+      )`
+    );
+    const [[mergeFlag]] = await pool.query(
+      `SELECT meta_value FROM app_meta WHERE meta_key = 'student_phone_merge_v1'`
+    );
+    if (!mergeFlag) {
+      const { mergeDuplicateStudentsByPhone } = require('../utils/studentIdentity');
+      await mergeDuplicateStudentsByPhone(pool);
+      await pool.query(
+        `INSERT INTO app_meta (meta_key, meta_value) VALUES ('student_phone_merge_v1', 'done')`
+      );
+    }
+  } catch (mergeErr) {
+    console.warn('student phone merge:', mergeErr.message);
+  }
+
   } catch (err) {
     console.warn('ensureSchema:', err.message);
   }

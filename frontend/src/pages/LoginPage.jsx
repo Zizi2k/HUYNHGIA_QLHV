@@ -48,7 +48,10 @@ export default function LoginPage() {
         <div className="login-form-panel">
           <div className="login-form-card">
             <h2 className="login-form-title">Đăng nhập</h2>
-            <p className="login-form-subtitle">Nhập tên đăng nhập và mã người dùng để tiếp tục.</p>
+            <p className="login-form-subtitle">
+              Nhập tên đăng nhập và mã người dùng để tiếp tục.
+              Học sinh học nhiều môn có thể dùng <strong>bất kỳ mã học viên</strong> nào (VD: HGTA0001, HGTIN0001).
+            </p>
 
             {error && <Alert variant="danger" className="login-alert">{error}</Alert>}
 

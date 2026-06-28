@@ -209,6 +209,12 @@ export default function AddEnrollmentModal({
       <Form onSubmit={handleSubmit}>
         <Modal.Body>
           {error && <Alert variant="danger" className="py-2">{error}</Alert>}
+          {!isEdit && (
+            <Alert variant="light" className="py-2 small mb-3">
+              Học viên học thêm môn mới: nhập <strong>SĐT trùng</strong> với hồ sơ cũ để gộp vào
+              cùng một tài khoản đăng nhập. Mỗi môn vẫn có mã riêng (VD: HGTA0001, HGTIN0001).
+            </Alert>
+          )}
           {loadingMeta ? (
             <div className="text-center py-4"><Spinner animation="border" /></div>
           ) : (
@@ -333,6 +339,7 @@ export default function AddEnrollmentModal({
                     <Form.Control
                       value={form.phone}
                       onChange={(e) => handleChange('phone', e.target.value)}
+                      placeholder="Dùng để gộp nhiều môn vào 1 tài khoản"
                     />
                   </Form.Group>
                 </Col>

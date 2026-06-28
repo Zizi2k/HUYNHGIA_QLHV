@@ -14,6 +14,7 @@ const {
 } = require('../utils/adminScope');
 const { addMonthsToDate } = require('../utils/dateHelpers');
 const { insertTuitionProfile } = require('../utils/tuitionProfileDb');
+const { resolveStudentUserForEnrollment } = require('../utils/studentIdentity');
 const { handleDeletion } = require('../utils/deletionPolicy');
 const { logAction } = require('../utils/auditLog');
 const { mapPublicMembers } = require('../utils/userProjection');
@@ -308,40 +309,27 @@ const createStudentMember = async (req, res) => {
 
     await conn.beginTransaction();
 
-    const [existing] = await conn.query('SELECT id, role FROM users WHERE code = ?', [code.trim()]);
     let userId;
+    try {
+      const resolved = await resolveStudentUserForEnrollment(conn, {
+        studentCode: code.trim(),
+        fullname: fullname.trim(),
+        phone,
+        zalo,
+      });
+      userId = resolved.userId;
+    } catch (resolveErr) {
+      await conn.rollback();
+      return res.status(resolveErr.status || 400).json({ message: resolveErr.message });
+    }
 
-    if (existing.length > 0) {
-      if (existing[0].role !== 'student') {
-        await conn.rollback();
-        return res.status(400).json({ message: 'Mã học viên đã được dùng bởi tài khoản khác học viên' });
-      }
-      userId = existing[0].id;
-      const [inClass] = await conn.query(
-        'SELECT id FROM class_members WHERE class_id = ? AND user_id = ?',
-        [req.params.id, userId]
-      );
-      if (inClass.length > 0) {
-        await conn.rollback();
-        return res.status(409).json({ message: 'Học viên đã có trong lớp' });
-      }
-      await conn.query(
-        'UPDATE users SET fullname=?, phone=?, zalo=? WHERE id=?',
-        [fullname.trim(), phone?.trim() || null, zalo?.trim() || null, userId]
-      );
-    } else {
-      const studentNumber = extractStudentNumber(code.trim(), null, 1);
-      const baseUsername = buildStudentUsername(fullname.trim(), studentNumber);
-      if (!baseUsername) {
-        await conn.rollback();
-        return res.status(400).json({ message: 'Họ tên hoặc mã học viên không hợp lệ' });
-      }
-      const finalUsername = await ensureUniqueUsername(conn, baseUsername);
-      const [inserted] = await conn.query(
-        'INSERT INTO users (fullname, username, code, role, phone, zalo) VALUES (?, ?, ?, ?, ?, ?)',
-        [fullname.trim(), finalUsername, code.trim(), 'student', phone?.trim() || null, zalo?.trim() || null]
-      );
-      userId = inserted.insertId;
+    const [inClass] = await conn.query(
+      'SELECT id FROM class_members WHERE class_id = ? AND user_id = ?',
+      [req.params.id, userId]
+    );
+    if (inClass.length > 0) {
+      await conn.rollback();
+      return res.status(409).json({ message: 'Học viên đã có trong lớp' });
     }
 
     await conn.query('INSERT INTO class_members (class_id, user_id) VALUES (?, ?)', [

@@ -1,5 +1,7 @@
 const jwt = require('jsonwebtoken');
 const pool = require('../config/db');
+const { findUserForStudentLogin, findStudentCodesForUser } = require('../utils/studentIdentity');
+const { SUBJECTS } = require('../utils/tuitionHelpers');
 
 const login = async (req, res) => {
   try {
@@ -8,17 +10,18 @@ const login = async (req, res) => {
       return res.status(400).json({ message: 'Vui lòng nhập tên đăng nhập và mã' });
     }
 
-    const [rows] = await pool.query(
-      'SELECT * FROM users WHERE username = ? AND code = ? AND status = TRUE',
-      [username, code]
-    );
-
-    if (rows.length === 0) {
-      return res.status(401).json({ message: 'Tên đăng nhập hoặc mã không đúng' });
+    let user = await findUserForStudentLogin(pool, username, code);
+    if (!user) {
+      const [rows] = await pool.query(
+        'SELECT * FROM users WHERE username = ? AND code = ? AND status = TRUE',
+        [username, code]
+      );
+      user = rows[0] || null;
     }
 
-    const user = rows[0];
-    const token = jwt.sign(
+    if (!user) {
+      return res.status(401).json({ message: 'Tên đăng nhập hoặc mã không đúng' });
+    }    const token = jwt.sign(
       {
         id: user.id,
         username: user.username,
@@ -92,12 +95,23 @@ const getMe = async (req, res) => {
       [req.user.id]
     );
     if (rows.length === 0) return res.status(404).json({ message: 'Không tìm thấy người dùng' });
-    res.json(rows[0]);
+
+    const user = rows[0];
+    if (user.role === 'student') {
+      const codes = await findStudentCodesForUser(pool, user.id);
+      user.student_codes = codes.map((row) => ({
+        code: row.student_code,
+        subject: row.subject,
+        subject_label: row.subject ? SUBJECTS[row.subject] : null,
+        class_label: row.class_label,
+      }));
+    }
+
+    res.json(user);
   } catch (err) {
     res.status(500).json({ message: 'Lỗi hệ thống', error: err.message });
   }
 };
-
 const updateProfile = async (req, res) => {
   try {
     const { fullname, username, code } = req.body;

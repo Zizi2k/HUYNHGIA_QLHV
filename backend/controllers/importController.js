@@ -6,6 +6,7 @@ const { normalizeHeader, parseAmount, resolveTuitionAmounts } = require('../util
 const { inferSubjectFromClassName } = require('../utils/studentCode');
 const { addMonthsToDate } = require('../utils/dateHelpers');
 const { insertTuitionProfile } = require('../utils/tuitionProfileDb');
+const { resolveStudentUserForEnrollment } = require('../utils/studentIdentity');
 
 const HEADER_MAP = {
   'ma hoc vien': 'code',
@@ -382,30 +383,21 @@ const importStudents = async (req, res) => {
           continue;
         }
 
-        const [existing] = await conn.query('SELECT id FROM users WHERE code = ?', [row.code]);
         let userId;
-
-        if (existing.length > 0) {
-          userId = existing[0].id;
-          await conn.query(
-            'UPDATE users SET fullname=?, phone=?, zalo=? WHERE id=?',
-            [row.fullname, row.phone || null, row.zalo || null, userId]
-          );
-          results.updated++;
-        } else {
-          const baseUsername = toUsernameFromName(row.fullname, row.code, null, pendingUserIds.length + 1);
-          if (!baseUsername) {
-            results.errors.push({ row: row.rowNumber, message: 'Họ tên hoặc mã học viên không hợp lệ' });
-            results.skipped++;
-            continue;
-          }
-          const finalUsername = await ensureUniqueUsername(conn, baseUsername);
-          const [inserted] = await conn.query(
-            'INSERT INTO users (fullname, username, code, role, phone, zalo) VALUES (?, ?, ?, ?, ?, ?)',
-            [row.fullname, finalUsername, row.code, 'student', row.phone || null, row.zalo || null]
-          );
-          userId = inserted.insertId;
-          results.imported++;
+        try {
+          const resolved = await resolveStudentUserForEnrollment(conn, {
+            studentCode: row.code,
+            fullname: row.fullname,
+            phone: row.phone,
+            zalo: row.zalo,
+          });
+          userId = resolved.userId;
+          if (resolved.isNewUser) results.imported++;
+          else results.updated++;
+        } catch (resolveErr) {
+          results.errors.push({ row: row.rowNumber, message: resolveErr.message });
+          results.skipped++;
+          continue;
         }
 
         const [member] = await conn.query(

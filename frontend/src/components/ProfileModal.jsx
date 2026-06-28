@@ -113,6 +113,11 @@ export default function ProfileModal({ show, onHide }) {
               onChange={(e) => setForm({ ...form, code: e.target.value })}
               required
             />
+            {user?.role === 'student' && user?.student_codes?.length > 1 && (
+              <Form.Text className="text-muted d-block mt-1">
+                Các mã theo môn: {user.student_codes.map((item) => item.code).join(', ')}
+              </Form.Text>
+            )}
           </Form.Group>
           <Form.Group>
             <Form.Label>Vai trò</Form.Label>

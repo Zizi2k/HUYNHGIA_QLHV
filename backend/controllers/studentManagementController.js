@@ -6,6 +6,7 @@ const { parseAmount, SUBJECTS, enrichProfile, resolveTuitionAmounts } = require(
 const { getNextStudentCode, inferSubjectFromClassName, validateStudentCodeFormat } = require('../utils/studentCode');
 const { addMonthsToDate, getEnrollmentStatus } = require('../utils/dateHelpers');
 const { PROFILE_SELECT, insertTuitionProfile } = require('../utils/tuitionProfileDb');
+const { resolveStudentUserForEnrollment } = require('../utils/studentIdentity');
 const { logAction } = require('../utils/auditLog');
 const {
   resolveCodePrefixFilter,
@@ -146,7 +147,7 @@ const createEnrollment = async (req, res) => {
   try {
     const {
       subject, class_id, course_id, start_date,
-      fullname, phone, zalo, code, tuition,
+      fullname, phone, zalo, code, tuition, link_user_id,
     } = req.body;
 
     if (!subject || !SUBJECTS[subject]) {
@@ -212,52 +213,35 @@ const createEnrollment = async (req, res) => {
 
     await conn.beginTransaction();
 
-    const [existing] = await conn.query('SELECT id, role FROM users WHERE code = ?', [studentCode]);
     let userId;
+    try {
+      const resolved = await resolveStudentUserForEnrollment(conn, {
+        studentCode,
+        fullname: fullname.trim(),
+        phone,
+        zalo,
+        linkUserId: link_user_id,
+      });
+      userId = resolved.userId;
+    } catch (resolveErr) {
+      await conn.rollback();
+      return res.status(resolveErr.status || 400).json({ message: resolveErr.message });
+    }
 
-    if (existing.length > 0) {
-      if (existing[0].role !== 'student') {
-        await conn.rollback();
-        return res.status(400).json({ message: 'Mã học viên đã được dùng bởi tài khoản khác học viên' });
-      }
-      userId = existing[0].id;
+    const [dupProfile] = await conn.query(
+      'SELECT id FROM tuition_profiles WHERE student_code = ? AND subject = ?',
+      [studentCode, subject]
+    );
+    if (dupProfile.length > 0) {
+      await conn.rollback();
+      return res.status(409).json({ message: 'Học viên đã có hồ sơ cho môn này' });
+    }
 
-      const [dupProfile] = await conn.query(
-        'SELECT id FROM tuition_profiles WHERE student_code = ? AND subject = ?',
-        [studentCode, subject]
-      );
-      if (dupProfile.length > 0) {
-        await conn.rollback();
-        return res.status(409).json({ message: 'Học viên đã có hồ sơ cho môn này' });
-      }
-
-      await conn.query(
-        'UPDATE users SET fullname=?, phone=?, zalo=? WHERE id=?',
-        [fullname.trim(), phone?.trim() || null, zalo?.trim() || null, userId]
-      );
-
-      const [inClass] = await conn.query(
-        'SELECT id FROM class_members WHERE class_id = ? AND user_id = ?',
-        [class_id, userId]
-      );
-      if (inClass.length === 0) {
-        await conn.query('INSERT INTO class_members (class_id, user_id) VALUES (?, ?)', [
-          class_id, userId,
-        ]);
-      }
-    } else {
-      const studentNumber = extractStudentNumber(studentCode, null, 1);
-      const baseUsername = buildStudentUsername(fullname.trim(), studentNumber);
-      if (!baseUsername) {
-        await conn.rollback();
-        return res.status(400).json({ message: 'Họ tên hoặc mã học viên không hợp lệ' });
-      }
-      const finalUsername = await ensureUniqueUsername(conn, baseUsername);
-      const [inserted] = await conn.query(
-        'INSERT INTO users (fullname, username, code, role, phone, zalo) VALUES (?, ?, ?, ?, ?, ?)',
-        [fullname.trim(), finalUsername, studentCode, 'student', phone?.trim() || null, zalo?.trim() || null]
-      );
-      userId = inserted.insertId;
+    const [inClass] = await conn.query(
+      'SELECT id FROM class_members WHERE class_id = ? AND user_id = ?',
+      [class_id, userId]
+    );
+    if (inClass.length === 0) {
       await conn.query('INSERT INTO class_members (class_id, user_id) VALUES (?, ?)', [
         class_id, userId,
       ]);
