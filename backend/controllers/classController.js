@@ -6,6 +6,12 @@ const { assertClassAccess, isClassTeacher } = require('../middleware/classAccess
 
 const getClasses = async (req, res) => {
   try {
+    const search = (req.query.search || '').trim();
+    const searchClause = search
+      ? ` AND (c.name LIKE ? OR c.code LIKE ? OR c.description LIKE ?)`
+      : '';
+    const searchParams = search ? [`%${search}%`, `%${search}%`, `%${search}%`] : [];
+
     let query;
     let params = [];
 
@@ -14,15 +20,18 @@ const getClasses = async (req, res) => {
         SELECT c.*, COUNT(cm.id) AS member_count
         FROM classes c
         LEFT JOIN class_members cm ON c.id = cm.class_id
+        WHERE 1=1${searchClause}
         GROUP BY c.id ORDER BY c.created_at DESC`;
+      params = [...searchParams];
     } else {
       query = `
         SELECT c.*, COUNT(cm2.id) AS member_count
         FROM classes c
         INNER JOIN class_members cm ON c.id = cm.class_id AND cm.user_id = ?
         LEFT JOIN class_members cm2 ON c.id = cm2.class_id
+        WHERE 1=1${searchClause}
         GROUP BY c.id ORDER BY c.created_at DESC`;
-      params = [req.user.id];
+      params = [req.user.id, ...searchParams];
     }
 
     const [rows] = await pool.query(query, params);

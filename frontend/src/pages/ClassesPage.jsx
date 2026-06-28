@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { Container, Row, Col, Card, Button, Modal, Form, Spinner } from 'react-bootstrap';
+import { useEffect, useState, useCallback } from 'react';
+import { Container, Row, Col, Card, Button, Modal, Form, Spinner, Alert, InputGroup } from 'react-bootstrap';
 import { Link } from 'react-router-dom';
 import { classService } from '../services';
 import { useAuth } from '../context/AuthContext';
@@ -10,6 +10,8 @@ export default function ClassesPage() {
   const { user } = useAuth();
   const [classes, setClasses] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [form, setForm] = useState(emptyForm);
@@ -19,13 +21,19 @@ export default function ClassesPage() {
   const isAdmin = user?.role === 'admin';
   const canManage = isAdmin;
 
-  const loadClasses = () => {
-    classService.getAll()
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(search.trim()), 300);
+    return () => clearTimeout(timer);
+  }, [search]);
+
+  const loadClasses = useCallback(() => {
+    setLoading(true);
+    classService.getAll(debouncedSearch ? { search: debouncedSearch } : {})
       .then((res) => setClasses(res.data))
       .finally(() => setLoading(false));
-  };
+  }, [debouncedSearch]);
 
-  useEffect(() => { loadClasses(); }, []);
+  useEffect(() => { loadClasses(); }, [loadClasses]);
 
   const openCreateModal = () => {
     setEditingId(null);
@@ -79,14 +87,10 @@ export default function ClassesPage() {
     }
   };
 
-  if (loading) {
-    return <Container className="text-center py-5"><Spinner animation="border" /></Container>;
-  }
-
   return (
     <Container>
-      <div className="d-flex justify-content-between align-items-center mb-4">
-        <h2>Lớp học</h2>
+      <div className="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+        <h2 className="mb-0">Lớp học</h2>
         {canManage && (
           <Button variant="primary" onClick={openCreateModal}>
             <i className="bi bi-plus-lg me-1" />Tạo lớp học
@@ -94,56 +98,84 @@ export default function ClassesPage() {
         )}
       </div>
 
-      {classes.length === 0 && (
-        <Alert variant="light">
-          {user?.role === 'teacher'
-            ? 'Bạn chưa được admin phân công lớp học nào.'
-            : 'Chưa có lớp học nào.'}
-        </Alert>
-      )}
-
-      <Row className="g-3">
-        {classes.map((cls) => (
-          <Col md={4} key={cls.id}>
-            <Card className="h-100 border-0 shadow-sm">
-              <Card.Body>
-                <div className="d-flex justify-content-between align-items-start gap-2">
-                  <h5 className="mb-2">{cls.name}</h5>
-                  {canManage && (
-                    <div className="d-flex gap-1 flex-shrink-0">
-                      <Button
-                        variant="outline-secondary"
-                        size="sm"
-                        title="Sửa lớp học"
-                        onClick={() => openEditModal(cls)}
-                      >
-                        <i className="bi bi-pencil" />
-                      </Button>
-                      <Button
-                        variant="outline-danger"
-                        size="sm"
-                        title="Xóa lớp học"
-                        onClick={() => handleDelete(cls)}
-                      >
-                        <i className="bi bi-trash" />
-                      </Button>
-                    </div>
-                  )}
-                </div>
-                <p className="text-muted">{cls.description}</p>
-                <span className="badge bg-primary bg-opacity-10 text-primary">
-                  {cls.member_count} thành viên
-                </span>
-              </Card.Body>
-              <Card.Footer className="bg-white border-0">
-                <Button as={Link} to={`/classes/${cls.id}`} variant="outline-primary" size="sm">
-                  Vào lớp học
-                </Button>
-              </Card.Footer>
-            </Card>
-          </Col>
-        ))}
+      <Row className="mb-4">
+        <Col md={6} lg={5}>
+          <InputGroup>
+            <InputGroup.Text><i className="bi bi-search" /></InputGroup.Text>
+            <Form.Control
+              type="search"
+              placeholder="Tìm theo tên, mã hoặc mô tả lớp..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+            {search && (
+              <Button variant="outline-secondary" onClick={() => setSearch('')}>
+                <i className="bi bi-x-lg" />
+              </Button>
+            )}
+          </InputGroup>
+        </Col>
       </Row>
+
+      {loading ? (
+        <div className="text-center py-5"><Spinner animation="border" /></div>
+      ) : classes.length === 0 ? (
+        <Alert variant="light">
+          {debouncedSearch
+            ? `Không tìm thấy lớp nào khớp "${debouncedSearch}".`
+            : user?.role === 'teacher'
+              ? 'Bạn chưa được admin phân công lớp học nào.'
+              : 'Chưa có lớp học nào.'}
+        </Alert>
+      ) : (
+        <Row className="g-3">
+          {classes.map((cls) => (
+            <Col md={4} key={cls.id}>
+              <Card className="h-100 border-0 shadow-sm">
+                <Card.Body>
+                  <div className="d-flex justify-content-between align-items-start gap-2">
+                    <div>
+                      <h5 className="mb-1">{cls.name}</h5>
+                      {cls.code && (
+                        <span className="badge bg-secondary bg-opacity-10 text-secondary mb-2">{cls.code}</span>
+                      )}
+                    </div>
+                    {canManage && (
+                      <div className="d-flex gap-1 flex-shrink-0">
+                        <Button
+                          variant="outline-secondary"
+                          size="sm"
+                          title="Sửa lớp học"
+                          onClick={() => openEditModal(cls)}
+                        >
+                          <i className="bi bi-pencil" />
+                        </Button>
+                        <Button
+                          variant="outline-danger"
+                          size="sm"
+                          title="Xóa lớp học"
+                          onClick={() => handleDelete(cls)}
+                        >
+                          <i className="bi bi-trash" />
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                  <p className="text-muted mb-2">{cls.description || '—'}</p>
+                  <span className="badge bg-primary bg-opacity-10 text-primary">
+                    {cls.member_count} thành viên
+                  </span>
+                </Card.Body>
+                <Card.Footer className="bg-white border-0">
+                  <Button as={Link} to={`/classes/${cls.id}`} variant="outline-primary" size="sm">
+                    Vào lớp học
+                  </Button>
+                </Card.Footer>
+              </Card>
+            </Col>
+          ))}
+        </Row>
+      )}
 
       <Modal show={showModal} onHide={closeModal}>
         <Modal.Header closeButton>

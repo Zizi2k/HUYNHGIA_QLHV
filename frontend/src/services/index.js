@@ -15,7 +15,7 @@ export const userService = {
 };
 
 export const classService = {
-  getAll: () => api.get('/classes'),
+  getAll: (params) => api.get('/classes', { params: params || {} }),
   getById: (id) => api.get(`/classes/${id}`),
   create: (data) => api.post('/classes', data),
   update: (id, data) => api.put(`/classes/${id}`, data),

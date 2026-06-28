@@ -10,12 +10,49 @@ const roleOptions = [
 
 const emptyForm = { fullname: '', username: '', code: '', role: 'student', status: true };
 
+function UserTableRow({ user, onEdit, onDelete, extraActions }) {
+  return (
+    <tr>
+      <td>{user.fullname}</td>
+      <td>{user.username}</td>
+      <td>{user.code}</td>
+      <td>
+        <Badge bg={user.role === 'admin' ? 'danger' : user.role === 'teacher' ? 'primary' : 'secondary'}>
+          {roleOptions.find((r) => r.value === user.role)?.label}
+        </Badge>
+      </td>
+      <td>
+        <Badge bg={user.status ? 'success' : 'secondary'}>
+          {user.status ? 'Hoạt động' : 'Đã khóa'}
+        </Badge>
+      </td>
+      <td>
+        {extraActions}
+        <Button
+          variant="outline-primary"
+          size="sm"
+          className="me-1"
+          onClick={() => onEdit(user)}
+        >
+          <i className="bi bi-pencil me-1" />Sửa
+        </Button>
+        <Button variant="outline-danger" size="sm" onClick={() => onDelete(user.id)}>
+          Xóa
+        </Button>
+      </td>
+    </tr>
+  );
+}
+
 export default function UsersPage() {
   const [classes, setClasses] = useState([]);
+  const [classSearch, setClassSearch] = useState('');
   const [selectedClassId, setSelectedClassId] = useState('');
-  const [users, setUsers] = useState([]);
+  const [members, setMembers] = useState([]);
+  const [unassignedTeachers, setUnassignedTeachers] = useState([]);
   const [loadingClasses, setLoadingClasses] = useState(true);
   const [loadingUsers, setLoadingUsers] = useState(false);
+  const [assigningId, setAssigningId] = useState(null);
   const [showModal, setShowModal] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [form, setForm] = useState(emptyForm);
@@ -30,18 +67,36 @@ export default function UsersPage() {
 
   const loadUsers = (classId) => {
     if (!classId) {
-      setUsers([]);
+      setMembers([]);
+      setUnassignedTeachers([]);
       return;
     }
     setLoadingUsers(true);
     userService.getAll(classId)
-      .then((res) => setUsers(res.data))
+      .then((res) => {
+        const data = res.data;
+        if (Array.isArray(data)) {
+          setMembers(data);
+          setUnassignedTeachers([]);
+        } else {
+          setMembers(data.members || []);
+          setUnassignedTeachers(data.unassigned_teachers || []);
+        }
+      })
       .finally(() => setLoadingUsers(false));
   };
 
   useEffect(() => {
     loadUsers(selectedClassId);
   }, [selectedClassId]);
+
+  const filteredClasses = classes.filter((cls) => {
+    const q = classSearch.trim().toLowerCase();
+    if (!q) return true;
+    return cls.name?.toLowerCase().includes(q)
+      || cls.code?.toLowerCase().includes(q)
+      || cls.description?.toLowerCase().includes(q);
+  });
 
   const openCreateModal = () => {
     setEditingId(null);
@@ -96,11 +151,24 @@ export default function UsersPage() {
     }
   };
 
+  const handleAssignTeacher = async (teacherId) => {
+    setAssigningId(teacherId);
+    try {
+      await classService.addTeacher(selectedClassId, teacherId);
+      loadUsers(selectedClassId);
+    } catch (err) {
+      alert(err.response?.data?.message || 'Không thể thêm giáo viên vào lớp');
+    } finally {
+      setAssigningId(null);
+    }
+  };
+
   if (loadingClasses) {
     return <Container className="text-center py-5"><Spinner animation="border" /></Container>;
   }
 
   const selectedClass = classes.find((c) => String(c.id) === selectedClassId);
+  const totalCount = members.length + unassignedTeachers.length;
 
   return (
     <Container>
@@ -111,21 +179,31 @@ export default function UsersPage() {
         </Button>
       </div>
 
-      <Row className="mb-4">
+      <Row className="mb-4 g-3">
         <Col md={5} lg={4}>
           <Form.Group>
-            <Form.Label className="fw-semibold">Chọn lớp học</Form.Label>
+            <Form.Label className="fw-semibold">Lọc lớp học</Form.Label>
+            <Form.Control
+              type="search"
+              placeholder="Tìm lớp..."
+              value={classSearch}
+              onChange={(e) => setClassSearch(e.target.value)}
+              className="mb-2"
+            />
             <Form.Select
               value={selectedClassId}
               onChange={(e) => setSelectedClassId(e.target.value)}
             >
               <option value="">-- Chọn lớp để xem tài khoản --</option>
-              {classes.map((cls) => (
+              {filteredClasses.map((cls) => (
                 <option key={cls.id} value={cls.id}>
                   {cls.name}{cls.code ? ` (${cls.code})` : ''}
                 </option>
               ))}
             </Form.Select>
+            {classSearch && filteredClasses.length === 0 && (
+              <Form.Text className="text-muted">Không tìm thấy lớp phù hợp.</Form.Text>
+            )}
           </Form.Group>
         </Col>
       </Row>
@@ -142,59 +220,101 @@ export default function UsersPage() {
           <div className="mb-3 text-muted small">
             Lớp: <strong>{selectedClass?.name}</strong>
             <span className="ms-2 badge bg-primary bg-opacity-10 text-primary">
-              {users.length} tài khoản
+              {members.length} thành viên trong lớp
             </span>
+            {unassignedTeachers.length > 0 && (
+              <span className="ms-2 badge bg-warning bg-opacity-10 text-warning">
+                {unassignedTeachers.length} giáo viên chưa phân lớp
+              </span>
+            )}
           </div>
 
-          {users.length === 0 ? (
+          {totalCount === 0 ? (
             <Alert variant="light" className="text-center py-4">
               Lớp này chưa có tài khoản nào. Thêm học viên tại tab Thành viên trong lớp học.
             </Alert>
           ) : (
-            <Table responsive hover className="bg-white shadow-sm rounded">
-              <thead className="table-light">
-                <tr>
-                  <th>Họ tên</th>
-                  <th>Tên đăng nhập</th>
-                  <th>Mã</th>
-                  <th>Vai trò</th>
-                  <th>Trạng thái</th>
-                  <th style={{ width: 140 }}>Thao tác</th>
-                </tr>
-              </thead>
-              <tbody>
-                {users.map((u) => (
-                  <tr key={u.id}>
-                    <td>{u.fullname}</td>
-                    <td>{u.username}</td>
-                    <td>{u.code}</td>
-                    <td>
-                      <Badge bg={u.role === 'admin' ? 'danger' : u.role === 'teacher' ? 'primary' : 'secondary'}>
-                        {roleOptions.find((r) => r.value === u.role)?.label}
-                      </Badge>
-                    </td>
-                    <td>
-                      <Badge bg={u.status ? 'success' : 'secondary'}>
-                        {u.status ? 'Hoạt động' : 'Đã khóa'}
-                      </Badge>
-                    </td>
-                    <td>
-                      <Button
-                        variant="outline-primary"
-                        size="sm"
-                        className="me-1"
-                        onClick={() => openEditModal(u)}
-                      >
-                        <i className="bi bi-pencil me-1" />Sửa
-                      </Button>
-                      <Button variant="outline-danger" size="sm" onClick={() => handleDelete(u.id)}>
-                        Xóa
-                      </Button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </Table>
+            <>
+              {members.length > 0 && (
+                <>
+                  <h6 className="mb-3">Thành viên trong lớp</h6>
+                  <Table responsive hover className="bg-white shadow-sm rounded mb-4">
+                    <thead className="table-light">
+                      <tr>
+                        <th>Họ tên</th>
+                        <th>Tên đăng nhập</th>
+                        <th>Mã</th>
+                        <th>Vai trò</th>
+                        <th>Trạng thái</th>
+                        <th style={{ width: 140 }}>Thao tác</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {members.map((u) => (
+                        <UserTableRow
+                          key={u.id}
+                          user={u}
+                          onEdit={openEditModal}
+                          onDelete={handleDelete}
+                        />
+                      ))}
+                    </tbody>
+                  </Table>
+                </>
+              )}
+
+              {unassignedTeachers.length > 0 && (
+                <>
+                  <h6 className="mb-3">
+                    Giáo viên chưa được thêm vào lớp nào
+                    <span className="text-muted fw-normal ms-2 small">
+                      Có thể thêm trực tiếp vào lớp đang chọn
+                    </span>
+                  </h6>
+                  <Table responsive hover className="bg-white shadow-sm rounded">
+                    <thead className="table-light">
+                      <tr>
+                        <th>Họ tên</th>
+                        <th>Tên đăng nhập</th>
+                        <th>Mã</th>
+                        <th>Vai trò</th>
+                        <th>Trạng thái</th>
+                        <th style={{ width: 180 }}>Thao tác</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {unassignedTeachers.map((u) => (
+                        <UserTableRow
+                          key={u.id}
+                          user={u}
+                          onEdit={openEditModal}
+                          onDelete={handleDelete}
+                          extraActions={(
+                            <Button
+                              variant="outline-success"
+                              size="sm"
+                              className="me-1"
+                              disabled={assigningId === u.id}
+                              onClick={() => handleAssignTeacher(u.id)}
+                            >
+                              {assigningId === u.id ? (
+                                <Spinner animation="border" size="sm" />
+                              ) : (
+                                <>
+                                  <i className="bi bi-person-plus me-1" />
+                                  Thêm vào lớp
+                                </>
+                              )}
+                            </Button>
+                          )}
+                        />
+                      ))}
+                    </tbody>
+                  </Table>
+                </>
+              )}
+
+            </>
           )}
         </>
       )}

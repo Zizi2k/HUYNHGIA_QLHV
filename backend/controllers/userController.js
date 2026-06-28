@@ -5,21 +5,30 @@ const getUsers = async (req, res) => {
   try {
     const classId = req.query.class_id;
     if (!classId) {
-      return res.json([]);
+      return res.json({ members: [], unassigned_teachers: [] });
     }
 
     if (req.user.role === 'teacher') {
       if (!(await assertClassAccess(req.user, classId, res, { manage: true }))) return;
     }
 
-    const [rows] = await pool.query(
+    const [members] = await pool.query(
       `SELECT u.id, u.fullname, u.username, u.code, u.role, u.status, u.created_at
        FROM users u
        INNER JOIN class_members cm ON u.id = cm.user_id AND cm.class_id = ?
        ORDER BY u.role DESC, u.fullname`,
       [classId]
     );
-    res.json(rows);
+
+    const [unassignedTeachers] = await pool.query(
+      `SELECT u.id, u.fullname, u.username, u.code, u.role, u.status, u.created_at
+       FROM users u
+       WHERE u.role = 'teacher' AND u.status = TRUE
+         AND NOT EXISTS (SELECT 1 FROM class_members cm WHERE cm.user_id = u.id)
+       ORDER BY u.fullname`
+    );
+
+    res.json({ members, unassigned_teachers: unassignedTeachers });
   } catch (err) {
     res.status(500).json({ message: 'Lỗi hệ thống', error: err.message });
   }
