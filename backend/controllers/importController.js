@@ -3,7 +3,7 @@ const pool = require('../config/db');
 const { buildStudentUsername, extractStudentNumber, ensureUniqueUsername, regenerateClassUsernames } = require('../utils/username');
 const { assertStudentCodeInScope } = require('../utils/adminScope');
 const { normalizeHeader, parseAmount, resolveTuitionAmounts } = require('../utils/tuitionHelpers');
-const { inferSubjectFromClassName, parseStudentCode, inferSubjectFromCodePrefix } = require('../utils/studentCode');
+const { inferSubjectFromClassName } = require('../utils/studentCode');
 const { addMonthsToDate } = require('../utils/dateHelpers');
 const { insertTuitionProfile } = require('../utils/tuitionProfileDb');
 
@@ -48,6 +48,20 @@ function resolveClassSubject(classRow) {
   return inferSubjectFromClassName(classRow?.name || '');
 }
 
+function parseDateString(str) {
+  const s = String(str).trim();
+  if (!s) return '';
+  const dmy = s.match(/^(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{4})$/);
+  if (dmy) {
+    return `${dmy[3]}-${dmy[2].padStart(2, '0')}-${dmy[1].padStart(2, '0')}`;
+  }
+  const ymd = s.match(/^(\d{4})[\/.\-](\d{1,2})[\/.\-](\d{1,2})$/);
+  if (ymd) {
+    return `${ymd[1]}-${ymd[2].padStart(2, '0')}-${ymd[3].padStart(2, '0')}`;
+  }
+  return s;
+}
+
 function parseCellValue(value) {
   if (value === null || value === undefined || value === '') return '';
   if (value instanceof Date) {
@@ -60,16 +74,13 @@ function parseCellValue(value) {
         return `${dc.y}-${String(dc.m).padStart(2, '0')}-${String(dc.d).padStart(2, '0')}`;
       }
     }
+    return String(value);
   }
-  return String(value).trim();
-}
-
-function resolveRowSubject(classRow, studentCode) {
-  const fromClass = resolveClassSubject(classRow);
-  if (fromClass) return fromClass;
-  const parsed = parseStudentCode(studentCode);
-  if (!parsed) return null;
-  return inferSubjectFromCodePrefix(parsed.prefix);
+  const str = String(value).trim();
+  if (/^\d{1,2}[\/.\-]\d{1,2}[\/.\-]\d{4}$/.test(str) || /^\d{4}[\/.\-]\d{1,2}[\/.\-]\d{1,2}$/.test(str)) {
+    return parseDateString(str);
+  }
+  return str;
 }
 
 function toUsernameFromName(fullname, code, username, fallbackOrdinal) {
@@ -80,7 +91,7 @@ function toUsernameFromName(fullname, code, username, fallbackOrdinal) {
 function parseSheet(filePath) {
   const workbook = XLSX.readFile(filePath, { cellDates: true });
   const sheet = workbook.Sheets[workbook.SheetNames[0]];
-  const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '', raw: false });
+  const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '', raw: true });
   if (rows.length < 2) return [];
 
   const headerRow = rows[0];
@@ -154,18 +165,48 @@ function validateTuitionRow(row) {
   return null;
 }
 
+async function resolveDiscount(conn, name) {
+  if (!name) return { id: null, inlinePercent: null };
+  const trimmed = String(name).trim();
+
+  const [byName] = await conn.query(
+    'SELECT id FROM fee_discounts WHERE name = ? AND is_active = TRUE LIMIT 1',
+    [trimmed]
+  );
+  if (byName.length > 0) return { id: byName[0].id, inlinePercent: null };
+
+  const pctMatch = trimmed.match(/^(\d+(?:[.,]\d+)?)\s*%$/);
+  if (pctMatch) {
+    const pct = parseFloat(pctMatch[1].replace(',', '.'));
+    const [byPct] = await conn.query(
+      `SELECT id FROM fee_discounts
+       WHERE discount_type = 'percent' AND discount_value = ? AND is_active = TRUE LIMIT 1`,
+      [pct]
+    );
+    if (byPct.length > 0) return { id: byPct[0].id, inlinePercent: null };
+    return { id: null, inlinePercent: pct };
+  }
+
+  return { id: null, inlinePercent: null };
+}
+
 async function normalizeTuitionRow(conn, row) {
   if (!row.fee_after_discount && row.fee_before_discount) {
     row.fee_after_discount = row.fee_before_discount;
   }
   if (row.discount_name) {
-    const discountId = await lookupDiscount(conn, row.discount_name);
+    const { id: discountId, inlinePercent } = await resolveDiscount(conn, row.discount_name);
     if (discountId) {
       const { feeAfter } = await resolveTuitionAmounts(conn, {
         fee_before_discount: row.fee_before_discount,
         discount_id: discountId,
       });
       row.fee_after_discount = String(feeAfter);
+      row._discountId = discountId;
+    } else if (inlinePercent != null && row.fee_before_discount) {
+      const before = parseAmount(row.fee_before_discount);
+      row.fee_after_discount = String(Math.max(0, Math.round(before - (before * inlinePercent) / 100)));
+      row._discountId = null;
     }
   }
 }
@@ -185,12 +226,8 @@ async function matchClass(classId, classCode, currentClass) {
 }
 
 async function lookupDiscount(conn, name) {
-  if (!name) return null;
-  const [rows] = await conn.query(
-    'SELECT id FROM fee_discounts WHERE name = ? AND is_active = TRUE LIMIT 1',
-    [name]
-  );
-  return rows.length > 0 ? rows[0].id : null;
+  const { id } = await resolveDiscount(conn, name);
+  return id;
 }
 
 async function lookupCourse(conn, name, subject) {
@@ -214,22 +251,25 @@ async function lookupCourse(conn, name, subject) {
 }
 
 async function upsertTuitionFromImport(conn, {
-  row, userId, studentCode, fullname, classRow, subject,
+  row, userId, studentCode, fullname, classRow,
 }) {
-  if (!subject) {
-    throw new Error('Không xác định được môn học. Gán môn cho lớp hoặc dùng mã HV đúng định dạng (VD: EGTA0001)');
-  }
-
   await normalizeTuitionRow(conn, row);
   const tuitionError = validateTuitionRow(row);
   if (tuitionError) throw new Error(tuitionError);
 
-  const course = await lookupCourse(conn, row.courseName, subject);
+  const course = await lookupCourse(conn, row.courseName, null);
   if (!course) throw new Error(`Không tìm thấy khóa học "${row.courseName}"`);
 
-  const discountId = await lookupDiscount(conn, row.discount_name);
+  const subject = resolveClassSubject(classRow) || course.subject;
+  if (!subject) {
+    throw new Error('Không xác định được môn học — gán môn cho lớp hoặc kiểm tra tên khóa học');
+  }
+
+  const discountId = row._discountId !== undefined
+    ? row._discountId
+    : (await resolveDiscount(conn, row.discount_name)).id;
   const endDate = addMonthsToDate(row.start_date, course.duration_months);
-  if (!endDate) throw new Error('Ngày bắt đầu không hợp lệ');
+  if (!endDate) throw new Error(`Ngày bắt đầu không hợp lệ: "${row.start_date}"`);
 
   const tuition = {
     base_fee: row.base_fee,
@@ -380,7 +420,6 @@ const importStudents = async (req, res) => {
         }
 
         if (isAdmin && hasTuitionData(row)) {
-          const rowSubject = resolveRowSubject(currentClass, row.code);
           try {
             const tuitionResult = await upsertTuitionFromImport(conn, {
               row,
@@ -388,7 +427,6 @@ const importStudents = async (req, res) => {
               studentCode: row.code,
               fullname: row.fullname,
               classRow: currentClass,
-              subject: rowSubject,
             });
             if (tuitionResult === 'created') results.tuition_created++;
             else results.tuition_updated++;
@@ -454,9 +492,9 @@ const downloadTemplate = async (req, res) => {
       'Phí sách', 'Mức giảm', 'Lý do giảm',
     ];
     const sample = [
-      'EGTA0001', 'Nguyễn Văn A', classCode, '0901234567', '0901234567',
-      sampleCourse, '2026-01-01', '', classRow?.name || 'Lớp mẫu',
-      '2000000', '2000000', '1800000', '150000', 'Giảm 10%', 'Học sinh cũ',
+      'EGC0019', 'Nguyễn Văn A', classCode, '0901234567', '0901234567',
+      sampleCourse, '30/05/2026', '', classRow?.name || 'Lớp mẫu',
+      '1200000', '1200000', '960000', '180000', '20%', 'Học sinh cũ',
     ];
     const sample2 = [
       'EGTA0002', 'Trần Thị B', classCode, '0912345678', 'tranthib',
