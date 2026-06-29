@@ -3,7 +3,7 @@ const { assertClassAccess, getQuizClassId } = require('../middleware/classAccess
 const { handleDeletion } = require('../utils/deletionPolicy');
 const { logAction } = require('../utils/auditLog');
 const { teachingStaffRoleSql } = require('../utils/teachingStaff');
-
+const { parseQuizDocx } = require('../utils/quizDocxParser');
 const getQuizzes = async (req, res) => {
   try {
     const classId = req.query.class_id;
@@ -298,6 +298,27 @@ const submitQuiz = async (req, res) => {
   }
 };
 
+const importQuizDocx = async (req, res) => {
+  try {
+    if (!req.file?.buffer?.length) {
+      return res.status(400).json({ message: 'Vui lòng chọn file Word (.docx)' });
+    }
+    const ext = (req.file.originalname || '').toLowerCase();
+    if (!ext.endsWith('.docx')) {
+      return res.status(400).json({ message: 'Chỉ hỗ trợ file .docx (Word 2007 trở lên)' });
+    }
+
+    const questions = await parseQuizDocx(req.file.buffer);
+    res.json({
+      message: `Đã nhận dạng ${questions.length} câu hỏi từ file Word`,
+      questions,
+      count: questions.length,
+    });
+  } catch (err) {
+    res.status(400).json({ message: err.message || 'Không thể đọc file Word' });
+  }
+};
+
 module.exports = {
   getQuizzes,
   getQuizById,
@@ -306,4 +327,5 @@ module.exports = {
   deleteQuiz,
   getQuizSubmissions,
   submitQuiz,
+  importQuizDocx,
 };

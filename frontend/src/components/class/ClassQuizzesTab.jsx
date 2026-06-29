@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Button, Card, Modal, Form, Alert, Badge, Spinner, Table, Collapse,
@@ -24,7 +24,10 @@ export default function ClassQuizzesTab({
   const [results, setResults] = useState([]);
   const [saving, setSaving] = useState(false);
   const [loadingEdit, setLoadingEdit] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [importInfo, setImportInfo] = useState('');
   const [error, setError] = useState('');
+  const docxInputRef = useRef(null);
 
   const openCreate = () => {
     setEditingId(null);
@@ -32,6 +35,7 @@ export default function ClassQuizzesTab({
     setExpandedQuestions({ 0: true });
     setForm({ ...emptyForm, questions: [{ ...emptyQuestion }] });
     setError('');
+    setImportInfo('');
     setShowForm(true);
   };
 
@@ -115,6 +119,53 @@ export default function ClassQuizzesTab({
       }
     }
     return true;
+  };
+
+  const handleDocxImport = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+
+    if (!file.name.toLowerCase().endsWith('.docx')) {
+      setError('Chỉ hỗ trợ file .docx (Word 2007 trở lên)');
+      return;
+    }
+
+    setImporting(true);
+    setError('');
+    setImportInfo('');
+    try {
+      const res = await quizService.parseDocx(file);
+      const imported = res.data.questions || [];
+      if (!imported.length) {
+        setError('Không nhận dạng được câu hỏi trong file');
+        return;
+      }
+
+      const hasContent = form.questions.some(
+        (q) => q.question.trim() || q.optionA.trim() || q.optionB.trim(),
+      );
+      let merged;
+      if (hasContent && !window.confirm(
+        `File có ${imported.length} câu. Thêm vào danh sách hiện tại? (Hủy = thay thế toàn bộ)`,
+      )) {
+        merged = imported;
+      } else if (hasContent) {
+        merged = [...form.questions, ...imported];
+      } else {
+        merged = imported;
+      }
+
+      const expanded = {};
+      merged.forEach((_, idx) => { expanded[idx] = true; });
+      setExpandedQuestions(expanded);
+      setForm((prev) => ({ ...prev, questions: merged }));
+      setImportInfo(res.data.message || `Đã import ${imported.length} câu hỏi`);
+    } catch (err) {
+      setError(err.response?.data?.message || 'Không thể đọc file Word');
+    } finally {
+      setImporting(false);
+    }
   };
 
   const handleSave = async (e) => {
@@ -282,12 +333,43 @@ export default function ClassQuizzesTab({
               </Alert>
             )}
 
-            <div className="d-flex justify-content-between align-items-center mb-2">
+            <div className="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
               <Form.Label className="mb-0 fw-semibold">Câu hỏi trắc nghiệm</Form.Label>
-              <Button type="button" variant="outline-primary" size="sm" onClick={addQuestion}>
-                <i className="bi bi-plus me-1" />Thêm câu
-              </Button>
+              <div className="d-flex flex-wrap gap-2">
+                <input
+                  ref={docxInputRef}
+                  type="file"
+                  accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                  className="d-none"
+                  onChange={handleDocxImport}
+                />
+                <Button
+                  type="button"
+                  variant="outline-success"
+                  size="sm"
+                  disabled={importing}
+                  onClick={() => docxInputRef.current?.click()}
+                >
+                  {importing ? (
+                    <><Spinner size="sm" className="me-1" />Đang đọc file...</>
+                  ) : (
+                    <><i className="bi bi-file-earmark-word me-1" />Import Word (.docx)</>
+                  )}
+                </Button>
+                <Button type="button" variant="outline-primary" size="sm" onClick={addQuestion}>
+                  <i className="bi bi-plus me-1" />Thêm câu
+                </Button>
+              </div>
             </div>
+
+            <Alert variant="light" className="py-2 small mb-3">
+              <strong>Định dạng file Word:</strong> mỗi câu gồm dòng <code>Câu 1: Nội dung...</code>,
+              rồi <code>A.</code> <code>B.</code> <code>C.</code> <code>D.</code> —{' '}
+              <span className="px-1 rounded" style={{ background: '#fff3cd' }}>tô vàng</span>{' '}
+              đáp án đúng trong Word để hệ thống tự nhận.
+            </Alert>
+
+            {importInfo && <Alert variant="success" className="py-2 small">{importInfo}</Alert>}
 
             {form.questions.map((q, idx) => (
               <Card key={q.id || `new-${idx}`} className="mb-3 border">

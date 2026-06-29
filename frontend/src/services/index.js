@@ -59,6 +59,13 @@ export const quizService = {
   delete: (id) => api.delete(`/quizzes/${id}`),
   getSubmissions: (quizId) => api.get(`/quizzes/${quizId}/submissions`),
   submit: (data) => api.post('/quizzes/submit', data),
+  parseDocx: (file) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    return api.post('/quizzes/parse-docx', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+  },
 };
 
 export const discussionService = {
