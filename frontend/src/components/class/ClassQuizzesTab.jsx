@@ -7,8 +7,18 @@ import { quizService } from '../../services';
 import { notifyDeleteResult } from '../../utils/deleteHelpers';
 
 const emptyQuestion = {
-  question: '', optionA: '', optionB: '', optionC: '', optionD: '', answer: 'A',
+  question: '', optionA: '', optionB: '', optionC: '', optionD: '', answer: 'A', needsAnswerReview: false,
 };
+
+const mapImportedQuestion = (q) => ({
+  question: q.question || '',
+  optionA: q.optionA || '',
+  optionB: q.optionB || '',
+  optionC: q.optionC || '',
+  optionD: q.optionD || '',
+  answer: q.answer || 'A',
+  needsAnswerReview: q.answerAutoDetected === false,
+});
 
 const emptyForm = { title: '', time_limit: 30, questions: [{ ...emptyQuestion }] };
 
@@ -25,7 +35,9 @@ export default function ClassQuizzesTab({
   const [saving, setSaving] = useState(false);
   const [loadingEdit, setLoadingEdit] = useState(false);
   const [importing, setImporting] = useState(false);
+  const [downloadingTemplate, setDownloadingTemplate] = useState(false);
   const [importInfo, setImportInfo] = useState('');
+  const [importWarning, setImportWarning] = useState('');
   const [error, setError] = useState('');
   const docxInputRef = useRef(null);
 
@@ -36,6 +48,7 @@ export default function ClassQuizzesTab({
     setForm({ ...emptyForm, questions: [{ ...emptyQuestion }] });
     setError('');
     setImportInfo('');
+    setImportWarning('');
     setShowForm(true);
   };
 
@@ -55,6 +68,7 @@ export default function ClassQuizzesTab({
         optionC: q.optionC || '',
         optionD: q.optionD || '',
         answer: q.answer || 'A',
+        needsAnswerReview: false,
       }));
       const expanded = {};
       questions.forEach((_, idx) => { expanded[idx] = true; });
@@ -87,8 +101,32 @@ export default function ClassQuizzesTab({
 
   const updateQuestion = (idx, field, value) => {
     const questions = [...form.questions];
-    questions[idx] = { ...questions[idx], [field]: value };
+    const updated = { ...questions[idx], [field]: value };
+    if (field === 'answer') {
+      updated.needsAnswerReview = false;
+    }
+    questions[idx] = updated;
     setForm({ ...form, questions });
+  };
+
+  const pendingReviewCount = form.questions.filter((q) => q.needsAnswerReview).length;
+
+  const handleDownloadTemplate = async () => {
+    setDownloadingTemplate(true);
+    setError('');
+    try {
+      const res = await quizService.downloadImportTemplate();
+      const url = window.URL.createObjectURL(new Blob([res.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = 'mau-trac-nghiem.docx';
+      link.click();
+      window.URL.revokeObjectURL(url);
+    } catch {
+      setError('Không thể tải file mẫu');
+    } finally {
+      setDownloadingTemplate(false);
+    }
   };
 
   const addQuestion = () => {
@@ -117,6 +155,11 @@ export default function ClassQuizzesTab({
         setError(`Câu ${i + 1}: vui lòng nhập đầy đủ 4 đáp án`);
         return false;
       }
+      if (q.needsAnswerReview) {
+        setError(`Câu ${i + 1}: vui lòng chọn đáp án đúng (chưa xác nhận sau khi import)`);
+        setExpandedQuestions((prev) => ({ ...prev, [i]: true }));
+        return false;
+      }
     }
     return true;
   };
@@ -134,9 +177,10 @@ export default function ClassQuizzesTab({
     setImporting(true);
     setError('');
     setImportInfo('');
+    setImportWarning('');
     try {
       const res = await quizService.parseDocx(file);
-      const imported = res.data.questions || [];
+      const imported = (res.data.questions || []).map(mapImportedQuestion);
       if (!imported.length) {
         setError('Không nhận dạng được câu hỏi trong file');
         return;
@@ -146,11 +190,9 @@ export default function ClassQuizzesTab({
         (q) => q.question.trim() || q.optionA.trim() || q.optionB.trim(),
       );
       let merged;
-      if (hasContent && !window.confirm(
+      if (hasContent && window.confirm(
         `File có ${imported.length} câu. Thêm vào danh sách hiện tại? (Hủy = thay thế toàn bộ)`,
       )) {
-        merged = imported;
-      } else if (hasContent) {
         merged = [...form.questions, ...imported];
       } else {
         merged = imported;
@@ -161,6 +203,12 @@ export default function ClassQuizzesTab({
       setExpandedQuestions(expanded);
       setForm((prev) => ({ ...prev, questions: merged }));
       setImportInfo(res.data.message || `Đã import ${imported.length} câu hỏi`);
+      const manual = res.data.manualCount ?? imported.filter((q) => q.needsAnswerReview).length;
+      if (manual > 0) {
+        setImportWarning(
+          `${manual} câu chưa có đáp án tô vàng — vui lòng chọn "Đáp án đúng" cho từng câu bên dưới trước khi lưu.`,
+        );
+      }
     } catch (err) {
       setError(err.response?.data?.message || 'Không thể đọc file Word');
     } finally {
@@ -336,6 +384,19 @@ export default function ClassQuizzesTab({
             <div className="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
               <Form.Label className="mb-0 fw-semibold">Câu hỏi trắc nghiệm</Form.Label>
               <div className="d-flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  variant="outline-secondary"
+                  size="sm"
+                  disabled={downloadingTemplate}
+                  onClick={handleDownloadTemplate}
+                >
+                  {downloadingTemplate ? (
+                    <><Spinner size="sm" className="me-1" />Đang tải...</>
+                  ) : (
+                    <><i className="bi bi-download me-1" />Tải file mẫu</>
+                  )}
+                </Button>
                 <input
                   ref={docxInputRef}
                   type="file"
@@ -363,13 +424,24 @@ export default function ClassQuizzesTab({
             </div>
 
             <Alert variant="light" className="py-2 small mb-3">
-              <strong>Định dạng file Word:</strong> mỗi câu gồm dòng <code>Câu 1: Nội dung...</code>,
-              rồi <code>A.</code> <code>B.</code> <code>C.</code> <code>D.</code> —{' '}
-              <span className="px-1 rounded" style={{ background: '#fff3cd' }}>tô vàng</span>{' '}
-              đáp án đúng trong Word để hệ thống tự nhận.
+              <strong>Cách dùng:</strong> tải <strong>file mẫu</strong> để xem định dạng → soạn câu hỏi trong Word →{' '}
+              <strong>Import Word (.docx)</strong>.
+              <ul className="mb-0 mt-2 ps-3">
+                <li>Mỗi câu: <code>Câu 1: Nội dung...</code>, rồi <code>A.</code> <code>B.</code> <code>C.</code> <code>D.</code></li>
+                <li>
+                  <span className="px-1 rounded" style={{ background: '#fff3cd' }}>Tô vàng</span> đáp án đúng → tự nhận
+                </li>
+                <li>Không tô vàng → sau import chọn <strong>Đáp án đúng</strong> thủ công trước khi lưu</li>
+              </ul>
             </Alert>
 
             {importInfo && <Alert variant="success" className="py-2 small">{importInfo}</Alert>}
+            {importWarning && <Alert variant="warning" className="py-2 small">{importWarning}</Alert>}
+            {pendingReviewCount > 0 && (
+              <Alert variant="warning" className="py-2 small">
+                Còn <strong>{pendingReviewCount}</strong> câu cần chọn đáp án đúng thủ công.
+              </Alert>
+            )}
 
             {form.questions.map((q, idx) => (
               <Card key={q.id || `new-${idx}`} className="mb-3 border">
@@ -386,7 +458,9 @@ export default function ClassQuizzesTab({
                         — {q.question}
                       </span>
                     )}
-                    <Badge bg="success" className="ms-1">Đáp án {q.answer}</Badge>
+                    <Badge bg={q.needsAnswerReview ? 'warning' : 'success'} className="ms-1">
+                      {q.needsAnswerReview ? 'Chọn đáp án' : `Đáp án ${q.answer}`}
+                    </Badge>
                   </div>
                   {form.questions.length > 1 && (
                     <Button
@@ -424,11 +498,17 @@ export default function ClassQuizzesTab({
                           />
                         </Form.Group>
                       ))}
-                      <Form.Group>
-                        <Form.Label className="small text-muted">Đáp án đúng</Form.Label>
+                      <Form.Group className={q.needsAnswerReview ? 'p-2 rounded border border-warning bg-warning-subtle' : ''}>
+                        <Form.Label className="small text-muted">
+                          Đáp án đúng
+                          {q.needsAnswerReview && (
+                            <span className="text-warning ms-1">(bắt buộc chọn thủ công)</span>
+                          )}
+                        </Form.Label>
                         <Form.Select
                           value={q.answer}
                           onChange={(e) => updateQuestion(idx, 'answer', e.target.value)}
+                          className={q.needsAnswerReview ? 'border-warning' : ''}
                         >
                           <option value="A">A — {q.optionA || '...'}</option>
                           <option value="B">B — {q.optionB || '...'}</option>

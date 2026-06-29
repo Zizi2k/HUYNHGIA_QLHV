@@ -40,6 +40,15 @@ function isYellowRunProperties(rPr) {
   return false;
 }
 
+function readTextNode(value) {
+  if (value == null) return '';
+  if (typeof value === 'string' || typeof value === 'number') return String(value);
+  if (typeof value === 'object') {
+    return String(value['#text'] ?? value['_text'] ?? '');
+  }
+  return '';
+}
+
 function extractParagraphRuns(paragraph) {
   const runs = [];
   for (const [key, value] of Object.entries(paragraph)) {
@@ -53,7 +62,7 @@ function extractParagraphRuns(paragraph) {
           highlighted = isYellowRunProperties(runValue);
         }
         if (localName(runKey) === 't') {
-          text += String(runValue);
+          text += readTextNode(runValue);
         }
         if (localName(runKey) === 'tab') {
           text += '\t';
@@ -109,10 +118,10 @@ function finalizeQuestion(question) {
   if (!question.question?.trim()) return null;
   if (filled.length < 4) return null;
 
-  if (!question.answer || !options.includes(question.answer)) {
-    const highlighted = options.find((letter) => question._highlighted?.[letter]);
-    question.answer = highlighted || 'A';
-  }
+  const highlighted = options.find((letter) => question._highlighted?.[letter]);
+  const answerAutoDetected = Boolean(highlighted);
+  let answer = highlighted || question.answer || 'A';
+  if (!options.includes(answer)) answer = 'A';
 
   return {
     question: question.question.trim(),
@@ -120,7 +129,8 @@ function finalizeQuestion(question) {
     optionB: question.optionB.trim(),
     optionC: question.optionC.trim(),
     optionD: question.optionD.trim(),
-    answer: question.answer,
+    answer,
+    answerAutoDetected,
   };
 }
 
@@ -194,14 +204,96 @@ async function parseQuizDocx(buffer) {
   const questions = parseQuizLines(lines);
   if (questions.length === 0) {
     throw new Error(
-      'Không nhận dạng được câu hỏi. Định dạng: "Câu 1: ...", "A. ...", "B. ..." — tô vàng đáp án đúng.'
+      'Không nhận dạng được câu hỏi. Định dạng: "Câu 1: ...", "A. ...", "B. ...", "C. ...", "D. ...".'
     );
   }
   return questions;
+}
+
+function escapeXml(text) {
+  return String(text)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function docxParagraph(text, { bold, highlight } = {}) {
+  let rPr = '';
+  if (bold) rPr += '<w:b/>';
+  if (highlight) rPr += '<w:highlight w:val="yellow"/>';
+  const rPrBlock = rPr ? `<w:rPr>${rPr}</w:rPr>` : '';
+  return `<w:p><w:r>${rPrBlock}<w:t xml:space="preserve">${escapeXml(text)}</w:t></w:r></w:p>`;
+}
+
+function docxOptionLine(letter, text, highlight = false) {
+  return docxParagraph(`${letter}. ${text}`, { highlight });
+}
+
+async function generateQuizSampleDocx() {
+  const bodyParts = [
+    docxParagraph('HƯỚNG DẪN ĐỊNH DẠNG FILE TRẮC NGHIỆM', { bold: true }),
+    docxParagraph(''),
+    docxParagraph('• Mỗi câu bắt đầu bằng: Câu 1: Nội dung câu hỏi'),
+    docxParagraph('• Tiếp theo 4 dòng đáp án: A. ...  B. ...  C. ...  D. ...'),
+    docxParagraph('• Tô vàng (Highlight) đáp án đúng trong Word → hệ thống tự nhận.'),
+    docxParagraph('• Không tô vàng: sau khi import, chọn đáp án đúng thủ công trên màn hình.'),
+    docxParagraph(''),
+    docxParagraph('——— VÍ DỤ ———', { bold: true }),
+    docxParagraph(''),
+    docxParagraph('Câu 1: Thủ đô Việt Nam là thành phố nào?'),
+    docxOptionLine('A', 'Hà Nội', true),
+    docxOptionLine('B', 'TP. Hồ Chí Minh'),
+    docxOptionLine('C', 'Đà Nẵng'),
+    docxOptionLine('D', 'Huế'),
+    docxParagraph(''),
+    docxParagraph('Câu 2: 2 + 2 = ?'),
+    docxOptionLine('A', '3'),
+    docxOptionLine('B', '4', true),
+    docxOptionLine('C', '5'),
+    docxOptionLine('D', '6'),
+    docxParagraph(''),
+    docxParagraph('Câu 3: Màu của lá cây thường là gì? (không tô vàng — chọn đáp án thủ công sau import)'),
+    docxOptionLine('A', 'Đỏ'),
+    docxOptionLine('B', 'Vàng'),
+    docxOptionLine('C', 'Xanh'),
+    docxOptionLine('D', 'Tím'),
+  ];
+
+  const documentXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+  <w:body>
+    ${bodyParts.join('\n    ')}
+    <w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440"/></w:sectPr>
+  </w:body>
+</w:document>`;
+
+  const contentTypes = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+  <Default Extension="xml" ContentType="application/xml"/>
+  <Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
+</Types>`;
+
+  const rels = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>
+</Relationships>`;
+
+  const docRels = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"/>`;
+
+  const zip = new JSZip();
+  zip.file('[Content_Types].xml', contentTypes);
+  zip.file('_rels/.rels', rels);
+  zip.file('word/document.xml', documentXml);
+  zip.file('word/_rels/document.xml.rels', docRels);
+  return zip.generateAsync({ type: 'nodebuffer' });
 }
 
 module.exports = {
   parseQuizDocx,
   parseQuizLines,
   extractParagraphLines,
+  generateQuizSampleDocx,
 };

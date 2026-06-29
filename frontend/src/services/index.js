@@ -66,6 +66,7 @@ export const quizService = {
       headers: { 'Content-Type': 'multipart/form-data' },
     });
   },
+  downloadImportTemplate: () => api.get('/quizzes/import-template', { responseType: 'blob' }),
 };
 
 export const discussionService = {

@@ -1,7 +1,7 @@
 const express = require('express');
 const {
   getQuizzes, getQuizById, createQuiz, updateQuiz, deleteQuiz,
-  getQuizSubmissions, submitQuiz, importQuizDocx,
+  getQuizSubmissions, submitQuiz, importQuizDocx, getQuizImportTemplate,
 } = require('../controllers/quizController');
 const { authenticate, authorize } = require('../middleware/auth');
 
@@ -33,6 +33,7 @@ function handleDocxUpload(req, res, next) {
 
 router.use(authenticate);
 router.get('/', getQuizzes);
+router.get('/import-template', authorize('admin', 'teacher'), getQuizImportTemplate);
 router.post('/parse-docx', authorize('admin', 'teacher'), handleDocxUpload, importQuizDocx);
 router.post('/submit', authorize('student'), submitQuiz);
 router.get('/:id/submissions', authorize('admin', 'teacher'), getQuizSubmissions);

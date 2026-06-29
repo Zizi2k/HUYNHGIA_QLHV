@@ -3,7 +3,7 @@ const { assertClassAccess, getQuizClassId } = require('../middleware/classAccess
 const { handleDeletion } = require('../utils/deletionPolicy');
 const { logAction } = require('../utils/auditLog');
 const { teachingStaffRoleSql } = require('../utils/teachingStaff');
-const { parseQuizDocx } = require('../utils/quizDocxParser');
+const { parseQuizDocx, generateQuizSampleDocx } = require('../utils/quizDocxParser');
 const getQuizzes = async (req, res) => {
   try {
     const classId = req.query.class_id;
@@ -309,13 +309,38 @@ const importQuizDocx = async (req, res) => {
     }
 
     const questions = await parseQuizDocx(req.file.buffer);
+    const autoCount = questions.filter((q) => q.answerAutoDetected).length;
+    const manualCount = questions.length - autoCount;
+    let message = `Đã import ${questions.length} câu hỏi từ file Word`;
+    if (manualCount > 0) {
+      message += ` (${autoCount} tự nhận đáp án, ${manualCount} cần chọn đáp án thủ công)`;
+    }
     res.json({
-      message: `Đã nhận dạng ${questions.length} câu hỏi từ file Word`,
+      message,
       questions,
       count: questions.length,
+      autoCount,
+      manualCount,
     });
   } catch (err) {
     res.status(400).json({ message: err.message || 'Không thể đọc file Word' });
+  }
+};
+
+const getQuizImportTemplate = async (_req, res) => {
+  try {
+    const buffer = await generateQuizSampleDocx();
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    );
+    res.setHeader(
+      'Content-Disposition',
+      'attachment; filename="mau-trac-nghiem.docx"',
+    );
+    res.send(buffer);
+  } catch (err) {
+    res.status(500).json({ message: 'Không thể tạo file mẫu', error: err.message });
   }
 };
 
@@ -328,4 +353,5 @@ module.exports = {
   getQuizSubmissions,
   submitQuiz,
   importQuizDocx,
+  getQuizImportTemplate,
 };
