@@ -6,7 +6,7 @@ const { parseAmount, SUBJECTS, enrichProfile, resolveTuitionAmounts } = require(
 const { getNextStudentCode, inferSubjectFromClassName, validateStudentCodeFormat } = require('../utils/studentCode');
 const { addMonthsToDate, getEnrollmentStatus } = require('../utils/dateHelpers');
 const { PROFILE_SELECT, insertTuitionProfile } = require('../utils/tuitionProfileDb');
-const { resolveStudentUserForEnrollment } = require('../utils/studentIdentity');
+const { resolveStudentUserForEnrollment, mergeDuplicateStudentsByPhone } = require('../utils/studentIdentity');
 const { logAction } = require('../utils/auditLog');
 const {
   resolveCodePrefixFilter,
@@ -588,10 +588,25 @@ const transferStudent = async (req, res) => {
   }
 };
 
+const reconcileDuplicates = async (_req, res) => {
+  try {
+    const merged = await mergeDuplicateStudentsByPhone(pool);
+    res.json({
+      message: merged > 0
+        ? `Đã gộp ${merged} tài khoản học viên trùng SĐT/tên.`
+        : 'Không có tài khoản trùng cần gộp.',
+      merged,
+    });
+  } catch (err) {
+    res.status(500).json({ message: 'Lỗi hệ thống', error: err.message });
+  }
+};
+
 module.exports = {
   getOverview,
   getNextCode,
   createEnrollment,
   updateEnrollment,
   transferStudent,
+  reconcileDuplicates,
 };

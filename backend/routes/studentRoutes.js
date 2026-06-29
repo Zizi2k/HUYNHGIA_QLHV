@@ -5,6 +5,7 @@ const {
 } = require('../controllers/trainingCourseController');
 const {
   getOverview, getNextCode, createEnrollment, updateEnrollment, transferStudent,
+  reconcileDuplicates,
 } = require('../controllers/studentManagementController');
 
 const router = express.Router();
@@ -18,6 +19,7 @@ router.put('/courses/:id', updateCourse);
 router.delete('/courses/:id', deleteCourse);
 
 router.get('/overview', getOverview);
+router.post('/reconcile-duplicates', reconcileDuplicates);
 router.get('/next-code', getNextCode);
 router.post('/enroll', createEnrollment);
 router.put('/enroll/:id', updateEnrollment);

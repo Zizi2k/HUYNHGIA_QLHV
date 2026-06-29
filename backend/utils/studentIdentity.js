@@ -50,25 +50,30 @@ async function findUserIdByStudentCode(conn, studentCode) {
   return userRows[0]?.id || null;
 }
 
-async function findExistingStudentByPhone(conn, phone, fullname) {
-  const trimmedPhone = String(phone || '').trim();
-  if (!trimmedPhone) return null;
-
-  const [rows] = await conn.query(
-    `SELECT id, code, fullname, username, phone
-     FROM users
-     WHERE role = 'student' AND phone = ?
-     ORDER BY id ASC`,
-    [trimmedPhone]
-  );
+function pickStudentByName(rows, fullname) {
   if (rows.length === 0) return null;
-
   const normalizedName = String(fullname || '').trim().toLowerCase();
   if (normalizedName) {
     const exact = rows.find((r) => String(r.fullname || '').trim().toLowerCase() === normalizedName);
     if (exact) return exact;
   }
   return rows[0];
+}
+
+async function findExistingStudentByPhone(conn, phone, fullname) {
+  const trimmedPhone = String(phone || '').trim();
+  if (!trimmedPhone) return null;
+
+  const [rows] = await conn.query(
+    `SELECT DISTINCT u.id, u.code, u.fullname, u.username, u.phone
+     FROM users u
+     LEFT JOIN tuition_profiles tp ON tp.user_id = u.id
+     WHERE u.role = 'student'
+       AND (TRIM(u.phone) = ? OR TRIM(tp.phone) = ?)
+     ORDER BY u.id ASC`,
+    [trimmedPhone, trimmedPhone]
+  );
+  return pickStudentByName(rows, fullname);
 }
 
 async function createStudentUser(conn, { fullname, studentCode, phone, zalo }) {
@@ -193,27 +198,51 @@ async function mergeStudentUsers(conn, keepId, removeId) {
   await conn.query('DELETE FROM users WHERE id = ?', [removeId]);
 }
 
-async function mergeDuplicateStudentsByPhone(pool) {
-  const [groups] = await pool.query(
-    `SELECT phone, LOWER(TRIM(fullname)) AS normalized_name,
-            GROUP_CONCAT(id ORDER BY id) AS ids,
-            COUNT(*) AS cnt
-     FROM users
-     WHERE role = 'student'
-       AND phone IS NOT NULL
-       AND TRIM(phone) != ''
-     GROUP BY phone, LOWER(TRIM(fullname))
-     HAVING cnt > 1`
+async function syncStudentPhonesFromProfiles(pool) {
+  await pool.query(
+    `UPDATE users u
+     INNER JOIN (
+       SELECT user_id, MIN(TRIM(phone)) AS phone
+       FROM tuition_profiles
+       WHERE phone IS NOT NULL AND TRIM(phone) != ''
+       GROUP BY user_id
+     ) tp ON tp.user_id = u.id
+     SET u.phone = tp.phone
+     WHERE u.role = 'student'
+       AND (u.phone IS NULL OR TRIM(u.phone) = '')`
   );
+}
 
-  for (const group of groups) {
-    const ids = String(group.ids).split(',').map((id) => Number(id)).filter(Boolean);
+function collectDuplicateGroups(rows) {
+  const groups = new Map();
+  for (const row of rows) {
+    const phone = String(row.phone || '').trim();
+    const name = String(row.normalized_name || '').trim().toLowerCase();
+    if (!phone || !name) continue;
+    const key = `${phone}::${name}`;
+    const ids = String(row.ids || '')
+      .split(',')
+      .map((id) => Number(id))
+      .filter(Boolean);
+    if (ids.length < 2) continue;
+    if (!groups.has(key)) groups.set(key, new Set());
+    ids.forEach((id) => groups.get(key).add(id));
+  }
+  return groups;
+}
+
+async function mergeDuplicateStudentGroups(pool, groups) {
+  let mergedCount = 0;
+  for (const idsSet of groups.values()) {
+    const ids = [...idsSet].sort((a, b) => a - b);
+    if (ids.length < 2) continue;
     const keepId = ids[0];
     const conn = await pool.getConnection();
     try {
       await conn.beginTransaction();
       for (let i = 1; i < ids.length; i += 1) {
         await mergeStudentUsers(conn, keepId, ids[i]);
+        mergedCount += 1;
       }
       await conn.commit();
     } catch (err) {
@@ -223,6 +252,38 @@ async function mergeDuplicateStudentsByPhone(pool) {
       conn.release();
     }
   }
+  return mergedCount;
+}
+
+async function mergeDuplicateStudentsByPhone(pool) {
+  await syncStudentPhonesFromProfiles(pool);
+
+  const [userGroups] = await pool.query(
+    `SELECT TRIM(phone) AS phone, LOWER(TRIM(fullname)) AS normalized_name,
+            GROUP_CONCAT(id ORDER BY id) AS ids,
+            COUNT(*) AS cnt
+     FROM users
+     WHERE role = 'student'
+       AND phone IS NOT NULL
+       AND TRIM(phone) != ''
+     GROUP BY TRIM(phone), LOWER(TRIM(fullname))
+     HAVING cnt > 1`
+  );
+
+  const [profileGroups] = await pool.query(
+    `SELECT TRIM(tp.phone) AS phone, LOWER(TRIM(tp.fullname)) AS normalized_name,
+            GROUP_CONCAT(DISTINCT tp.user_id ORDER BY tp.user_id) AS ids,
+            COUNT(DISTINCT tp.user_id) AS cnt
+     FROM tuition_profiles tp
+     JOIN users u ON u.id = tp.user_id AND u.role = 'student'
+     WHERE tp.phone IS NOT NULL
+       AND TRIM(tp.phone) != ''
+     GROUP BY TRIM(tp.phone), LOWER(TRIM(tp.fullname))
+     HAVING cnt > 1`
+  );
+
+  const groups = collectDuplicateGroups([...userGroups, ...profileGroups]);
+  return mergeDuplicateStudentGroups(pool, groups);
 }
 
 module.exports = {
@@ -231,5 +292,6 @@ module.exports = {
   findUserIdByStudentCode,
   findExistingStudentByPhone,
   resolveStudentUserForEnrollment,
+  mergeStudentUsers,
   mergeDuplicateStudentsByPhone,
 };

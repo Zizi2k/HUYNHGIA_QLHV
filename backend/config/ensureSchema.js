@@ -198,13 +198,15 @@ async function ensureSchema() {
       )`
     );
     const [[mergeFlag]] = await pool.query(
-      `SELECT meta_value FROM app_meta WHERE meta_key = 'student_phone_merge_v1'`
+      `SELECT meta_value FROM app_meta WHERE meta_key = 'student_phone_merge_v2'`
     );
     if (!mergeFlag) {
       const { mergeDuplicateStudentsByPhone } = require('../utils/studentIdentity');
-      await mergeDuplicateStudentsByPhone(pool);
+      const merged = await mergeDuplicateStudentsByPhone(pool);
+      console.log(`student phone merge v2: merged ${merged} duplicate account(s)`);
       await pool.query(
-        `INSERT INTO app_meta (meta_key, meta_value) VALUES ('student_phone_merge_v1', 'done')`
+        `INSERT INTO app_meta (meta_key, meta_value) VALUES ('student_phone_merge_v2', 'done')
+         ON DUPLICATE KEY UPDATE meta_value = 'done'`
       );
     }
   } catch (mergeErr) {
