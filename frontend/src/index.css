@@ -454,61 +454,6 @@ svg {
   box-shadow: 0 8px 32px rgba(37, 99, 235, 0.08);
 }
 
-.module-hero-decor {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  overflow: hidden;
-}
-
-.module-hero-decor-item {
-  position: absolute;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 16px;
-  background: rgba(255, 255, 255, 0.55);
-  box-shadow: 0 8px 24px rgba(37, 99, 235, 0.1);
-  color: #3b82f6;
-  font-size: 1.5rem;
-}
-
-.module-hero-decor-item--1 {
-  width: 56px;
-  height: 56px;
-  top: 18%;
-  right: 12%;
-  transform: rotate(-8deg);
-}
-
-.module-hero-decor-item--2 {
-  width: 48px;
-  height: 48px;
-  top: 42%;
-  right: 22%;
-  font-size: 1.25rem;
-  transform: rotate(6deg);
-}
-
-.module-hero-decor-item--3 {
-  width: 52px;
-  height: 52px;
-  top: 22%;
-  right: 28%;
-  font-size: 1.35rem;
-  transform: rotate(-4deg);
-}
-
-.module-hero-decor-item--4 {
-  width: 44px;
-  height: 44px;
-  top: 50%;
-  right: 8%;
-  color: #f59e0b;
-  font-size: 1.2rem;
-  transform: rotate(12deg);
-}
-
 .module-hero-content {
   position: relative;
   z-index: 1;
@@ -885,10 +830,6 @@ svg {
 
   .module-hero {
     padding: 1.25rem 1.15rem;
-  }
-
-  .module-hero-decor-item {
-    opacity: 0.45;
   }
 
   .module-tab-content {
