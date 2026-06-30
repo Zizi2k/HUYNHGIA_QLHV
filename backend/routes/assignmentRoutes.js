@@ -1,7 +1,7 @@
 const express = require('express');
 const {
   getAssignments, createAssignment, updateAssignment, deleteAssignment,
-  uploadSubmission, getSubmissions, gradeSubmission,
+  uploadSubmission, getSubmissions, gradeSubmission, setAssignmentVisibility,
 } = require('../controllers/assignmentController');
 const { authenticate, authorize } = require('../middleware/auth');
 const { uploadMemory } = require('../middleware/upload');
@@ -25,6 +25,7 @@ router.get('/', getAssignments);
 router.post('/', authorize('admin', 'teacher'), withOptionalUpload(createAssignment));
 router.post('/upload', authorize('student'), uploadMemory.single('file'), uploadSubmission);
 router.put('/submissions/:id/grade', authorize('admin', 'teacher'), gradeSubmission);
+router.patch('/:id/visibility', authorize('admin', 'teacher'), setAssignmentVisibility);
 router.get('/:id/submissions', authorize('admin', 'teacher'), getSubmissions);
 router.put('/:id', authorize('admin', 'teacher'), withOptionalUpload(updateAssignment));
 router.delete('/:id', authorize('admin', 'teacher'), deleteAssignment);

@@ -12,9 +12,13 @@ import {
 } from '../../utils/fileTypes';
 
 import { API_BASE } from '../../config/apiBase';
+import {
+  appendVisibilityFields, getContentVisibilityStatus, toDatetimeLocalValue,
+} from '../../utils/contentVisibility';
 
 const emptyForm = {
   title: '', description: '', deadline: '',
+  visible_from: '', is_hidden: false,
   sourceType: 'none', file: null, linkUrl: '', removeAttachment: false,
 };
 
@@ -75,6 +79,8 @@ export default function ClassAssignmentsTab({
       title: a.title,
       description: a.description || '',
       deadline: a.deadline ? a.deadline.slice(0, 16) : '',
+      visible_from: toDatetimeLocalValue(a.visible_from),
+      is_hidden: a.is_hidden === 1 || a.is_hidden === true,
       sourceType: getAttachmentSourceType(a),
       linkUrl: isExternalLessonUrl(a.file_url) ? a.file_url : '',
       file: null,
@@ -148,7 +154,7 @@ export default function ClassAssignmentsTab({
           return;
         }
         if (form.sourceType === 'file' && !isLessonFileAllowed(form.file)) {
-          setError('Chỉ chấp nhận tệp PDF, Word, PowerPoint hoặc video');
+          setError('Chỉ chấp nhận tệp PDF, Word, Excel, PowerPoint hoặc video');
           return;
         }
       }
@@ -166,6 +172,7 @@ export default function ClassAssignmentsTab({
         description: form.description,
         deadline: form.deadline || null,
       };
+      appendVisibilityFields(base, form);
 
       if (form.sourceType === 'none') {
         const payload = editingId && form.existingFileUrl
@@ -181,6 +188,7 @@ export default function ClassAssignmentsTab({
         formData.append('title', form.title);
         formData.append('description', form.description || '');
         formData.append('deadline', form.deadline || '');
+        appendVisibilityFields(formData, form);
         formData.append('file', form.file);
         if (!editingId) formData.append('class_id', classId);
         if (editingId) {
@@ -226,6 +234,44 @@ export default function ClassAssignmentsTab({
       alert(err.response?.data?.message || 'Không thể xóa bài tập');
     }
   };
+
+  const handleToggleHide = async (assignment) => {
+    const hidden = assignment.is_hidden === 1 || assignment.is_hidden === true;
+    try {
+      await assignmentService.setVisibility(assignment.id, {
+        is_hidden: !hidden,
+        visible_from: assignment.visible_from || null,
+      });
+      onUpdated();
+    } catch (err) {
+      alert(err.response?.data?.message || 'Không thể cập nhật trạng thái hiển thị');
+    }
+  };
+
+  const renderVisibilityFields = () => (
+    <>
+      <Form.Group className="mb-3">
+        <Form.Label>Thời điểm hiển thị cho học sinh</Form.Label>
+        <Form.Control
+          type="datetime-local"
+          value={form.visible_from}
+          onChange={(e) => setForm({ ...form, visible_from: e.target.value })}
+        />
+        <Form.Text className="text-muted">
+          Để trống = hiển thị ngay (khi không bật ẩn). Học sinh chỉ thấy sau thời điểm này.
+        </Form.Text>
+      </Form.Group>
+      <Form.Group className="mb-3">
+        <Form.Check
+          type="switch"
+          id="assignment-hidden-switch"
+          label="Ẩn bài tập với học sinh"
+          checked={form.is_hidden}
+          onChange={(e) => setForm({ ...form, is_hidden: e.target.checked })}
+        />
+      </Form.Group>
+    </>
+  );
 
   const handleSubmitFile = async (assignmentId, file) => {
     if (!file) return;
@@ -327,7 +373,9 @@ export default function ClassAssignmentsTab({
       {assignments.length === 0 ? (
         <Alert variant="light">Chưa có bài tập nào.</Alert>
       ) : (
-        assignments.map((a) => (
+        assignments.map((a) => {
+          const visibility = getContentVisibilityStatus(a);
+          return (
           <Card key={a.id} className="mb-3 border-0 shadow-sm">
             <Card.Body>
               <div className="d-flex justify-content-between align-items-start gap-3">
@@ -336,6 +384,9 @@ export default function ClassAssignmentsTab({
                   {a.description && <p className="text-muted mb-2">{a.description}</p>}
                   {renderAttachment(a)}
                   <div className="d-flex flex-wrap gap-2 mt-2">
+                    {isTeacher && (
+                      <Badge bg={visibility.variant}>{visibility.label}</Badge>
+                    )}
                     {a.deadline && (
                       <Badge bg="warning" text="dark">
                         Hạn nộp: {new Date(a.deadline).toLocaleString('vi-VN')}
@@ -359,6 +410,14 @@ export default function ClassAssignmentsTab({
                 </div>
                 {isTeacher && (
                   <div className="d-flex gap-1 flex-shrink-0">
+                    <Button
+                      variant={a.is_hidden ? 'outline-success' : 'outline-warning'}
+                      size="sm"
+                      title={a.is_hidden ? 'Hiện cho học sinh' : 'Ẩn với học sinh'}
+                      onClick={() => handleToggleHide(a)}
+                    >
+                      <i className={`bi bi-${a.is_hidden ? 'eye' : 'eye-slash'}`} />
+                    </Button>
                     <Button variant="outline-success" size="sm" onClick={() => openGrade(a.id)}>
                       <i className="bi bi-check2-square" />
                     </Button>
@@ -379,7 +438,7 @@ export default function ClassAssignmentsTab({
                   </Form.Label>
                   <Form.Control
                     type="file"
-                    accept=".pdf,.doc,.docx,.zip,.ppt,.pptx,.jpg,.jpeg,.png"
+                    accept=".pdf,.doc,.docx,.xlsx,.xls,.zip,.ppt,.pptx,.jpg,.jpeg,.png"
                     disabled={submittingId === a.id}
                     onChange={(e) => handleSubmitFile(a.id, e.target.files[0])}
                   />
@@ -404,7 +463,8 @@ export default function ClassAssignmentsTab({
               )}
             </Card.Body>
           </Card>
-        ))
+          );
+        })
       )}
 
       <Modal
@@ -444,6 +504,8 @@ export default function ClassAssignmentsTab({
                 onChange={(e) => setForm({ ...form, deadline: e.target.value })}
               />
             </Form.Group>
+
+            {renderVisibilityFields()}
 
             <Form.Label className="fw-semibold">Đính kèm (tùy chọn)</Form.Label>
             <div className="d-flex flex-wrap gap-2 mb-3">

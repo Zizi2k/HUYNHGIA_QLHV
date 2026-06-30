@@ -1,7 +1,9 @@
 export const LESSON_FILE_ACCEPT =
-  '.pdf,.doc,.docx,.ppt,.pptx,.pps,.ppsx,.mp4,.avi,.mov,.wmv,.webm,.mkv,' +
+  '.pdf,.doc,.docx,.xlsx,.xls,.ppt,.pptx,.pps,.ppsx,.mp4,.avi,.mov,.wmv,.webm,.mkv,' +
   'application/pdf,application/msword,' +
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document,' +
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,' +
+  'application/vnd.ms-excel,' +
   'application/vnd.ms-powerpoint,' +
   'application/vnd.openxmlformats-officedocument.presentationml.presentation,' +
   'video/mp4,video/avi,video/quicktime,video/webm';
@@ -11,7 +13,7 @@ export const LESSON_IMAGE_ACCEPT =
   'image/jpeg,image/png,image/gif,image/webp,image/bmp,image/svg+xml';
 
 export const LESSON_FILE_EXTENSIONS = [
-  '.pdf', '.doc', '.docx', '.ppt', '.pptx', '.pps', '.ppsx',
+  '.pdf', '.doc', '.docx', '.xlsx', '.xls', '.ppt', '.pptx', '.pps', '.ppsx',
   '.mp4', '.avi', '.mov', '.wmv', '.webm', '.mkv',
 ];
 
@@ -46,6 +48,7 @@ export function getFileIcon(fileUrl) {
   if (['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'svg'].includes(ext)) return 'bi-image';
   if (ext === 'pdf') return 'bi-file-earmark-pdf';
   if (['doc', 'docx'].includes(ext)) return 'bi-file-earmark-word';
+  if (['xls', 'xlsx'].includes(ext)) return 'bi-file-earmark-excel';
   if (['ppt', 'pptx', 'pps', 'ppsx'].includes(ext)) return 'bi-file-earmark-ppt';
   if (['mp4', 'avi', 'mov', 'wmv', 'webm', 'mkv'].includes(ext)) return 'bi-file-earmark-play';
   return 'bi-file-earmark';

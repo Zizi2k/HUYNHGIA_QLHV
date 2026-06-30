@@ -213,6 +213,19 @@ async function ensureSchema() {
     console.warn('student phone merge:', mergeErr.message);
   }
 
+  for (const table of ['assignments', 'quizzes']) {
+    for (const col of [
+      'visible_from DATETIME NULL',
+      'is_hidden TINYINT(1) NOT NULL DEFAULT 0',
+    ]) {
+      try {
+        await pool.query(`ALTER TABLE ${table} ADD COLUMN ${col}`);
+      } catch (err) {
+        if (err.code !== 'ER_DUP_FIELDNAME') throw err;
+      }
+    }
+  }
+
   } catch (err) {
     console.warn('ensureSchema:', err.message);
   }

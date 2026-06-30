@@ -5,6 +5,9 @@ import {
 } from 'react-bootstrap';
 import { quizService } from '../../services';
 import { notifyDeleteResult } from '../../utils/deleteHelpers';
+import {
+  appendVisibilityFields, getContentVisibilityStatus, toDatetimeLocalValue,
+} from '../../utils/contentVisibility';
 
 const emptyQuestion = {
   question: '', optionA: '', optionB: '', optionC: '', optionD: '', answer: 'A', needsAnswerReview: false,
@@ -20,7 +23,10 @@ const mapImportedQuestion = (q) => ({
   needsAnswerReview: q.answerAutoDetected === false,
 });
 
-const emptyForm = { title: '', time_limit: 30, questions: [{ ...emptyQuestion }] };
+const emptyForm = {
+  title: '', time_limit: 30, visible_from: '', is_hidden: false,
+  questions: [{ ...emptyQuestion }],
+};
 
 export default function ClassQuizzesTab({
   classId, quizzes, isTeacher, isStudent, onUpdated,
@@ -76,6 +82,8 @@ export default function ClassQuizzesTab({
       setForm({
         title: data.title,
         time_limit: data.time_limit || 30,
+        visible_from: toDatetimeLocalValue(data.visible_from),
+        is_hidden: data.is_hidden === 1 || data.is_hidden === true,
         questions,
       });
       setShowForm(true);
@@ -111,21 +119,34 @@ export default function ClassQuizzesTab({
 
   const pendingReviewCount = form.questions.filter((q) => q.needsAnswerReview).length;
 
-  const handleDownloadTemplate = async () => {
+  const handleDownloadTemplate = async (format = 'docx') => {
     setDownloadingTemplate(true);
     setError('');
     try {
-      const res = await quizService.downloadImportTemplate();
+      const res = await quizService.downloadImportTemplate(format);
       const url = window.URL.createObjectURL(new Blob([res.data]));
       const link = document.createElement('a');
       link.href = url;
-      link.download = 'mau-trac-nghiem.docx';
+      link.download = format === 'xlsx' ? 'mau-trac-nghiem.xlsx' : 'mau-trac-nghiem.docx';
       link.click();
       window.URL.revokeObjectURL(url);
     } catch {
       setError('Không thể tải file mẫu');
     } finally {
       setDownloadingTemplate(false);
+    }
+  };
+
+  const handleToggleHide = async (quiz) => {
+    const hidden = quiz.is_hidden === 1 || quiz.is_hidden === true;
+    try {
+      await quizService.setVisibility(quiz.id, {
+        is_hidden: !hidden,
+        visible_from: quiz.visible_from || null,
+      });
+      onUpdated();
+    } catch (err) {
+      alert(err.response?.data?.message || 'Không thể cập nhật trạng thái hiển thị');
     }
   };
 
@@ -164,13 +185,14 @@ export default function ClassQuizzesTab({
     return true;
   };
 
-  const handleDocxImport = async (e) => {
+  const handleImportFile = async (e) => {
     const file = e.target.files?.[0];
     e.target.value = '';
     if (!file) return;
 
-    if (!file.name.toLowerCase().endsWith('.docx')) {
-      setError('Chỉ hỗ trợ file .docx (Word 2007 trở lên)');
+    const lower = file.name.toLowerCase();
+    if (!lower.endsWith('.docx') && !lower.endsWith('.xlsx') && !lower.endsWith('.xls')) {
+      setError('Chỉ hỗ trợ file .docx hoặc .xlsx');
       return;
     }
 
@@ -179,7 +201,7 @@ export default function ClassQuizzesTab({
     setImportInfo('');
     setImportWarning('');
     try {
-      const res = await quizService.parseDocx(file);
+      const res = await quizService.parseImportFile(file);
       const imported = (res.data.questions || []).map(mapImportedQuestion);
       if (!imported.length) {
         setError('Không nhận dạng được câu hỏi trong file');
@@ -210,7 +232,7 @@ export default function ClassQuizzesTab({
         );
       }
     } catch (err) {
-      setError(err.response?.data?.message || 'Không thể đọc file Word');
+      setError(err.response?.data?.message || 'Không thể đọc file Word/Excel');
     } finally {
       setImporting(false);
     }
@@ -237,6 +259,7 @@ export default function ClassQuizzesTab({
           answer: q.answer,
         })),
       };
+      appendVisibilityFields(payload, form);
       if (editingId) {
         await quizService.update(editingId, payload);
       } else {
@@ -273,12 +296,17 @@ export default function ClassQuizzesTab({
       {quizzes.length === 0 ? (
         <Alert variant="light">Chưa có bài kiểm tra nào.</Alert>
       ) : (
-        quizzes.map((q) => (
+        quizzes.map((q) => {
+          const visibility = getContentVisibilityStatus(q);
+          return (
           <Card key={q.id} className="mb-3 border-0 shadow-sm">
             <Card.Body className="d-flex justify-content-between align-items-center gap-3">
               <div>
                 <h5 className="mb-1">{q.title}</h5>
                 <div className="d-flex flex-wrap gap-2">
+                  {isTeacher && (
+                    <Badge bg={visibility.variant}>{visibility.label}</Badge>
+                  )}
                   <span className="text-muted small">
                     <i className="bi bi-clock me-1" />
                     {q.time_limit} phút
@@ -308,6 +336,14 @@ export default function ClassQuizzesTab({
                 {isTeacher && (
                   <>
                     <Button
+                      variant={q.is_hidden ? 'outline-success' : 'outline-warning'}
+                      size="sm"
+                      title={q.is_hidden ? 'Hiện cho học sinh' : 'Ẩn với học sinh'}
+                      onClick={() => handleToggleHide(q)}
+                    >
+                      <i className={`bi bi-${q.is_hidden ? 'eye' : 'eye-slash'}`} />
+                    </Button>
+                    <Button
                       variant="outline-primary"
                       size="sm"
                       onClick={() => openEditQuestions(q)}
@@ -330,7 +366,8 @@ export default function ClassQuizzesTab({
               </div>
             </Card.Body>
           </Card>
-        ))
+          );
+        })
       )}
 
       <Modal
@@ -372,6 +409,26 @@ export default function ClassQuizzesTab({
                     required
                   />
                 </Form.Group>
+                <Form.Group className="mb-3">
+                  <Form.Label>Thời điểm hiển thị cho học sinh</Form.Label>
+                  <Form.Control
+                    type="datetime-local"
+                    value={form.visible_from}
+                    onChange={(e) => setForm({ ...form, visible_from: e.target.value })}
+                  />
+                  <Form.Text className="text-muted">
+                    Để trống = hiển thị ngay (khi không bật ẩn).
+                  </Form.Text>
+                </Form.Group>
+                <Form.Group className="mb-4">
+                  <Form.Check
+                    type="switch"
+                    id="quiz-hidden-switch"
+                    label="Ẩn bài kiểm tra với học sinh"
+                    checked={form.is_hidden}
+                    onChange={(e) => setForm({ ...form, is_hidden: e.target.checked })}
+                  />
+                </Form.Group>
               </>
             )}
 
@@ -389,20 +446,29 @@ export default function ClassQuizzesTab({
                   variant="outline-secondary"
                   size="sm"
                   disabled={downloadingTemplate}
-                  onClick={handleDownloadTemplate}
+                  onClick={() => handleDownloadTemplate('docx')}
                 >
                   {downloadingTemplate ? (
                     <><Spinner size="sm" className="me-1" />Đang tải...</>
                   ) : (
-                    <><i className="bi bi-download me-1" />Tải file mẫu</>
+                    <><i className="bi bi-download me-1" />Mẫu Word</>
                   )}
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline-secondary"
+                  size="sm"
+                  disabled={downloadingTemplate}
+                  onClick={() => handleDownloadTemplate('xlsx')}
+                >
+                  <i className="bi bi-download me-1" />Mẫu Excel
                 </Button>
                 <input
                   ref={docxInputRef}
                   type="file"
-                  accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                  accept=".docx,.xlsx,.xls,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                   className="d-none"
-                  onChange={handleDocxImport}
+                  onChange={handleImportFile}
                 />
                 <Button
                   type="button"
@@ -414,7 +480,7 @@ export default function ClassQuizzesTab({
                   {importing ? (
                     <><Spinner size="sm" className="me-1" />Đang đọc file...</>
                   ) : (
-                    <><i className="bi bi-file-earmark-word me-1" />Import Word (.docx)</>
+                    <><i className="bi bi-upload me-1" />Import Word/Excel</>
                   )}
                 </Button>
                 <Button type="button" variant="outline-primary" size="sm" onClick={addQuestion}>
@@ -424,14 +490,12 @@ export default function ClassQuizzesTab({
             </div>
 
             <Alert variant="light" className="py-2 small mb-3">
-              <strong>Cách dùng:</strong> tải <strong>file mẫu</strong> để xem định dạng → soạn câu hỏi trong Word →{' '}
-              <strong>Import Word (.docx)</strong>.
+              <strong>Cách dùng:</strong> tải <strong>Mẫu Word</strong> hoặc <strong>Mẫu Excel</strong> → soạn câu hỏi →{' '}
+              <strong>Import Word/Excel</strong>.
               <ul className="mb-0 mt-2 ps-3">
-                <li>Mỗi câu: <code>Câu 1: Nội dung...</code>, rồi <code>A.</code> <code>B.</code> <code>C.</code> <code>D.</code></li>
-                <li>
-                  <span className="px-1 rounded" style={{ background: '#fff3cd' }}>Tô vàng</span> đáp án đúng → tự nhận
-                </li>
-                <li>Không tô vàng → sau import chọn <strong>Đáp án đúng</strong> thủ công trước khi lưu</li>
+                <li>Word: <code>Câu 1: ...</code>, <code>A.</code>–<code>D.</code>, tô vàng đáp án đúng (tùy chọn)</li>
+                <li>Excel: cột Câu hỏi | A | B | C | D | Đáp án đúng (A-D)</li>
+                <li>Sau import: kiểm tra/chọn <strong>Đáp án đúng</strong> thủ công nếu cần</li>
               </ul>
             </Alert>
 

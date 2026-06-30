@@ -296,4 +296,5 @@ module.exports = {
   parseQuizLines,
   extractParagraphLines,
   generateQuizSampleDocx,
+  finalizeQuestion,
 };

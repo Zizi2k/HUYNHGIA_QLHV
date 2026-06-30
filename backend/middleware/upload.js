@@ -8,7 +8,7 @@ if (!fs.existsSync(uploadDir)) {
 }
 
 const ALLOWED_EXTENSIONS = [
-  '.pdf', '.doc', '.docx', '.ppt', '.pptx', '.pps', '.ppsx',
+  '.pdf', '.doc', '.docx', '.xlsx', '.xls', '.ppt', '.pptx', '.pps', '.ppsx',
   '.mp4', '.avi', '.mov', '.wmv', '.webm', '.mkv',
   '.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.svg',
 ];
@@ -17,6 +17,8 @@ const ALLOWED_MIME_TYPES = [
   'application/pdf',
   'application/msword',
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'application/vnd.ms-excel',
   'application/vnd.ms-powerpoint',
   'application/vnd.openxmlformats-officedocument.presentationml.presentation',
   'application/vnd.openxmlformats-officedocument.presentationml.slideshow',

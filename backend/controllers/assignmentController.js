@@ -6,6 +6,7 @@ const { handleDeletion } = require('../utils/deletionPolicy');
 const { logAction } = require('../utils/auditLog');
 const { teachingStaffRoleSql } = require('../utils/teachingStaff');
 const { saveMulterFile } = require('../utils/fileStorage');
+const { studentVisibilityClause, parseVisibilityFields, isVisibleToStudent } = require('../utils/contentVisibility');
 
 function isValidUrl(url) {
   try {
@@ -66,7 +67,7 @@ const getAssignments = async (req, res) => {
           s.file_url AS submission_url
          FROM assignments a
          LEFT JOIN submissions s ON a.id = s.assignment_id AND s.student_id = ?
-         WHERE a.class_id = ?
+         WHERE a.class_id = ?${studentVisibilityClause('a')}
          ORDER BY a.created_at DESC`,
         [req.user.id, classId]
       );
@@ -108,11 +109,16 @@ const createAssignment = async (req, res) => {
     if (!(await assertClassAccess(req.user, class_id, res, { manage: true }))) return;
 
     const attachment = await resolveAttachment(req);
+    const visibility = parseVisibilityFields(req.body);
 
     const [result] = await pool.query(
-      `INSERT INTO assignments (class_id, title, description, file_url, file_type, deadline)
-       VALUES (?, ?, ?, ?, ?, ?)`,
-      [class_id, title.trim(), description || null, attachment.file_url, attachment.file_type, deadline || null]
+      `INSERT INTO assignments (class_id, title, description, file_url, file_type, deadline, visible_from, is_hidden)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        class_id, title.trim(), description || null,
+        attachment.file_url, attachment.file_type, deadline || null,
+        visibility.visible_from, visibility.is_hidden,
+      ]
     );
     await logAction({
       actorId: req.user.id,
@@ -143,10 +149,14 @@ const updateAssignment = async (req, res) => {
     }
 
     const attachment = await resolveAttachment(req, existing[0]);
+    const visibility = parseVisibilityFields(req.body);
 
     const [result] = await pool.query(
-      `UPDATE assignments SET title=?, description=?, file_url=?, file_type=?, deadline=? WHERE id=?`,
-      [title, description || null, attachment.file_url, attachment.file_type, deadline || null, req.params.id]
+      `UPDATE assignments SET title=?, description=?, file_url=?, file_type=?, deadline=?, visible_from=?, is_hidden=? WHERE id=?`,
+      [
+        title, description || null, attachment.file_url, attachment.file_type,
+        deadline || null, visibility.visible_from, visibility.is_hidden, req.params.id,
+      ]
     );
     if (result.affectedRows === 0) {
       return res.status(404).json({ message: 'Không tìm thấy bài tập' });
@@ -200,6 +210,14 @@ const uploadSubmission = async (req, res) => {
       return res.status(404).json({ message: 'Không tìm thấy bài tập' });
     }
     if (!(await assertClassAccess(req.user, classId, res))) return;
+
+    const [assignmentRows] = await pool.query('SELECT * FROM assignments WHERE id = ?', [assignment_id]);
+    if (assignmentRows.length === 0) {
+      return res.status(404).json({ message: 'Không tìm thấy bài tập' });
+    }
+    if (req.user.role === 'student' && !isVisibleToStudent(assignmentRows[0])) {
+      return res.status(403).json({ message: 'Bài tập chưa được mở cho học sinh' });
+    }
 
     const saved = await saveMulterFile(req);
     const file_url = saved.file_url;
@@ -276,6 +294,32 @@ const gradeSubmission = async (req, res) => {
   }
 };
 
+const setAssignmentVisibility = async (req, res) => {
+  try {
+    const classId = await getAssignmentClassId(req.params.id);
+    if (!classId) {
+      return res.status(404).json({ message: 'Không tìm thấy bài tập' });
+    }
+    if (!(await assertClassAccess(req.user, classId, res, { manage: true }))) return;
+
+    const visibility = parseVisibilityFields(req.body);
+    const [result] = await pool.query(
+      'UPDATE assignments SET visible_from = ?, is_hidden = ? WHERE id = ?',
+      [visibility.visible_from, visibility.is_hidden, req.params.id]
+    );
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ message: 'Không tìm thấy bài tập' });
+    }
+    res.json({
+      message: visibility.is_hidden ? 'Đã ẩn bài tập' : 'Đã cập nhật hiển thị bài tập',
+      is_hidden: visibility.is_hidden,
+      visible_from: visibility.visible_from,
+    });
+  } catch (err) {
+    res.status(500).json({ message: 'Lỗi hệ thống', error: err.message });
+  }
+};
+
 module.exports = {
   getAssignments,
   createAssignment,
@@ -284,4 +328,5 @@ module.exports = {
   uploadSubmission,
   getSubmissions,
   gradeSubmission,
+  setAssignmentVisibility,
 };

@@ -4,6 +4,9 @@ const { handleDeletion } = require('../utils/deletionPolicy');
 const { logAction } = require('../utils/auditLog');
 const { teachingStaffRoleSql } = require('../utils/teachingStaff');
 const { parseQuizDocx, generateQuizSampleDocx } = require('../utils/quizDocxParser');
+const { parseQuizXlsx, generateQuizSampleXlsx } = require('../utils/quizXlsxParser');
+const { studentVisibilityClause, parseVisibilityFields, isVisibleToStudent } = require('../utils/contentVisibility');
+
 const getQuizzes = async (req, res) => {
   try {
     const classId = req.query.class_id;
@@ -16,7 +19,7 @@ const getQuizzes = async (req, res) => {
           qs.id AS submission_id, qs.score AS quiz_score, qs.submitted_at AS quiz_submitted_at
          FROM quizzes q
          LEFT JOIN quiz_submissions qs ON q.id = qs.quiz_id AND qs.student_id = ?
-         WHERE q.class_id = ?
+         WHERE q.class_id = ?${studentVisibilityClause('q')}
          ORDER BY q.created_at DESC`,
         [req.user.id, classId]
       );
@@ -58,6 +61,10 @@ const getQuizById = async (req, res) => {
 
     if (!(await assertClassAccess(req.user, quizzes[0].class_id, res))) return;
 
+    if (req.user.role === 'student' && !isVisibleToStudent(quizzes[0])) {
+      return res.status(404).json({ message: 'Không tìm thấy bài kiểm tra' });
+    }
+
     const isStudent = req.user.role === 'student';
     const fields = isStudent
       ? 'id, question, optionA, optionB, optionC, optionD'
@@ -92,11 +99,12 @@ const createQuiz = async (req, res) => {
     }
     if (!(await assertClassAccess(req.user, class_id, res, { manage: true }))) return;
 
+    const visibility = parseVisibilityFields(req.body);
     await conn.beginTransaction();
 
     const [result] = await conn.query(
-      'INSERT INTO quizzes (class_id, title, time_limit) VALUES (?, ?, ?)',
-      [class_id, title, time_limit || 30]
+      'INSERT INTO quizzes (class_id, title, time_limit, visible_from, is_hidden) VALUES (?, ?, ?, ?, ?)',
+      [class_id, title, time_limit || 30, visibility.visible_from, visibility.is_hidden]
     );
     const quizId = result.insertId;
 
@@ -140,11 +148,12 @@ const updateQuiz = async (req, res) => {
       return res.status(400).json({ message: 'Vui lòng thêm ít nhất 1 câu hỏi' });
     }
 
+    const visibility = parseVisibilityFields(req.body);
     await conn.beginTransaction();
 
     const [updated] = await conn.query(
-      'UPDATE quizzes SET title=?, time_limit=? WHERE id=?',
-      [title, time_limit || 30, req.params.id]
+      'UPDATE quizzes SET title=?, time_limit=?, visible_from=?, is_hidden=? WHERE id=?',
+      [title, time_limit || 30, visibility.visible_from, visibility.is_hidden, req.params.id]
     );
     if (updated.affectedRows === 0) {
       await conn.rollback();
@@ -252,6 +261,14 @@ const submitQuiz = async (req, res) => {
     }
     if (!(await assertClassAccess(req.user, classId, res))) return;
 
+    const [quizRows] = await pool.query('SELECT * FROM quizzes WHERE id = ?', [quiz_id]);
+    if (quizRows.length === 0) {
+      return res.status(404).json({ message: 'Không tìm thấy bài kiểm tra' });
+    }
+    if (req.user.role === 'student' && !isVisibleToStudent(quizRows[0])) {
+      return res.status(403).json({ message: 'Bài kiểm tra chưa được mở cho học sinh' });
+    }
+
     const [existing] = await conn.query(
       'SELECT id, score FROM quiz_submissions WHERE quiz_id = ? AND student_id = ?',
       [quiz_id, student_id]
@@ -298,20 +315,28 @@ const submitQuiz = async (req, res) => {
   }
 };
 
-const importQuizDocx = async (req, res) => {
+const importQuizFile = async (req, res) => {
   try {
     if (!req.file?.buffer?.length) {
-      return res.status(400).json({ message: 'Vui lòng chọn file Word (.docx)' });
+      return res.status(400).json({ message: 'Vui lòng chọn file Word hoặc Excel' });
     }
-    const ext = (req.file.originalname || '').toLowerCase();
-    if (!ext.endsWith('.docx')) {
-      return res.status(400).json({ message: 'Chỉ hỗ trợ file .docx (Word 2007 trở lên)' });
+    const name = (req.file.originalname || '').toLowerCase();
+    let questions;
+    let sourceLabel = 'file';
+
+    if (name.endsWith('.docx')) {
+      questions = await parseQuizDocx(req.file.buffer);
+      sourceLabel = 'Word';
+    } else if (name.endsWith('.xlsx') || name.endsWith('.xls')) {
+      questions = await parseQuizXlsx(req.file.buffer);
+      sourceLabel = 'Excel';
+    } else {
+      return res.status(400).json({ message: 'Chỉ hỗ trợ file .docx hoặc .xlsx' });
     }
 
-    const questions = await parseQuizDocx(req.file.buffer);
     const autoCount = questions.filter((q) => q.answerAutoDetected).length;
     const manualCount = questions.length - autoCount;
-    let message = `Đã import ${questions.length} câu hỏi từ file Word`;
+    let message = `Đã import ${questions.length} câu hỏi từ file ${sourceLabel}`;
     if (manualCount > 0) {
       message += ` (${autoCount} tự nhận đáp án, ${manualCount} cần chọn đáp án thủ công)`;
     }
@@ -323,12 +348,26 @@ const importQuizDocx = async (req, res) => {
       manualCount,
     });
   } catch (err) {
-    res.status(400).json({ message: err.message || 'Không thể đọc file Word' });
+    res.status(400).json({ message: err.message || 'Không thể đọc file' });
   }
 };
 
-const getQuizImportTemplate = async (_req, res) => {
+const getQuizImportTemplate = async (req, res) => {
   try {
+    const format = (req.query.format || 'docx').toLowerCase();
+    if (format === 'xlsx') {
+      const buffer = generateQuizSampleXlsx();
+      res.setHeader(
+        'Content-Type',
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      );
+      res.setHeader(
+        'Content-Disposition',
+        'attachment; filename="mau-trac-nghiem.xlsx"',
+      );
+      return res.send(buffer);
+    }
+
     const buffer = await generateQuizSampleDocx();
     res.setHeader(
       'Content-Type',
@@ -344,6 +383,32 @@ const getQuizImportTemplate = async (_req, res) => {
   }
 };
 
+const setQuizVisibility = async (req, res) => {
+  try {
+    const classId = await getQuizClassId(req.params.id);
+    if (!classId) {
+      return res.status(404).json({ message: 'Không tìm thấy bài kiểm tra' });
+    }
+    if (!(await assertClassAccess(req.user, classId, res, { manage: true }))) return;
+
+    const visibility = parseVisibilityFields(req.body);
+    const [result] = await pool.query(
+      'UPDATE quizzes SET visible_from = ?, is_hidden = ? WHERE id = ?',
+      [visibility.visible_from, visibility.is_hidden, req.params.id]
+    );
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ message: 'Không tìm thấy bài kiểm tra' });
+    }
+    res.json({
+      message: visibility.is_hidden ? 'Đã ẩn bài kiểm tra' : 'Đã cập nhật hiển thị bài kiểm tra',
+      is_hidden: visibility.is_hidden,
+      visible_from: visibility.visible_from,
+    });
+  } catch (err) {
+    res.status(500).json({ message: 'Lỗi hệ thống', error: err.message });
+  }
+};
+
 module.exports = {
   getQuizzes,
   getQuizById,
@@ -352,6 +417,7 @@ module.exports = {
   deleteQuiz,
   getQuizSubmissions,
   submitQuiz,
-  importQuizDocx,
+  importQuizFile,
   getQuizImportTemplate,
+  setQuizVisibility,
 };

@@ -49,6 +49,7 @@ export const assignmentService = {
   upload: (formData) => api.post('/assignments/upload', formData),
   getSubmissions: (assignmentId) => api.get(`/assignments/${assignmentId}/submissions`),
   grade: (id, data) => api.put(`/assignments/submissions/${id}/grade`, data),
+  setVisibility: (id, data) => api.patch(`/assignments/${id}/visibility`, data),
 };
 
 export const quizService = {
@@ -59,14 +60,18 @@ export const quizService = {
   delete: (id) => api.delete(`/quizzes/${id}`),
   getSubmissions: (quizId) => api.get(`/quizzes/${quizId}/submissions`),
   submit: (data) => api.post('/quizzes/submit', data),
-  parseDocx: (file) => {
+  parseImportFile: (file) => {
     const formData = new FormData();
     formData.append('file', file);
     return api.post('/quizzes/parse-docx', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
     });
   },
-  downloadImportTemplate: () => api.get('/quizzes/import-template', { responseType: 'blob' }),
+  downloadImportTemplate: (format = 'docx') => api.get('/quizzes/import-template', {
+    params: { format },
+    responseType: 'blob',
+  }),
+  setVisibility: (id, data) => api.patch(`/quizzes/${id}/visibility`, data),
 };
 
 export const discussionService = {
