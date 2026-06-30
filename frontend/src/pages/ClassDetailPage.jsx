@@ -19,6 +19,7 @@ import ClassQuizzesTab from '../components/class/ClassQuizzesTab';
 import ClassOnlineTab from '../components/class/ClassOnlineTab';
 import { notifyDeleteResult } from '../utils/deleteHelpers';
 import { canActAsClassTeacher } from '../utils/roles';
+import { getAvatarUrl } from '../utils/avatar';
 
 import { API_BASE } from '../config/apiBase';
 
@@ -49,6 +50,27 @@ export default function ClassDetailPage() {
   const canManageClass = isAdmin || isClassTeacher;
   const isStudent = user?.role === 'student';
   const classStudents = classData?.members?.filter((m) => m.role === 'student') || [];
+  const primaryTeacher = useMemo(() => {
+    const staff = classData?.members?.filter((m) => m.role === 'teacher' || m.role === 'admin') || [];
+    return staff.find((m) => m.avatar_url) || staff[0] || null;
+  }, [classData?.members]);
+
+  const handleClassAvatarUpload = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file || !isLessonImageAllowed(file)) {
+      alert('Chỉ chấp nhận ảnh JPG, PNG, GIF hoặc WEBP');
+      return;
+    }
+    try {
+      const fd = new FormData();
+      fd.append('avatar', file);
+      await classService.uploadAvatar(id, fd);
+      await loadData();
+    } catch (err) {
+      alert(err.response?.data?.message || 'Không thể tải ảnh lớp');
+    }
+  };
 
   const fetchClassData = async () => {
     setAccessError('');
@@ -274,13 +296,73 @@ export default function ClassDetailPage() {
 
   return (
     <div className="page-container">
-      <h2 className="mb-1 text-break">
-        {classData.name}
-        {refreshing && (
-          <Spinner animation="border" size="sm" className="ms-2 align-middle" />
-        )}
-      </h2>
-      <p className="text-muted mb-4 text-break">{classData.description}</p>
+      <div className="class-detail-header mb-4">
+        <div className="class-detail-header-text">
+          <h2 className="mb-1 text-break">
+            {classData.name}
+            {refreshing && (
+              <Spinner animation="border" size="sm" className="ms-2 align-middle" />
+            )}
+          </h2>
+          <p className="text-muted mb-0 text-break">{classData.description}</p>
+        </div>
+        <div className="class-card-visual class-detail-header-visual">
+          <div className="class-card-avatar class-card-avatar--class">
+            <div className="class-card-avatar-ring">
+              {classData.avatar_url ? (
+                <img
+                  src={getAvatarUrl(classData.avatar_url)}
+                  alt={classData.name}
+                  className="class-card-avatar-img"
+                />
+              ) : (
+                <div className="class-card-avatar-fallback">
+                  <i className="bi bi-mortarboard" />
+                </div>
+              )}
+            </div>
+            <span className="class-card-avatar-label">Lớp học</span>
+            {canManageClass && (
+              <>
+                <input
+                  id="class-avatar-upload"
+                  type="file"
+                  accept={LESSON_IMAGE_ACCEPT}
+                  className="d-none"
+                  onChange={handleClassAvatarUpload}
+                />
+                <Button
+                  as="label"
+                  htmlFor="class-avatar-upload"
+                  variant="link"
+                  size="sm"
+                  className="p-0 text-decoration-none small"
+                >
+                  Đổi ảnh lớp
+                </Button>
+              </>
+            )}
+          </div>
+          {primaryTeacher && (
+            <div className="class-card-avatar class-card-avatar--teacher">
+              <div className="class-card-avatar-ring">
+                {primaryTeacher.avatar_url ? (
+                  <img
+                    src={getAvatarUrl(primaryTeacher.avatar_url)}
+                    alt={primaryTeacher.fullname}
+                    className="class-card-avatar-img"
+                  />
+                ) : (
+                  <div className="class-card-avatar-fallback">
+                    {primaryTeacher.fullname?.charAt(0) || 'G'}
+                  </div>
+                )}
+              </div>
+              <span className="class-card-avatar-label">Giáo viên</span>
+            </div>
+          )}
+        </div>
+      </div>
 
       <Tab.Container activeKey={activeTab} onSelect={(k) => setActiveTab(k || 'lessons')}>
         <Nav variant="tabs" className="mb-3 app-nav-tabs-scroll flex-nowrap">

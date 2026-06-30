@@ -1,13 +1,15 @@
 import { useEffect, useState, useCallback } from 'react';
-import { Row, Col, Card, Button, Modal, Form, Spinner, Alert, InputGroup, ButtonGroup } from 'react-bootstrap';
-import { Link } from 'react-router-dom';
+import { Row, Col, Button, Modal, Form, Spinner, Alert, InputGroup, ButtonGroup } from 'react-bootstrap';
 import { classService } from '../services';
 import { useAuth } from '../context/AuthContext';
 import PageHeader from '../components/layout/PageHeader';
+import ClassCard from '../components/class/ClassCard';
 import { SUBJECT_OPTIONS } from '../components/tuition/tuitionConstants';
 import { isSuperAdmin } from '../utils/adminScope';
+import { getAvatarUrl } from '../utils/avatar';
+import { LESSON_IMAGE_ACCEPT, isLessonImageAllowed } from '../utils/fileTypes';
 
-const emptyForm = { name: '', description: '', subject: '' };
+const emptyForm = { name: '', description: '', subject: '', avatarFile: null };
 
 const PREFIX_OPTIONS = [
   { value: '', label: 'Tất cả' },
@@ -27,6 +29,7 @@ export default function ClassesPage() {
   const [showModal, setShowModal] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [form, setForm] = useState(emptyForm);
+  const [avatarPreview, setAvatarPreview] = useState(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
@@ -60,6 +63,7 @@ export default function ClassesPage() {
   const openCreateModal = () => {
     setEditingId(null);
     setForm(emptyForm);
+    setAvatarPreview(null);
     setError('');
     setShowModal(true);
   };
@@ -70,7 +74,9 @@ export default function ClassesPage() {
       name: cls.name,
       description: cls.description || '',
       subject: cls.subject || '',
+      avatarFile: null,
     });
+    setAvatarPreview(cls.avatar_url ? getAvatarUrl(cls.avatar_url) : null);
     setError('');
     setShowModal(true);
   };
@@ -79,7 +85,20 @@ export default function ClassesPage() {
     setShowModal(false);
     setEditingId(null);
     setForm(emptyForm);
+    setAvatarPreview(null);
     setError('');
+  };
+
+  const handleAvatarChange = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!isLessonImageAllowed(file)) {
+      setError('Chỉ chấp nhận ảnh JPG, PNG, GIF hoặc WEBP');
+      return;
+    }
+    setError('');
+    setForm({ ...form, avatarFile: file });
+    setAvatarPreview(URL.createObjectURL(file));
   };
 
   const handleSubmit = async (e) => {
@@ -89,8 +108,18 @@ export default function ClassesPage() {
     try {
       if (editingId) {
         await classService.update(editingId, form);
+        if (form.avatarFile) {
+          const fd = new FormData();
+          fd.append('avatar', form.avatarFile);
+          await classService.uploadAvatar(editingId, fd);
+        }
       } else {
-        await classService.create(form);
+        const res = await classService.create(form);
+        if (form.avatarFile && res.data?.id) {
+          const fd = new FormData();
+          fd.append('avatar', form.avatarFile);
+          await classService.uploadAvatar(res.data.id, fd);
+        }
       }
       closeModal();
       loadClasses();
@@ -194,53 +223,12 @@ export default function ClassesPage() {
         <Row className="g-3">
           {classes.map((cls) => (
             <Col md={4} key={cls.id}>
-              <Card className="h-100 border-0 shadow-sm">
-                <Card.Body>
-                  <div className="d-flex justify-content-between align-items-start gap-2">
-                    <div>
-                      <h5 className="mb-1 text-break">{cls.name}</h5>
-                      {cls.code && (
-                        <span className="badge bg-secondary bg-opacity-10 text-secondary mb-2">{cls.code}</span>
-                      )}
-                    </div>
-                    {canManage && (
-                      <div className="d-flex gap-1 flex-shrink-0">
-                        <Button
-                          variant="outline-secondary"
-                          size="sm"
-                          title="Sửa lớp học"
-                          onClick={() => openEditModal(cls)}
-                        >
-                          <i className="bi bi-pencil" />
-                        </Button>
-                        <Button
-                          variant="outline-danger"
-                          size="sm"
-                          title="Xóa lớp học"
-                          onClick={() => handleDelete(cls)}
-                        >
-                          <i className="bi bi-trash" />
-                        </Button>
-                      </div>
-                    )}
-                  </div>
-                  <p className="text-muted mb-2">{cls.description || '—'}</p>
-                  {cls.teacher_names && (
-                    <p className="small text-muted mb-2">
-                      <i className="bi bi-person-workspace me-1" />
-                      GV: {cls.teacher_names}
-                    </p>
-                  )}
-                  <span className="badge bg-primary bg-opacity-10 text-primary">
-                    {cls.member_count} thành viên
-                  </span>
-                </Card.Body>
-                <Card.Footer className="bg-white border-0">
-                  <Button as={Link} to={`/classes/${cls.id}`} variant="outline-primary" size="sm">
-                    Vào lớp học
-                  </Button>
-                </Card.Footer>
-              </Card>
+              <ClassCard
+                cls={cls}
+                canManage={canManage}
+                onEdit={openEditModal}
+                onDelete={handleDelete}
+              />
             </Col>
           ))}
         </Row>
@@ -276,6 +264,28 @@ export default function ClassesPage() {
               <Form.Text className="text-muted">
                 Dùng để tự sinh mã học viên và liên kết học phí khi thêm học viên.
               </Form.Text>
+            </Form.Group>
+            <Form.Group className="mb-3">
+              <Form.Label>Ảnh đại diện lớp học</Form.Label>
+              <div className="d-flex align-items-center gap-3">
+                <div className="class-card-avatar class-card-avatar--class class-card-avatar--preview">
+                  <div className="class-card-avatar-ring">
+                    {avatarPreview ? (
+                      <img src={avatarPreview} alt="Preview" className="class-card-avatar-img" />
+                    ) : (
+                      <div className="class-card-avatar-fallback">
+                        <i className="bi bi-mortarboard" />
+                      </div>
+                    )}
+                  </div>
+                </div>
+                <Form.Control
+                  type="file"
+                  accept={LESSON_IMAGE_ACCEPT}
+                  onChange={handleAvatarChange}
+                />
+              </div>
+              <Form.Text className="text-muted">JPG, PNG, GIF hoặc WEBP — tối đa 3MB</Form.Text>
             </Form.Group>
             <Form.Group>
               <Form.Label>Mô tả</Form.Label>

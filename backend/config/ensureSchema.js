@@ -272,6 +272,12 @@ async function ensureSchema() {
     }
   }
 
+  try {
+    await pool.query('ALTER TABLE classes ADD COLUMN avatar_url TEXT NULL');
+  } catch (err) {
+    if (err.code !== 'ER_DUP_FIELDNAME') throw err;
+  }
+
   } catch (err) {
     console.warn('ensureSchema:', err.message);
   }

@@ -20,6 +20,9 @@ export const classService = {
   getById: (id) => api.get(`/classes/${id}`),
   create: (data) => api.post('/classes', data),
   update: (id, data) => api.put(`/classes/${id}`, data),
+  uploadAvatar: (id, formData) => api.post(`/classes/${id}/avatar`, formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  }),
   delete: (id) => api.delete(`/classes/${id}`),
   addMember: (classId, userId) => api.post(`/classes/${classId}/members`, { user_id: userId }),
   createStudent: (classId, data) => api.post(`/classes/${classId}/students`, data),

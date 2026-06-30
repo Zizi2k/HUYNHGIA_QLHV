@@ -1,10 +1,11 @@
 const express = require('express');
 const {
-  getClasses, getClassById, createClass, updateClass, addMember, removeMember,
+  getClasses, getClassById, createClass, updateClass, uploadClassAvatar, addMember, removeMember,
   deleteClass, getAvailableStudents, createStudentMember, updateStudentMember, syncUsernames,
   getAvailableTeachers, addTeacher, removeTeacher, getNextStudentCodeForClass,
 } = require('../controllers/classController');
 const { importStudents, downloadTemplate } = require('../controllers/importController');
+const classAvatarUpload = require('../middleware/classAvatarUpload');
 const excelUpload = require('../middleware/excelUpload');
 const { authenticate, authorize } = require('../middleware/auth');
 const { requireClassMember, requireClassTeacher } = require('../middleware/classAccess');
@@ -34,6 +35,7 @@ router.post('/:id/teachers', authorize('admin'), addTeacher);
 router.delete('/:id/teachers/:userId', authorize('admin'), removeTeacher);
 
 router.get('/:id', requireClassMember('id'), getClassById);
+router.post('/:id/avatar', authorize('admin', 'teacher'), classAvatarUpload.single('avatar'), uploadClassAvatar);
 router.put('/:id', authorize('admin'), updateClass);
 router.delete('/:id', authorize('admin'), deleteClass);
 

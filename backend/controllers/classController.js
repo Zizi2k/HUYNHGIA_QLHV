@@ -94,13 +94,22 @@ const getClasses = async (req, res) => {
       WHERE cm_t.class_id = c.id AND (${teachingStaffRoleSql('u_t')})
     ) AS teacher_names`;
 
+    const teacherAvatarSelect = `(
+      SELECT u_t.avatar_url
+      FROM class_members cm_t
+      JOIN users u_t ON cm_t.user_id = u_t.id
+      WHERE cm_t.class_id = c.id AND (${teachingStaffRoleSql('u_t')})
+      ORDER BY (u_t.avatar_url IS NOT NULL AND u_t.avatar_url != '') DESC, u_t.fullname
+      LIMIT 1
+    ) AS teacher_avatar_url`;
+
     let query;
     let params = [];
 
     if (req.user.role === 'admin') {
       if (prefix) {
         query = `
-          SELECT c.*, ${teacherNamesSelect},
+          SELECT c.*, ${teacherNamesSelect}, ${teacherAvatarSelect},
             (SELECT COUNT(*) FROM class_members cm2
              JOIN users u2 ON cm2.user_id = u2.id
              WHERE cm2.class_id = c.id AND u2.role = 'student' AND UPPER(u2.code) LIKE ?) AS member_count
@@ -110,7 +119,7 @@ const getClasses = async (req, res) => {
         params = [`${prefix}%`, ...filterParams];
       } else {
         query = `
-          SELECT c.*, ${teacherNamesSelect}, COUNT(cm.id) AS member_count
+          SELECT c.*, ${teacherNamesSelect}, ${teacherAvatarSelect}, COUNT(cm.id) AS member_count
           FROM classes c
           LEFT JOIN class_members cm ON c.id = cm.class_id
           WHERE 1=1${filterClause}
@@ -119,7 +128,7 @@ const getClasses = async (req, res) => {
       }
     } else {
       query = `
-        SELECT c.*, ${teacherNamesSelect},
+        SELECT c.*, ${teacherNamesSelect}, ${teacherAvatarSelect},
           (SELECT COUNT(*) FROM class_members cm2
            JOIN users u2 ON cm2.user_id = u2.id
            WHERE cm2.class_id = c.id AND u2.role = 'student'${prefix ? ' AND UPPER(u2.code) LIKE ?' : ''}) AS member_count
@@ -196,6 +205,21 @@ const updateClass = async (req, res) => {
       resourceLabel: name,
     });
     res.json({ message: 'Cập nhật thành công' });
+  } catch (err) {
+    res.status(500).json({ message: 'Lỗi hệ thống', error: err.message });
+  }
+};
+
+const uploadClassAvatar = async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ message: 'Vui lòng chọn ảnh đại diện lớp' });
+    }
+    if (!(await assertClassAccess(req.user, req.params.id, res, { manage: true }))) return;
+
+    const avatarUrl = `/uploads/class-avatars/${req.file.filename}`;
+    await pool.query('UPDATE classes SET avatar_url = ? WHERE id = ?', [avatarUrl, req.params.id]);
+    res.json({ message: 'Đã cập nhật ảnh lớp học', avatar_url: avatarUrl });
   } catch (err) {
     res.status(500).json({ message: 'Lỗi hệ thống', error: err.message });
   }
@@ -668,7 +692,7 @@ const removeTeacher = async (req, res) => {
 };
 
 module.exports = {
-  getClasses, getClassById, createClass, updateClass, addMember, removeMember,
+  getClasses, getClassById, createClass, updateClass, uploadClassAvatar, addMember, removeMember,
   deleteClass, getAvailableStudents, createStudentMember, updateStudentMember, syncUsernames,
   getAvailableTeachers, addTeacher, removeTeacher, getNextStudentCodeForClass,
 };
