@@ -2,7 +2,7 @@ const express = require('express');
 const {
   getClasses, getClassById, createClass, updateClass, uploadClassAvatar, addMember, removeMember,
   deleteClass, getAvailableStudents, createStudentMember, updateStudentMember, syncUsernames,
-  getAvailableTeachers, addTeacher, removeTeacher, getNextStudentCodeForClass,
+  getAvailableTeachers, addTeacher, removeTeacher, getNextStudentCodeForClass, getShareTargetClasses,
 } = require('../controllers/classController');
 const { importStudents, downloadTemplate } = require('../controllers/importController');
 const classAvatarUpload = require('../middleware/classAvatarUpload');
@@ -14,6 +14,7 @@ const router = express.Router();
 
 router.use(authenticate);
 router.get('/', getClasses);
+router.get('/share-targets', authorize('admin', 'teacher'), getShareTargetClasses);
 router.post('/', authorize('admin'), createClass);
 
 router.get('/:id/available-teachers', authorize('admin'), getAvailableTeachers);

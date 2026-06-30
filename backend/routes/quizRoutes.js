@@ -4,6 +4,7 @@ const {
   getQuizSubmissions, submitQuiz, submitQuizAttachment, gradeQuizSubmission,
   importQuizFile, getQuizImportTemplate, setQuizVisibility,
 } = require('../controllers/quizController');
+const { shareQuiz, sendShareResult } = require('../utils/contentShare');
 const { authenticate, authorize } = require('../middleware/auth');
 const { uploadMemory } = require('../middleware/upload');
 
@@ -38,6 +39,14 @@ router.get('/', getQuizzes);
 router.get('/import-template', authorize('admin', 'teacher'), getQuizImportTemplate);
 router.post('/parse-docx', authorize('admin', 'teacher'), handleQuizImportUpload, importQuizFile);
 router.patch('/:id/visibility', authorize('admin', 'teacher'), setQuizVisibility);
+router.post('/:id/share', authorize('admin', 'teacher'), async (req, res) => {
+  try {
+    const result = await shareQuiz(req.user, req.params.id, req.body.target_class_ids);
+    return sendShareResult(res, result);
+  } catch (err) {
+    res.status(500).json({ message: 'Lỗi hệ thống', error: err.message });
+  }
+});
 router.post('/submit', authorize('student'), submitQuiz);
 router.post('/submit-attachment', authorize('student'), (req, res, next) => {
   const contentType = req.headers['content-type'] || '';

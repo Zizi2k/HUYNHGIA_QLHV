@@ -17,6 +17,7 @@ import ClassAttendanceTab from '../components/class/ClassAttendanceTab';
 import ClassAssignmentsTab from '../components/class/ClassAssignmentsTab';
 import ClassQuizzesTab from '../components/class/ClassQuizzesTab';
 import ClassOnlineTab from '../components/class/ClassOnlineTab';
+import ShareContentModal from '../components/class/ShareContentModal';
 import { notifyDeleteResult } from '../utils/deleteHelpers';
 import { ClassMediaTile } from '../components/class/ClassCard';
 import { canActAsClassTeacher } from '../utils/roles';
@@ -44,6 +45,7 @@ export default function ClassDetailPage() {
   const [uploadError, setUploadError] = useState('');
   const [accessError, setAccessError] = useState('');
   const [loadError, setLoadError] = useState('');
+  const [shareLessonTarget, setShareLessonTarget] = useState(null);
 
   const isAdmin = user?.role === 'admin';
   const isClassTeacher = canActAsClassTeacher(user, classData?.members);
@@ -269,6 +271,12 @@ export default function ClassDetailPage() {
     }
   };
 
+  const handleShareLesson = async (targetClassIds) => {
+    const res = await lessonService.share(shareLessonTarget.id, targetClassIds);
+    alert(res.data?.message || 'Chia sẻ thành công');
+    refreshData();
+  };
+
   const getLessonFileUrl = (fileUrl) => getLessonResourceUrl(fileUrl, API_BASE);
 
   if (loading) {
@@ -433,14 +441,24 @@ export default function ClassDetailPage() {
                         </Button>
                       )}
                       {canManageClass && (
-                        <Button
-                          variant="outline-danger"
-                          size="sm"
-                          onClick={() => handleDeleteLesson(lesson.id)}
-                          title="Xóa bài giảng"
-                        >
-                          <i className="bi bi-trash" />
-                        </Button>
+                        <>
+                          <Button
+                            variant="outline-secondary"
+                            size="sm"
+                            title="Chia sẻ sang lớp khác"
+                            onClick={() => setShareLessonTarget({ id: lesson.id, title: lesson.title })}
+                          >
+                            <i className="bi bi-share" />
+                          </Button>
+                          <Button
+                            variant="outline-danger"
+                            size="sm"
+                            onClick={() => handleDeleteLesson(lesson.id)}
+                            title="Xóa bài giảng"
+                          >
+                            <i className="bi bi-trash" />
+                          </Button>
+                        </>
                       )}
                     </div>
                   </ListGroup.Item>
@@ -737,6 +755,15 @@ export default function ClassDetailPage() {
           </Modal.Footer>
         </Form>
       </Modal>
+
+      <ShareContentModal
+        show={!!shareLessonTarget}
+        onHide={() => setShareLessonTarget(null)}
+        contentType="lesson"
+        contentTitle={shareLessonTarget?.title}
+        sourceClassId={Number(id)}
+        onShare={handleShareLesson}
+      />
     </div>
   );
 }

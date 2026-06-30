@@ -16,6 +16,7 @@ import {
   appendVisibilityFields, getContentVisibilityStatus, toDatetimeLocalValue,
 } from '../../utils/contentVisibility';
 import StudentWorkSubmission from './StudentWorkSubmission';
+import ShareContentModal from './ShareContentModal';
 
 const emptyForm = {
   title: '', description: '', deadline: '',
@@ -50,6 +51,7 @@ export default function ClassAssignmentsTab({
   const [submittingId, setSubmittingId] = useState(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [shareTarget, setShareTarget] = useState(null);
 
   const imagePreviewUrl = useMemo(() => {
     if (form.sourceType === 'image' && form.file) {
@@ -234,6 +236,12 @@ export default function ClassAssignmentsTab({
     } catch (err) {
       alert(err.response?.data?.message || 'Không thể xóa bài tập');
     }
+  };
+
+  const handleShare = async (targetClassIds) => {
+    const res = await assignmentService.share(shareTarget.id, targetClassIds);
+    alert(res.data?.message || 'Chia sẻ thành công');
+    onUpdated();
   };
 
   const handleToggleHide = async (assignment) => {
@@ -440,6 +448,14 @@ export default function ClassAssignmentsTab({
                     </Button>
                     <Button variant="outline-primary" size="sm" onClick={() => openEdit(a)}>
                       <i className="bi bi-pencil" />
+                    </Button>
+                    <Button
+                      variant="outline-secondary"
+                      size="sm"
+                      title="Chia sẻ sang lớp khác"
+                      onClick={() => setShareTarget({ id: a.id, title: a.title })}
+                    >
+                      <i className="bi bi-share" />
                     </Button>
                     <Button variant="outline-danger" size="sm" onClick={() => handleDelete(a.id, a.title)}>
                       <i className="bi bi-trash" />
@@ -727,6 +743,15 @@ export default function ClassAssignmentsTab({
           )}
         </Modal.Body>
       </Modal>
+
+      <ShareContentModal
+        show={!!shareTarget}
+        onHide={() => setShareTarget(null)}
+        contentType="assignment"
+        contentTitle={shareTarget?.title}
+        sourceClassId={classId}
+        onShare={handleShare}
+      />
     </>
   );
 }

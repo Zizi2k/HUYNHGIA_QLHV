@@ -17,6 +17,9 @@ export const userService = {
 
 export const classService = {
   getAll: (params) => api.get('/classes', { params: params || {} }),
+  getShareTargets: (excludeClassId) => api.get('/classes/share-targets', {
+    params: excludeClassId ? { exclude_class_id: excludeClassId } : {},
+  }),
   getById: (id) => api.get(`/classes/${id}`),
   create: (data) => api.post('/classes', data),
   update: (id, data) => api.put(`/classes/${id}`, data),
@@ -42,6 +45,7 @@ export const lessonService = {
   getByClass: (classId) => api.get(`/lessons/${classId}`),
   create: (classId, data) => api.post(`/lessons/${classId}`, data),
   delete: (id) => api.delete(`/lessons/${id}`),
+  share: (id, targetClassIds) => api.post(`/lessons/${id}/share`, { target_class_ids: targetClassIds }),
 };
 
 export const assignmentService = {
@@ -54,6 +58,7 @@ export const assignmentService = {
   getSubmissions: (assignmentId) => api.get(`/assignments/${assignmentId}/submissions`),
   grade: (id, data) => api.put(`/assignments/submissions/${id}/grade`, data),
   setVisibility: (id, data) => api.patch(`/assignments/${id}/visibility`, data),
+  share: (id, targetClassIds) => api.post(`/assignments/${id}/share`, { target_class_ids: targetClassIds }),
 };
 
 export const quizService = {
@@ -83,6 +88,7 @@ export const quizService = {
     responseType: 'blob',
   }),
   setVisibility: (id, data) => api.patch(`/quizzes/${id}/visibility`, data),
+  share: (id, targetClassIds) => api.post(`/quizzes/${id}/share`, { target_class_ids: targetClassIds }),
 };
 
 export const discussionService = {

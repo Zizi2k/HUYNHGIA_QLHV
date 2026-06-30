@@ -2,7 +2,7 @@ const pool = require('../config/db');
 const {
   buildStudentUsername, extractStudentNumber, ensureUniqueUsername, regenerateClassUsernames,
 } = require('../utils/username');
-const { assertClassAccess, isClassTeacher } = require('../middleware/classAccess');
+const { assertClassAccess, isClassTeacher, canManageClass } = require('../middleware/classAccess');
 const { parseAmount, SUBJECTS } = require('../utils/tuitionHelpers');
 const { getNextStudentCode, inferSubjectFromClassName, validateStudentCodeFormat } = require('../utils/studentCode');
 const {
@@ -691,8 +691,53 @@ const removeTeacher = async (req, res) => {
   }
 };
 
+const getShareTargetClasses = async (req, res) => {
+  try {
+    const excludeId = Number(req.query.exclude_class_id) || null;
+    const prefix = resolveCodePrefixFilter(req.user, req.query.prefix);
+    const scopeFilter = classScopeWhereSql(prefix);
+    const filterParams = [...scopeFilter.params];
+
+    let query;
+    let params = [];
+
+    if (req.user.role === 'admin') {
+      query = `
+        SELECT c.id, c.name, c.code
+        FROM classes c
+        WHERE 1=1${scopeFilter.sql}
+        ORDER BY c.name ASC`;
+      params = filterParams;
+    } else if (isTeachingStaffUser(req.user)) {
+      query = `
+        SELECT DISTINCT c.id, c.name, c.code
+        FROM classes c
+        INNER JOIN class_members cm ON c.id = cm.class_id AND cm.user_id = ?
+        WHERE 1=1${scopeFilter.sql}
+        ORDER BY c.name ASC`;
+      params = [req.user.id, ...filterParams];
+    } else {
+      return res.status(403).json({ message: 'Bạn không có quyền chia sẻ nội dung' });
+    }
+
+    const [rows] = await pool.query(query, params);
+    const targets = [];
+
+    for (const row of rows) {
+      if (excludeId && row.id === excludeId) continue;
+      if (await canManageClass(req.user, row.id)) {
+        targets.push(row);
+      }
+    }
+
+    res.json(targets);
+  } catch (err) {
+    res.status(500).json({ message: 'Lỗi hệ thống', error: err.message });
+  }
+};
+
 module.exports = {
   getClasses, getClassById, createClass, updateClass, uploadClassAvatar, addMember, removeMember,
   deleteClass, getAvailableStudents, createStudentMember, updateStudentMember, syncUsernames,
-  getAvailableTeachers, addTeacher, removeTeacher, getNextStudentCodeForClass,
+  getAvailableTeachers, addTeacher, removeTeacher, getNextStudentCodeForClass, getShareTargetClasses,
 };

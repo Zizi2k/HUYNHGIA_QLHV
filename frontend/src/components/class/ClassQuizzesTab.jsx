@@ -9,6 +9,7 @@ import {
   appendVisibilityFields, getContentVisibilityStatus, toDatetimeLocalValue,
 } from '../../utils/contentVisibility';
 import StudentWorkSubmission from './StudentWorkSubmission';
+import ShareContentModal from './ShareContentModal';
 import { getLessonResourceUrl } from '../../utils/fileTypes';
 import { API_BASE } from '../../config/apiBase';
 
@@ -50,6 +51,7 @@ export default function ClassQuizzesTab({
   const [importWarning, setImportWarning] = useState('');
   const [error, setError] = useState('');
   const [submittingId, setSubmittingId] = useState(null);
+  const [shareTarget, setShareTarget] = useState(null);
   const [gradeDrafts, setGradeDrafts] = useState({});
   const docxInputRef = useRef(null);
 
@@ -365,6 +367,12 @@ export default function ClassQuizzesTab({
     }
   };
 
+  const handleShare = async (targetClassIds) => {
+    const res = await quizService.share(shareTarget.id, targetClassIds);
+    alert(res.data?.message || 'Chia sẻ thành công');
+    onUpdated();
+  };
+
   return (
     <>
       {isTeacher && (
@@ -445,6 +453,14 @@ export default function ClassQuizzesTab({
                     </Button>
                     <Button variant="outline-secondary" size="sm" onClick={() => openEdit(q)} title="Sửa tiêu đề">
                       <i className="bi bi-gear" />
+                    </Button>
+                    <Button
+                      variant="outline-secondary"
+                      size="sm"
+                      title="Chia sẻ sang lớp khác"
+                      onClick={() => setShareTarget({ id: q.id, title: q.title })}
+                    >
+                      <i className="bi bi-share" />
                     </Button>
                     <Button variant="outline-danger" size="sm" onClick={() => handleDelete(q.id, q.title)}>
                       <i className="bi bi-trash" />
@@ -792,6 +808,15 @@ export default function ClassQuizzesTab({
           </Alert>
         </Modal.Body>
       </Modal>
+
+      <ShareContentModal
+        show={!!shareTarget}
+        onHide={() => setShareTarget(null)}
+        contentType="quiz"
+        contentTitle={shareTarget?.title}
+        sourceClassId={classId}
+        onShare={handleShare}
+      />
     </>
   );
 }
