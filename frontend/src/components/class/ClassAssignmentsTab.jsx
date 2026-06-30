@@ -15,6 +15,7 @@ import { API_BASE } from '../../config/apiBase';
 import {
   appendVisibilityFields, getContentVisibilityStatus, toDatetimeLocalValue,
 } from '../../utils/contentVisibility';
+import StudentWorkSubmission from './StudentWorkSubmission';
 
 const emptyForm = {
   title: '', description: '', deadline: '',
@@ -290,6 +291,22 @@ export default function ClassAssignmentsTab({
     }
   };
 
+  const handleSubmitLink = async (assignmentId, linkUrl) => {
+    setSubmittingId(assignmentId);
+    try {
+      await assignmentService.submitLink({
+        assignment_id: assignmentId,
+        link_url: linkUrl,
+      });
+      onUpdated();
+      alert('Nộp bài thành công!');
+    } catch (err) {
+      alert(err.response?.data?.message || 'Không thể nộp bài');
+    } finally {
+      setSubmittingId(null);
+    }
+  };
+
   const handleFileChange = (e) => {
     const file = e.target.files[0];
     const isImage = form.sourceType === 'image';
@@ -432,34 +449,14 @@ export default function ClassAssignmentsTab({
               </div>
 
               {isStudent && (
-                <div className="mt-3 pt-3 border-top">
-                  <Form.Label className="fw-semibold">
-                    {a.submission_id ? 'Nộp lại bài' : 'Nộp bài'}
-                  </Form.Label>
-                  <Form.Control
-                    type="file"
-                    accept=".pdf,.doc,.docx,.xlsx,.xls,.zip,.ppt,.pptx,.jpg,.jpeg,.png"
-                    disabled={submittingId === a.id}
-                    onChange={(e) => handleSubmitFile(a.id, e.target.files[0])}
-                  />
-                  {a.submission_url && (
-                    <div className="mt-2 small">
-                      <a
-                        href={getResourceUrl(a.submission_url)}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                      >
-                        <i className="bi bi-file-earmark me-1" />
-                        Xem bài đã nộp
-                      </a>
-                      {a.submitted_at && (
-                        <span className="text-muted ms-2">
-                          ({new Date(a.submitted_at).toLocaleString('vi-VN')})
-                        </span>
-                      )}
-                    </div>
-                  )}
-                </div>
+                <StudentWorkSubmission
+                  itemId={a.id}
+                  submitting={submittingId === a.id}
+                  submissionUrl={a.submission_url}
+                  submittedAt={a.submitted_at}
+                  onSubmitFile={handleSubmitFile}
+                  onSubmitLink={handleSubmitLink}
+                />
               )}
             </Card.Body>
           </Card>
@@ -679,7 +676,7 @@ export default function ClassAssignmentsTab({
                     <td>
                       {s.file_url ? (
                         <a href={getResourceUrl(s.file_url)} target="_blank" rel="noopener noreferrer">
-                          Tải về
+                          {/^https?:\/\//i.test(s.file_url) ? 'Mở link' : 'Tải về'}
                         </a>
                       ) : '—'}
                     </td>

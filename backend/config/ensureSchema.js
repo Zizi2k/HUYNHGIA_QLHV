@@ -226,6 +226,14 @@ async function ensureSchema() {
     }
   }
 
+  for (const col of ['file_url TEXT NULL', 'feedback TEXT NULL']) {
+    try {
+      await pool.query(`ALTER TABLE quiz_submissions ADD COLUMN ${col}`);
+    } catch (err) {
+      if (err.code !== 'ER_DUP_FIELDNAME') throw err;
+    }
+  }
+
   } catch (err) {
     console.warn('ensureSchema:', err.message);
   }

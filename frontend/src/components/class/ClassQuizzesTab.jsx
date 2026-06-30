@@ -8,6 +8,9 @@ import { notifyDeleteResult } from '../../utils/deleteHelpers';
 import {
   appendVisibilityFields, getContentVisibilityStatus, toDatetimeLocalValue,
 } from '../../utils/contentVisibility';
+import StudentWorkSubmission from './StudentWorkSubmission';
+import { getLessonResourceUrl } from '../../utils/fileTypes';
+import { API_BASE } from '../../config/apiBase';
 
 const emptyQuestion = {
   question: '', optionA: '', optionB: '', optionC: '', optionD: '', answer: 'A', needsAnswerReview: false,
@@ -38,6 +41,7 @@ export default function ClassQuizzesTab({
   const [expandedQuestions, setExpandedQuestions] = useState({});
   const [form, setForm] = useState(emptyForm);
   const [results, setResults] = useState([]);
+  const [resultsQuizId, setResultsQuizId] = useState(null);
   const [saving, setSaving] = useState(false);
   const [loadingEdit, setLoadingEdit] = useState(false);
   const [importing, setImporting] = useState(false);
@@ -45,7 +49,13 @@ export default function ClassQuizzesTab({
   const [importInfo, setImportInfo] = useState('');
   const [importWarning, setImportWarning] = useState('');
   const [error, setError] = useState('');
+  const [submittingId, setSubmittingId] = useState(null);
+  const [gradeDrafts, setGradeDrafts] = useState({});
   const docxInputRef = useRef(null);
+
+  const getResourceUrl = (fileUrl) => getLessonResourceUrl(fileUrl, API_BASE);
+  const isOnlineSubmission = (q) => q.submission_id && Number(q.answer_count) > 0;
+  const isFileSubmission = (q) => q.submission_id && q.submission_url && Number(q.answer_count) === 0;
 
   const openCreate = () => {
     setEditingId(null);
@@ -101,9 +111,80 @@ export default function ClassQuizzesTab({
     try {
       const res = await quizService.getSubmissions(quizId);
       setResults(res.data);
+      setResultsQuizId(quizId);
+      const drafts = {};
+      res.data.forEach((r) => {
+        if (r.file_url && Number(r.answer_count) === 0 && r.score == null) {
+          drafts[r.id] = { score: '', feedback: r.feedback || '' };
+        }
+      });
+      setGradeDrafts(drafts);
+      setError('');
       setShowResults(true);
     } catch {
       alert('Không thể tải kết quả');
+    }
+  };
+
+  const updateGradeDraft = (submissionId, field, value) => {
+    setGradeDrafts((prev) => ({
+      ...prev,
+      [submissionId]: { ...prev[submissionId], [field]: value },
+    }));
+  };
+
+  const handleGradeQuiz = async (submissionId) => {
+    const draft = gradeDrafts[submissionId] || {};
+    if (!draft.score) {
+      setError('Vui lòng nhập điểm');
+      return;
+    }
+    setSaving(true);
+    setError('');
+    try {
+      await quizService.gradeSubmission(submissionId, {
+        score: parseFloat(draft.score),
+        feedback: draft.feedback || '',
+      });
+      if (resultsQuizId) {
+        const res = await quizService.getSubmissions(resultsQuizId);
+        setResults(res.data);
+      }
+      onUpdated();
+    } catch (err) {
+      setError(err.response?.data?.message || 'Không thể chấm điểm');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleSubmitQuizFile = async (quizId, file) => {
+    if (!file) return;
+    setSubmittingId(quizId);
+    try {
+      const formData = new FormData();
+      formData.append('quiz_id', quizId);
+      formData.append('file', file);
+      await quizService.submitAttachment(formData);
+      onUpdated();
+      alert('Nộp bài thành công!');
+    } catch (err) {
+      alert(err.response?.data?.message || 'Không thể nộp bài');
+    } finally {
+      setSubmittingId(null);
+    }
+  };
+
+  const handleSubmitQuizLink = async (quizId, linkUrl) => {
+    setSubmittingId(quizId);
+    try {
+      await quizService.submitAttachment({ quiz_id: quizId, link_url: linkUrl });
+      onUpdated();
+      alert('Nộp bài thành công!');
+    } catch (err) {
+      alert(err.response?.data?.message || 'Không thể nộp bài');
+    } finally {
+      setSubmittingId(null);
     }
   };
 
@@ -300,7 +381,8 @@ export default function ClassQuizzesTab({
           const visibility = getContentVisibilityStatus(q);
           return (
           <Card key={q.id} className="mb-3 border-0 shadow-sm">
-            <Card.Body className="d-flex justify-content-between align-items-center gap-3">
+            <Card.Body>
+              <div className="d-flex justify-content-between align-items-center gap-3">
               <div>
                 <h5 className="mb-1">{q.title}</h5>
                 <div className="d-flex flex-wrap gap-2">
@@ -317,18 +399,24 @@ export default function ClassQuizzesTab({
                   {isTeacher && (
                     <Badge bg="secondary">{q.submission_count || 0} lượt làm</Badge>
                   )}
-                  {isStudent && q.submission_id && (
-                    <Badge bg="success">Đã làm — {q.quiz_score}/10</Badge>
+                  {isStudent && isOnlineSubmission(q) && (
+                    <Badge bg="success">Đã làm trắc nghiệm — {q.quiz_score}/10</Badge>
+                  )}
+                  {isStudent && isFileSubmission(q) && q.quiz_score != null && (
+                    <Badge bg="success">Đã nộp — {q.quiz_score}/10</Badge>
+                  )}
+                  {isStudent && isFileSubmission(q) && q.quiz_score == null && (
+                    <Badge bg="warning" text="dark">Đã nộp — chờ chấm</Badge>
                   )}
                 </div>
               </div>
               <div className="d-flex gap-1 flex-shrink-0 flex-wrap justify-content-end">
                 {isStudent && !q.submission_id && (
-                  <Button as={Link} to={`/quizzes/${q.id}`} variant="primary" size="sm">
-                    Làm bài
+                  <Button as={Link} to={`/quizzes/${q.id}`} variant="outline-primary" size="sm">
+                    Làm trắc nghiệm
                   </Button>
                 )}
-                {isStudent && q.submission_id && (
+                {isStudent && isOnlineSubmission(q) && (
                   <Badge bg="primary" className="d-flex align-items-center px-3">
                     Điểm: {q.quiz_score}/10
                   </Badge>
@@ -364,6 +452,17 @@ export default function ClassQuizzesTab({
                   </>
                 )}
               </div>
+              </div>
+              {isStudent && !isOnlineSubmission(q) && (
+                <StudentWorkSubmission
+                  itemId={q.id}
+                  submitting={submittingId === q.id}
+                  submissionUrl={isFileSubmission(q) ? q.submission_url : null}
+                  submittedAt={q.quiz_submitted_at}
+                  onSubmitFile={handleSubmitQuizFile}
+                  onSubmitLink={handleSubmitQuizLink}
+                />
+              )}
             </Card.Body>
           </Card>
           );
@@ -600,6 +699,7 @@ export default function ClassQuizzesTab({
           <Modal.Title>Kết quả bài kiểm tra</Modal.Title>
         </Modal.Header>
         <Modal.Body>
+          {error && <Alert variant="danger" className="py-2">{error}</Alert>}
           {results.length === 0 ? (
             <Alert variant="light" className="mb-0">Chưa có học sinh làm bài.</Alert>
           ) : (
@@ -608,29 +708,87 @@ export default function ClassQuizzesTab({
                 <tr>
                   <th>#</th>
                   <th>Học sinh</th>
+                  <th>Hình thức</th>
+                  <th>Bài nộp</th>
                   <th>Điểm</th>
+                  <th>Nhận xét</th>
                   <th>Thời gian nộp</th>
+                  <th></th>
                 </tr>
               </thead>
               <tbody>
-                {results.map((r, idx) => (
+                {results.map((r, idx) => {
+                  const isFile = r.file_url && Number(r.answer_count) === 0;
+                  return (
                   <tr key={r.id}>
                     <td>{idx + 1}</td>
                     <td>
                       <div className="fw-semibold">{r.fullname}</div>
                       <div className="text-muted small">{r.code}</div>
                     </td>
-                    <td><Badge bg="primary">{r.score}/10</Badge></td>
+                    <td>{isFile ? 'File/Link' : 'Trắc nghiệm'}</td>
+                    <td>
+                      {r.file_url ? (
+                        <a href={getResourceUrl(r.file_url)} target="_blank" rel="noopener noreferrer">
+                          {/^https?:\/\//i.test(r.file_url) ? 'Mở link' : 'Tải về'}
+                        </a>
+                      ) : '—'}
+                    </td>
+                    <td style={{ width: 90 }}>
+                      {r.score != null ? (
+                        <Badge bg="primary">{r.score}/10</Badge>
+                      ) : isFile ? (
+                        <Form.Control
+                          type="number"
+                          min="0"
+                          max="10"
+                          step="0.5"
+                          size="sm"
+                          placeholder="0-10"
+                          value={gradeDrafts[r.id]?.score ?? ''}
+                          onChange={(e) => updateGradeDraft(r.id, 'score', e.target.value)}
+                        />
+                      ) : (
+                        '—'
+                      )}
+                    </td>
+                    <td>
+                      {r.score != null ? (
+                        <span className="small">{r.feedback || '—'}</span>
+                      ) : isFile ? (
+                        <Form.Control
+                          size="sm"
+                          placeholder="Nhận xét..."
+                          value={gradeDrafts[r.id]?.feedback ?? ''}
+                          onChange={(e) => updateGradeDraft(r.id, 'feedback', e.target.value)}
+                        />
+                      ) : (
+                        '—'
+                      )}
+                    </td>
                     <td className="text-muted small">
                       {new Date(r.submitted_at).toLocaleString('vi-VN')}
                     </td>
+                    <td>
+                      {isFile && r.score == null && (
+                        <Button
+                          size="sm"
+                          variant="success"
+                          disabled={saving}
+                          onClick={() => handleGradeQuiz(r.id)}
+                        >
+                          Chấm
+                        </Button>
+                      )}
+                    </td>
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </Table>
           )}
           <Alert variant="info" className="mt-3 mb-0 small">
-            Điểm bài kiểm tra được tính tự động và cộng vào bảng vinh danh.
+            Bài trắc nghiệm online được chấm tự động. Bài nộp file/link cần giáo viên chấm thủ công.
           </Alert>
         </Modal.Body>
       </Modal>

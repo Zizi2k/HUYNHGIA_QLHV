@@ -1,9 +1,11 @@
 const express = require('express');
 const {
   getQuizzes, getQuizById, createQuiz, updateQuiz, deleteQuiz,
-  getQuizSubmissions, submitQuiz, importQuizFile, getQuizImportTemplate, setQuizVisibility,
+  getQuizSubmissions, submitQuiz, submitQuizAttachment, gradeQuizSubmission,
+  importQuizFile, getQuizImportTemplate, setQuizVisibility,
 } = require('../controllers/quizController');
 const { authenticate, authorize } = require('../middleware/auth');
+const { uploadMemory } = require('../middleware/upload');
 
 const router = express.Router();
 
@@ -37,6 +39,18 @@ router.get('/import-template', authorize('admin', 'teacher'), getQuizImportTempl
 router.post('/parse-docx', authorize('admin', 'teacher'), handleQuizImportUpload, importQuizFile);
 router.patch('/:id/visibility', authorize('admin', 'teacher'), setQuizVisibility);
 router.post('/submit', authorize('student'), submitQuiz);
+router.post('/submit-attachment', authorize('student'), (req, res, next) => {
+  const contentType = req.headers['content-type'] || '';
+  if (contentType.includes('multipart/form-data')) {
+    uploadMemory.single('file')(req, res, (err) => {
+      if (err) return next(err);
+      submitQuizAttachment(req, res);
+    });
+  } else {
+    submitQuizAttachment(req, res);
+  }
+});
+router.put('/submissions/:id/grade', authorize('admin', 'teacher'), gradeQuizSubmission);
 router.get('/:id/submissions', authorize('admin', 'teacher'), getQuizSubmissions);
 router.get('/:id', getQuizById);
 router.post('/', authorize('admin', 'teacher'), createQuiz);

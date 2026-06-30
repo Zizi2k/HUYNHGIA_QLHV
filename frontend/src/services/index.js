@@ -47,6 +47,7 @@ export const assignmentService = {
   update: (id, data) => api.put(`/assignments/${id}`, data),
   delete: (id) => api.delete(`/assignments/${id}`),
   upload: (formData) => api.post('/assignments/upload', formData),
+  submitLink: (data) => api.post('/assignments/upload', data),
   getSubmissions: (assignmentId) => api.get(`/assignments/${assignmentId}/submissions`),
   grade: (id, data) => api.put(`/assignments/submissions/${id}/grade`, data),
   setVisibility: (id, data) => api.patch(`/assignments/${id}/visibility`, data),
@@ -60,6 +61,13 @@ export const quizService = {
   delete: (id) => api.delete(`/quizzes/${id}`),
   getSubmissions: (quizId) => api.get(`/quizzes/${quizId}/submissions`),
   submit: (data) => api.post('/quizzes/submit', data),
+  submitAttachment: (data) => {
+    if (data instanceof FormData) {
+      return api.post('/quizzes/submit-attachment', data);
+    }
+    return api.post('/quizzes/submit-attachment', data);
+  },
+  gradeSubmission: (id, data) => api.put(`/quizzes/submissions/${id}/grade`, data),
   parseImportFile: (file) => {
     const formData = new FormData();
     formData.append('file', file);

@@ -1,3 +1,17 @@
+export const STUDENT_SUBMIT_FILE_ACCEPT =
+  '.docx,.xlsx,.xls,' +
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document,' +
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,' +
+  'application/vnd.ms-excel';
+
+export const STUDENT_SUBMIT_EXTENSIONS = ['.docx', '.xlsx', '.xls'];
+
+export function isStudentSubmitFileAllowed(file) {
+  if (!file) return false;
+  const name = file.name.toLowerCase();
+  return STUDENT_SUBMIT_EXTENSIONS.some((ext) => name.endsWith(ext));
+}
+
 export const LESSON_FILE_ACCEPT =
   '.pdf,.doc,.docx,.xlsx,.xls,.ppt,.pptx,.pps,.ppsx,.mp4,.avi,.mov,.wmv,.webm,.mkv,' +
   'application/pdf,application/msword,' +

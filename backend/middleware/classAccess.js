@@ -100,6 +100,16 @@ async function getSubmissionClassId(submissionId) {
   return rows[0]?.class_id;
 }
 
+async function getQuizSubmissionClassId(submissionId) {
+  const [rows] = await pool.query(
+    `SELECT q.class_id FROM quiz_submissions qs
+     JOIN quizzes q ON qs.quiz_id = q.id
+     WHERE qs.id = ?`,
+    [submissionId]
+  );
+  return rows[0]?.class_id;
+}
+
 const requireClassMember = (param = 'id') => async (req, res, next) => {
   try {
     const classId = req.params[param] || req.params.classId;
@@ -133,6 +143,7 @@ module.exports = {
   getAssignmentClassId,
   getQuizClassId,
   getSubmissionClassId,
+  getQuizSubmissionClassId,
   requireClassMember,
   requireClassTeacher,
 };

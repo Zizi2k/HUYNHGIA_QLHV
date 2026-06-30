@@ -23,7 +23,17 @@ const withOptionalUpload = (handler) => (req, res, next) => {
 router.use(authenticate);
 router.get('/', getAssignments);
 router.post('/', authorize('admin', 'teacher'), withOptionalUpload(createAssignment));
-router.post('/upload', authorize('student'), uploadMemory.single('file'), uploadSubmission);
+router.post('/upload', authorize('student'), (req, res, next) => {
+  const contentType = req.headers['content-type'] || '';
+  if (contentType.includes('multipart/form-data')) {
+    uploadMemory.single('file')(req, res, (err) => {
+      if (err) return next(err);
+      uploadSubmission(req, res);
+    });
+  } else {
+    uploadSubmission(req, res);
+  }
+});
 router.put('/submissions/:id/grade', authorize('admin', 'teacher'), gradeSubmission);
 router.patch('/:id/visibility', authorize('admin', 'teacher'), setAssignmentVisibility);
 router.get('/:id/submissions', authorize('admin', 'teacher'), getSubmissions);

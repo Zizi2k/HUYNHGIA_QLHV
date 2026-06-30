@@ -7,6 +7,7 @@ const { logAction } = require('../utils/auditLog');
 const { teachingStaffRoleSql } = require('../utils/teachingStaff');
 const { saveMulterFile } = require('../utils/fileStorage');
 const { studentVisibilityClause, parseVisibilityFields, isVisibleToStudent } = require('../utils/contentVisibility');
+const { resolveStudentSubmissionInput } = require('../utils/studentSubmission');
 
 function isValidUrl(url) {
   try {
@@ -201,8 +202,8 @@ const deleteAssignment = async (req, res) => {
 const uploadSubmission = async (req, res) => {
   try {
     const { assignment_id } = req.body;
-    if (!req.file) {
-      return res.status(400).json({ message: 'Vui lòng chọn tệp tin để nộp' });
+    if (!assignment_id) {
+      return res.status(400).json({ message: 'Thiếu mã bài tập' });
     }
 
     const classId = await getAssignmentClassId(assignment_id);
@@ -219,8 +220,13 @@ const uploadSubmission = async (req, res) => {
       return res.status(403).json({ message: 'Bài tập chưa được mở cho học sinh' });
     }
 
-    const saved = await saveMulterFile(req);
-    const file_url = saved.file_url;
+    let file_url;
+    try {
+      ({ file_url } = await resolveStudentSubmissionInput(req));
+    } catch (err) {
+      return res.status(err.status || 400).json({ message: err.message });
+    }
+
     const student_id = req.user.id;
 
     const [existing] = await pool.query(

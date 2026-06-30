@@ -1,11 +1,23 @@
 const pool = require('../config/db');
-const { assertClassAccess, getQuizClassId } = require('../middleware/classAccess');
+const { assertClassAccess, getQuizClassId, getQuizSubmissionClassId } = require('../middleware/classAccess');
 const { handleDeletion } = require('../utils/deletionPolicy');
 const { logAction } = require('../utils/auditLog');
 const { teachingStaffRoleSql } = require('../utils/teachingStaff');
 const { parseQuizDocx, generateQuizSampleDocx } = require('../utils/quizDocxParser');
 const { parseQuizXlsx, generateQuizSampleXlsx } = require('../utils/quizXlsxParser');
 const { studentVisibilityClause, parseVisibilityFields, isVisibleToStudent } = require('../utils/contentVisibility');
+const { resolveStudentSubmissionInput } = require('../utils/studentSubmission');
+
+async function getStudentQuizSubmission(conn, quizId, studentId) {
+  const [rows] = await conn.query(
+    `SELECT qs.*,
+      (SELECT COUNT(*) FROM quiz_answers qa WHERE qa.submission_id = qs.id) AS answer_count
+     FROM quiz_submissions qs
+     WHERE qs.quiz_id = ? AND qs.student_id = ?`,
+    [quizId, studentId]
+  );
+  return rows[0] || null;
+}
 
 const getQuizzes = async (req, res) => {
   try {
@@ -16,7 +28,9 @@ const getQuizzes = async (req, res) => {
     if (req.user.role === 'student' && classId) {
       const [rows] = await pool.query(
         `SELECT q.*,
-          qs.id AS submission_id, qs.score AS quiz_score, qs.submitted_at AS quiz_submitted_at
+          qs.id AS submission_id, qs.score AS quiz_score, qs.submitted_at AS quiz_submitted_at,
+          qs.file_url AS submission_url,
+          (SELECT COUNT(*) FROM quiz_answers qa WHERE qa.submission_id = qs.id) AS answer_count
          FROM quizzes q
          LEFT JOIN quiz_submissions qs ON q.id = qs.quiz_id AND qs.student_id = ?
          WHERE q.class_id = ?${studentVisibilityClause('q')}
@@ -78,7 +92,10 @@ const getQuizById = async (req, res) => {
     let mySubmission = null;
     if (isStudent) {
       const [subs] = await pool.query(
-        'SELECT id, score, submitted_at FROM quiz_submissions WHERE quiz_id = ? AND student_id = ?',
+        `SELECT qs.id, qs.score, qs.submitted_at, qs.file_url,
+          (SELECT COUNT(*) FROM quiz_answers qa WHERE qa.submission_id = qs.id) AS answer_count
+         FROM quiz_submissions qs
+         WHERE qs.quiz_id = ? AND qs.student_id = ?`,
         [req.params.id, req.user.id]
       );
       mySubmission = subs[0] || null;
@@ -236,7 +253,8 @@ const getQuizSubmissions = async (req, res) => {
     if (!(await assertClassAccess(req.user, classId, res, { manage: true }))) return;
 
     const [rows] = await pool.query(
-      `SELECT qs.*, u.fullname, u.username, u.code
+      `SELECT qs.*, u.fullname, u.username, u.code,
+        (SELECT COUNT(*) FROM quiz_answers qa WHERE qa.submission_id = qs.id) AS answer_count
        FROM quiz_submissions qs
        JOIN users u ON qs.student_id = u.id
        WHERE qs.quiz_id = ?
@@ -270,10 +288,18 @@ const submitQuiz = async (req, res) => {
     }
 
     const [existing] = await conn.query(
-      'SELECT id, score FROM quiz_submissions WHERE quiz_id = ? AND student_id = ?',
+      `SELECT qs.id, qs.score, qs.file_url,
+        (SELECT COUNT(*) FROM quiz_answers qa WHERE qa.submission_id = qs.id) AS answer_count
+       FROM quiz_submissions qs
+       WHERE qs.quiz_id = ? AND qs.student_id = ?`,
       [quiz_id, student_id]
     );
     if (existing.length > 0) {
+      if (existing[0].file_url) {
+        return res.status(409).json({
+          message: 'Bạn đã nộp bài kiểm tra bằng file/link. Không thể làm trắc nghiệm online.',
+        });
+      }
       return res.status(409).json({
         message: 'Bạn đã làm bài kiểm tra này',
         score: existing[0].score,
@@ -383,6 +409,105 @@ const getQuizImportTemplate = async (req, res) => {
   }
 };
 
+const submitQuizAttachment = async (req, res) => {
+  const conn = await pool.getConnection();
+  try {
+    const { quiz_id } = req.body;
+    if (!quiz_id) {
+      return res.status(400).json({ message: 'Thiếu mã bài kiểm tra' });
+    }
+
+    const classId = await getQuizClassId(quiz_id);
+    if (!classId) {
+      return res.status(404).json({ message: 'Không tìm thấy bài kiểm tra' });
+    }
+    if (!(await assertClassAccess(req.user, classId, res))) return;
+
+    const [quizRows] = await pool.query('SELECT * FROM quizzes WHERE id = ?', [quiz_id]);
+    if (quizRows.length === 0) {
+      return res.status(404).json({ message: 'Không tìm thấy bài kiểm tra' });
+    }
+    if (!isVisibleToStudent(quizRows[0])) {
+      return res.status(403).json({ message: 'Bài kiểm tra chưa được mở cho học sinh' });
+    }
+
+    let file_url;
+    try {
+      ({ file_url } = await resolveStudentSubmissionInput(req));
+    } catch (err) {
+      return res.status(err.status || 400).json({ message: err.message });
+    }
+
+    const student_id = req.user.id;
+    const existing = await getStudentQuizSubmission(conn, quiz_id, student_id);
+
+    if (existing?.answer_count > 0) {
+      return res.status(409).json({
+        message: 'Bạn đã làm bài trắc nghiệm online. Không thể nộp file/link.',
+      });
+    }
+
+    if (existing) {
+      await conn.query(
+        `UPDATE quiz_submissions SET file_url = ?, score = NULL, feedback = NULL, submitted_at = NOW()
+         WHERE id = ?`,
+        [file_url, existing.id]
+      );
+      return res.json({ message: 'Nộp lại bài thành công', id: existing.id });
+    }
+
+    const [result] = await conn.query(
+      'INSERT INTO quiz_submissions (quiz_id, student_id, file_url, score) VALUES (?, ?, ?, NULL)',
+      [quiz_id, student_id, file_url]
+    );
+    res.status(201).json({ message: 'Nộp bài thành công', id: result.insertId });
+  } catch (err) {
+    res.status(500).json({ message: 'Lỗi hệ thống', error: err.message });
+  } finally {
+    conn.release();
+  }
+};
+
+const gradeQuizSubmission = async (req, res) => {
+  try {
+    const classId = await getQuizSubmissionClassId(req.params.id);
+    if (!classId) {
+      return res.status(404).json({ message: 'Không tìm thấy bài nộp' });
+    }
+    if (!(await assertClassAccess(req.user, classId, res, { manage: true }))) return;
+
+    const { score, feedback } = req.body;
+    if (score === undefined || score === null || score === '') {
+      return res.status(400).json({ message: 'Vui lòng nhập điểm' });
+    }
+    const numScore = parseFloat(score);
+    if (Number.isNaN(numScore) || numScore < 0 || numScore > 10) {
+      return res.status(400).json({ message: 'Điểm phải từ 0 đến 10' });
+    }
+
+    const [rows] = await pool.query(
+      `SELECT qs.id, qs.file_url,
+        (SELECT COUNT(*) FROM quiz_answers qa WHERE qa.submission_id = qs.id) AS answer_count
+       FROM quiz_submissions qs WHERE qs.id = ?`,
+      [req.params.id]
+    );
+    if (rows.length === 0) {
+      return res.status(404).json({ message: 'Không tìm thấy bài nộp' });
+    }
+    if (!rows[0].file_url || rows[0].answer_count > 0) {
+      return res.status(400).json({ message: 'Chỉ chấm thủ công bài nộp file/link' });
+    }
+
+    await pool.query(
+      'UPDATE quiz_submissions SET score = ?, feedback = ? WHERE id = ?',
+      [numScore, feedback || null, req.params.id]
+    );
+    res.json({ message: 'Chấm điểm thành công' });
+  } catch (err) {
+    res.status(500).json({ message: 'Lỗi hệ thống', error: err.message });
+  }
+};
+
 const setQuizVisibility = async (req, res) => {
   try {
     const classId = await getQuizClassId(req.params.id);
@@ -417,6 +542,8 @@ module.exports = {
   deleteQuiz,
   getQuizSubmissions,
   submitQuiz,
+  submitQuizAttachment,
+  gradeQuizSubmission,
   importQuizFile,
   getQuizImportTemplate,
   setQuizVisibility,

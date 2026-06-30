@@ -18,12 +18,22 @@ export default function QuizPage() {
       .then((res) => {
         setQuiz(res.data);
         if (res.data.mySubmission) {
-          setResult({
-            score: res.data.mySubmission.score,
-            correct: null,
-            total: res.data.questions?.length,
-            alreadyDone: true,
-          });
+          const sub = res.data.mySubmission;
+          if (sub.file_url && Number(sub.answer_count) === 0) {
+            setResult({
+              score: sub.score,
+              fileSubmission: true,
+              alreadyDone: true,
+              pendingGrade: sub.score == null,
+            });
+          } else {
+            setResult({
+              score: sub.score,
+              correct: null,
+              total: res.data.questions?.length,
+              alreadyDone: true,
+            });
+          }
         }
       })
       .finally(() => setLoading(false));
@@ -57,9 +67,15 @@ export default function QuizPage() {
         <Card className="border-0 shadow text-center p-4">
           <i className="bi bi-trophy text-warning" style={{ fontSize: '4rem' }} />
           <h3 className="mt-3">
-            {result.alreadyDone ? 'Bạn đã làm bài này' : 'Kết quả bài kiểm tra'}
+            {result.fileSubmission
+              ? (result.pendingGrade ? 'Bạn đã nộp bài kiểm tra' : 'Kết quả bài kiểm tra')
+              : (result.alreadyDone ? 'Bạn đã làm bài này' : 'Kết quả bài kiểm tra')}
           </h3>
-          <div className="display-4 fw-bold text-primary my-3">{result.score}/10</div>
+          {result.pendingGrade ? (
+            <p className="text-muted my-3">Giáo viên sẽ chấm điểm và thông báo sau.</p>
+          ) : (
+            <div className="display-4 fw-bold text-primary my-3">{result.score}/10</div>
+          )}
           {!result.alreadyDone && result.correct != null && (
             <p>Đúng {result.correct}/{result.total} câu</p>
           )}
