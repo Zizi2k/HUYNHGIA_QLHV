@@ -16,6 +16,7 @@ const dashboardRoutes = require('./routes/dashboardRoutes');
 const onlineSessionRoutes = require('./routes/onlineSessionRoutes');
 const tuitionRoutes = require('./routes/tuitionRoutes');
 const studentRoutes = require('./routes/studentRoutes');
+const auditRoutes = require('./routes/auditRoutes');
 const scheduleRoutes = require('./routes/scheduleRoutes');
 const fileRoutes = require('./routes/fileRoutes');
 const { ensureSchema } = require('./config/ensureSchema');
