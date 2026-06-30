@@ -213,7 +213,7 @@ svg {
 .sidebar-collapsed .app-sidebar-link span,
 .sidebar-collapsed .app-sidebar-section-label,
 .sidebar-collapsed .app-sidebar-brand-text,
-.sidebar-collapsed .app-sidebar-footer-text {
+.sidebar-collapsed .app-sidebar-promo {
   display: none;
 }
 
@@ -223,15 +223,130 @@ svg {
 }
 
 .app-sidebar-footer {
-  padding: 1rem;
+  padding: 0.75rem;
   border-top: 1px solid var(--app-border);
   flex-shrink: 0;
 }
 
-.app-sidebar-footer-text {
-  color: var(--app-text-muted);
-  font-size: 0.75rem;
-  text-align: center;
+.app-sidebar-promo {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-height: 108px;
+  padding: 0.9rem 0.75rem 0.9rem 1rem;
+  border-radius: 18px;
+  overflow: hidden;
+  background: linear-gradient(105deg, #4f6ef7 0%, #6378f8 28%, #8b7cf8 58%, #b8a4ff 100%);
+  box-shadow: 0 10px 28px rgba(79, 110, 247, 0.32);
+}
+
+.app-sidebar-promo-tagline {
+  margin: 0;
+  flex: 1;
+  min-width: 0;
+  color: #fff;
+  font-weight: 800;
+  font-size: 0.98rem;
+  line-height: 1.32;
+  letter-spacing: -0.02em;
+  z-index: 2;
+}
+
+.app-sidebar-promo-visual {
+  position: relative;
+  width: 92px;
+  height: 78px;
+  flex-shrink: 0;
+}
+
+.app-sidebar-promo-monitor {
+  position: absolute;
+  right: 2px;
+  top: 6px;
+  width: 72px;
+  z-index: 2;
+}
+
+.app-sidebar-promo-screen {
+  position: relative;
+  height: 46px;
+  border-radius: 6px 6px 2px 2px;
+  background: linear-gradient(180deg, #1a1f36 0%, #0f1428 100%);
+  border: 2px solid #2a3354;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.app-sidebar-promo-screen-cap {
+  position: relative;
+  z-index: 2;
+  color: #7dd3fc;
+  font-size: 1.35rem;
+  margin-bottom: 4px;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.35));
+}
+
+.app-sidebar-promo-screen-bars {
+  position: absolute;
+  left: 8px;
+  bottom: 8px;
+  width: 18px;
+  height: 22px;
+  background:
+    linear-gradient(#60a5fa, #60a5fa) 0 100% / 4px 55% no-repeat,
+    linear-gradient(#93c5fd, #93c5fd) 8px 100% / 4px 80% no-repeat,
+    linear-gradient(#bfdbfe, #bfdbfe) 16px 100% / 4px 40% no-repeat;
+  opacity: 0.85;
+}
+
+.app-sidebar-promo-stand {
+  width: 26px;
+  height: 5px;
+  margin: 2px auto 0;
+  border-radius: 0 0 4px 4px;
+  background: #2a3354;
+}
+
+.app-sidebar-promo-stand::after {
+  content: '';
+  display: block;
+  width: 38px;
+  height: 3px;
+  margin: 0 auto;
+  border-radius: 999px;
+  background: #3d4668;
+  transform: translateY(2px);
+}
+
+.app-sidebar-promo-cap-front {
+  position: absolute;
+  left: 0;
+  bottom: 14px;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.95);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #4f6ef7;
+  font-size: 1rem;
+  box-shadow: 0 6px 16px rgba(15, 23, 42, 0.2);
+  z-index: 3;
+}
+
+.app-sidebar-promo-floor {
+  position: absolute;
+  left: -8px;
+  right: -8px;
+  bottom: 0;
+  height: 28px;
+  background: radial-gradient(ellipse 80% 100% at 50% 100%, rgba(191, 219, 254, 0.55), transparent 70%);
+  z-index: 1;
 }
 
 .app-main {

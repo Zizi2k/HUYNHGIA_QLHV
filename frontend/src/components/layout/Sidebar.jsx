@@ -66,8 +66,27 @@ export default function Sidebar({ collapsed, mobileOpen, onNavigate }) {
 
       <div className="app-sidebar-footer">
         {!collapsed && (
-          <div className="app-sidebar-footer-text">
-            <small>Hệ thống học trực tuyến</small>
+          <div className="app-sidebar-promo" aria-hidden="true">
+            <p className="app-sidebar-promo-tagline">
+              Learn to develop
+              <br />
+              your future.
+            </p>
+            <div className="app-sidebar-promo-visual">
+              <div className="app-sidebar-promo-monitor">
+                <div className="app-sidebar-promo-screen">
+                  <span className="app-sidebar-promo-screen-cap">
+                    <i className="bi bi-mortarboard-fill" />
+                  </span>
+                  <span className="app-sidebar-promo-screen-bars" />
+                </div>
+                <div className="app-sidebar-promo-stand" />
+              </div>
+              <div className="app-sidebar-promo-cap-front">
+                <i className="bi bi-mortarboard-fill" />
+              </div>
+              <div className="app-sidebar-promo-floor" />
+            </div>
           </div>
         )}
       </div>
