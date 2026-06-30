@@ -1,19 +1,29 @@
 import { useEffect, useState, useCallback } from 'react';
-import { Row, Col, Card, Button, Modal, Form, Spinner, Alert, InputGroup } from 'react-bootstrap';
+import { Row, Col, Card, Button, Modal, Form, Spinner, Alert, InputGroup, ButtonGroup } from 'react-bootstrap';
 import { Link } from 'react-router-dom';
 import { classService } from '../services';
 import { useAuth } from '../context/AuthContext';
 import PageHeader from '../components/layout/PageHeader';
 import { SUBJECT_OPTIONS } from '../components/tuition/tuitionConstants';
+import { isSuperAdmin } from '../utils/adminScope';
 
 const emptyForm = { name: '', description: '', subject: '' };
+
+const PREFIX_OPTIONS = [
+  { value: '', label: 'Tất cả' },
+  { value: 'HG', label: 'LHG (HG)' },
+  { value: 'EG', label: 'EGC (EG)' },
+];
 
 export default function ClassesPage() {
   const { user } = useAuth();
   const [classes, setClasses] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [teacherSearch, setTeacherSearch] = useState('');
+  const [prefixFilter, setPrefixFilter] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [debouncedTeacherSearch, setDebouncedTeacherSearch] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [form, setForm] = useState(emptyForm);
@@ -22,18 +32,28 @@ export default function ClassesPage() {
 
   const isAdmin = user?.role === 'admin';
   const canManage = isAdmin;
+  const showSuperFilters = isSuperAdmin(user);
 
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedSearch(search.trim()), 300);
     return () => clearTimeout(timer);
   }, [search]);
 
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedTeacherSearch(teacherSearch.trim()), 300);
+    return () => clearTimeout(timer);
+  }, [teacherSearch]);
+
   const loadClasses = useCallback(() => {
     setLoading(true);
-    classService.getAll(debouncedSearch ? { search: debouncedSearch } : {})
+    const params = {};
+    if (debouncedSearch) params.search = debouncedSearch;
+    if (showSuperFilters && debouncedTeacherSearch) params.teacher = debouncedTeacherSearch;
+    if (showSuperFilters && prefixFilter) params.prefix = prefixFilter;
+    classService.getAll(Object.keys(params).length ? params : {})
       .then((res) => setClasses(res.data))
       .finally(() => setLoading(false));
-  }, [debouncedSearch]);
+  }, [debouncedSearch, debouncedTeacherSearch, prefixFilter, showSuperFilters]);
 
   useEffect(() => { loadClasses(); }, [loadClasses]);
 
@@ -107,8 +127,8 @@ export default function ClassesPage() {
         }
       />
 
-      <Row className="mb-4">
-        <Col md={6} lg={5}>
+      <Row className="mb-4 g-3">
+        <Col md={showSuperFilters ? 4 : 6} lg={showSuperFilters ? 4 : 5}>
           <InputGroup>
             <InputGroup.Text><i className="bi bi-search" /></InputGroup.Text>
             <Form.Control
@@ -124,14 +144,48 @@ export default function ClassesPage() {
             )}
           </InputGroup>
         </Col>
+        {showSuperFilters && (
+          <>
+            <Col md={4} lg={3}>
+              <InputGroup>
+                <InputGroup.Text><i className="bi bi-person-badge" /></InputGroup.Text>
+                <Form.Control
+                  type="search"
+                  placeholder="Tìm theo giáo viên đảm nhiệm..."
+                  value={teacherSearch}
+                  onChange={(e) => setTeacherSearch(e.target.value)}
+                />
+                {teacherSearch && (
+                  <Button variant="outline-secondary" onClick={() => setTeacherSearch('')}>
+                    <i className="bi bi-x-lg" />
+                  </Button>
+                )}
+              </InputGroup>
+            </Col>
+            <Col md={4} lg={5} className="d-flex align-items-center">
+              <span className="text-muted small me-2 flex-shrink-0">Lọc nhánh:</span>
+              <ButtonGroup size="sm" className="flex-wrap">
+                {PREFIX_OPTIONS.map((opt) => (
+                  <Button
+                    key={opt.value || 'all'}
+                    variant={prefixFilter === opt.value ? 'primary' : 'outline-primary'}
+                    onClick={() => setPrefixFilter(opt.value)}
+                  >
+                    {opt.label}
+                  </Button>
+                ))}
+              </ButtonGroup>
+            </Col>
+          </>
+        )}
       </Row>
 
       {loading ? (
         <div className="text-center py-5"><Spinner animation="border" /></div>
       ) : classes.length === 0 ? (
         <Alert variant="light">
-          {debouncedSearch
-            ? `Không tìm thấy lớp nào khớp "${debouncedSearch}".`
+          {debouncedSearch || debouncedTeacherSearch || prefixFilter
+            ? 'Không tìm thấy lớp nào khớp bộ lọc hiện tại.'
             : user?.role === 'teacher'
               ? 'Bạn chưa được admin phân công lớp học nào.'
               : 'Chưa có lớp học nào.'}
@@ -171,6 +225,12 @@ export default function ClassesPage() {
                     )}
                   </div>
                   <p className="text-muted mb-2">{cls.description || '—'}</p>
+                  {cls.teacher_names && (
+                    <p className="small text-muted mb-2">
+                      <i className="bi bi-person-workspace me-1" />
+                      GV: {cls.teacher_names}
+                    </p>
+                  )}
                   <span className="badge bg-primary bg-opacity-10 text-primary">
                     {cls.member_count} thành viên
                   </span>

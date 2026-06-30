@@ -11,6 +11,7 @@ const {
   filterMembersByScope,
   appendStudentCodeScopeSql,
   classScopeWhereSql,
+  resolveCodePrefixFilter,
 } = require('../utils/adminScope');
 const { addMonthsToDate } = require('../utils/dateHelpers');
 const { insertTuitionProfile } = require('../utils/tuitionProfileDb');
@@ -61,49 +62,74 @@ function validateTuitionFields(tuition = {}) {
 const getClasses = async (req, res) => {
   try {
     const search = (req.query.search || '').trim();
+    const teacherSearch = (req.query.teacher || '').trim();
+    const prefix = resolveCodePrefixFilter(req.user, req.query.prefix);
+
     const searchClause = search
-      ? ` AND (c.name LIKE ? OR c.code LIKE ? OR c.description LIKE ?)`
+      ? ' AND (c.name LIKE ? OR c.code LIKE ? OR c.description LIKE ?)'
       : '';
     const searchParams = search ? [`%${search}%`, `%${search}%`, `%${search}%`] : [];
-    const scope = getUserScope(req.user);
-    const scopeFilter = classScopeWhereSql(scope);
+
+    const teacherClause = teacherSearch
+      ? ` AND EXISTS (
+          SELECT 1 FROM class_members cm_t
+          JOIN users u_t ON cm_t.user_id = u_t.id
+          WHERE cm_t.class_id = c.id
+            AND (${teachingStaffRoleSql('u_t')})
+            AND (u_t.fullname LIKE ? OR u_t.username LIKE ? OR u_t.code LIKE ?)
+        )`
+      : '';
+    const teacherParams = teacherSearch
+      ? [`%${teacherSearch}%`, `%${teacherSearch}%`, `%${teacherSearch}%`]
+      : [];
+
+    const scopeFilter = classScopeWhereSql(prefix);
+    const filterClause = `${scopeFilter.sql}${searchClause}${teacherClause}`;
+    const filterParams = [...scopeFilter.params, ...searchParams, ...teacherParams];
+
+    const teacherNamesSelect = `(
+      SELECT GROUP_CONCAT(DISTINCT u_t.fullname ORDER BY u_t.fullname SEPARATOR ', ')
+      FROM class_members cm_t
+      JOIN users u_t ON cm_t.user_id = u_t.id
+      WHERE cm_t.class_id = c.id AND (${teachingStaffRoleSql('u_t')})
+    ) AS teacher_names`;
 
     let query;
     let params = [];
 
     if (req.user.role === 'admin') {
-      if (scope) {
+      if (prefix) {
         query = `
-          SELECT c.*,
+          SELECT c.*, ${teacherNamesSelect},
             (SELECT COUNT(*) FROM class_members cm2
              JOIN users u2 ON cm2.user_id = u2.id
              WHERE cm2.class_id = c.id AND u2.role = 'student' AND UPPER(u2.code) LIKE ?) AS member_count
           FROM classes c
-          WHERE 1=1${scopeFilter.sql}${searchClause}
+          WHERE 1=1${filterClause}
           ORDER BY c.created_at DESC`;
-        params = [`${scope}%`, ...scopeFilter.params, ...searchParams];
+        params = [`${prefix}%`, ...filterParams];
       } else {
         query = `
-          SELECT c.*, COUNT(cm.id) AS member_count
+          SELECT c.*, ${teacherNamesSelect}, COUNT(cm.id) AS member_count
           FROM classes c
           LEFT JOIN class_members cm ON c.id = cm.class_id
-          WHERE 1=1${searchClause}
+          WHERE 1=1${filterClause}
           GROUP BY c.id ORDER BY c.created_at DESC`;
-        params = [...searchParams];
+        params = [...filterParams];
       }
     } else {
       query = `
-        SELECT c.*,
+        SELECT c.*, ${teacherNamesSelect},
           (SELECT COUNT(*) FROM class_members cm2
            JOIN users u2 ON cm2.user_id = u2.id
-           WHERE cm2.class_id = c.id AND u2.role = 'student'${scope ? ' AND UPPER(u2.code) LIKE ?' : ''}) AS member_count
+           WHERE cm2.class_id = c.id AND u2.role = 'student'${prefix ? ' AND UPPER(u2.code) LIKE ?' : ''}) AS member_count
         FROM classes c
         INNER JOIN class_members cm ON c.id = cm.class_id AND cm.user_id = ?
-        WHERE 1=1${scopeFilter.sql}${searchClause}
+        WHERE 1=1${filterClause}
         GROUP BY c.id ORDER BY c.created_at DESC`;
-      params = scope
-        ? [`${scope}%`, req.user.id, ...scopeFilter.params, ...searchParams]
-        : [req.user.id, ...scopeFilter.params, ...searchParams];
+      params = prefix
+        ? [`${prefix}%`, req.user.id, ...filterParams]
+        : [req.user.id, ...filterParams];
     }
 
     const [rows] = await pool.query(query, params);
