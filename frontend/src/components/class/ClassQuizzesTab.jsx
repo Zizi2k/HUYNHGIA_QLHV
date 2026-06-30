@@ -221,11 +221,10 @@ export default function ClassQuizzesTab({
   };
 
   const handleToggleHide = async (quiz) => {
-    const hidden = quiz.is_hidden === 1 || quiz.is_hidden === true;
+    const hidden = Number(quiz.is_hidden) === 1 || quiz.is_hidden === true;
     try {
       await quizService.setVisibility(quiz.id, {
         is_hidden: !hidden,
-        visible_from: quiz.visible_from || null,
       });
       onUpdated();
     } catch (err) {

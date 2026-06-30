@@ -121,7 +121,7 @@ const createQuiz = async (req, res) => {
 
     const [result] = await conn.query(
       'INSERT INTO quizzes (class_id, title, time_limit, visible_from, is_hidden) VALUES (?, ?, ?, ?, ?)',
-      [class_id, title, time_limit || 30, visibility.visible_from, visibility.is_hidden]
+      [class_id, title, time_limit || 30, visibility.visible_from ?? null, visibility.is_hidden ?? 0]
     );
     const quizId = result.insertId;
 
@@ -170,7 +170,7 @@ const updateQuiz = async (req, res) => {
 
     const [updated] = await conn.query(
       'UPDATE quizzes SET title=?, time_limit=?, visible_from=?, is_hidden=? WHERE id=?',
-      [title, time_limit || 30, visibility.visible_from, visibility.is_hidden, req.params.id]
+      [title, time_limit || 30, visibility.visible_from ?? null, visibility.is_hidden ?? 0, req.params.id]
     );
     if (updated.affectedRows === 0) {
       await conn.rollback();
@@ -516,18 +516,33 @@ const setQuizVisibility = async (req, res) => {
     }
     if (!(await assertClassAccess(req.user, classId, res, { manage: true }))) return;
 
+    const [existing] = await pool.query(
+      'SELECT visible_from, is_hidden FROM quizzes WHERE id = ?',
+      [req.params.id],
+    );
+    if (!existing.length) {
+      return res.status(404).json({ message: 'Không tìm thấy bài kiểm tra' });
+    }
+
     const visibility = parseVisibilityFields(req.body);
+    const visibleFrom = visibility.visible_from !== undefined
+      ? visibility.visible_from
+      : existing[0].visible_from;
+    const isHidden = visibility.is_hidden !== undefined
+      ? visibility.is_hidden
+      : existing[0].is_hidden;
+
     const [result] = await pool.query(
       'UPDATE quizzes SET visible_from = ?, is_hidden = ? WHERE id = ?',
-      [visibility.visible_from, visibility.is_hidden, req.params.id]
+      [visibleFrom, isHidden, req.params.id]
     );
     if (result.affectedRows === 0) {
       return res.status(404).json({ message: 'Không tìm thấy bài kiểm tra' });
     }
     res.json({
-      message: visibility.is_hidden ? 'Đã ẩn bài kiểm tra' : 'Đã cập nhật hiển thị bài kiểm tra',
-      is_hidden: visibility.is_hidden,
-      visible_from: visibility.visible_from,
+      message: isHidden ? 'Đã ẩn bài kiểm tra' : 'Đã cập nhật hiển thị bài kiểm tra',
+      is_hidden: isHidden,
+      visible_from: visibleFrom,
     });
   } catch (err) {
     res.status(500).json({ message: 'Lỗi hệ thống', error: err.message });

@@ -118,7 +118,8 @@ const createAssignment = async (req, res) => {
       [
         class_id, title.trim(), description || null,
         attachment.file_url, attachment.file_type, deadline || null,
-        visibility.visible_from, visibility.is_hidden,
+        visibility.visible_from ?? null,
+        visibility.is_hidden ?? 0,
       ]
     );
     await logAction({
@@ -156,7 +157,7 @@ const updateAssignment = async (req, res) => {
       `UPDATE assignments SET title=?, description=?, file_url=?, file_type=?, deadline=?, visible_from=?, is_hidden=? WHERE id=?`,
       [
         title, description || null, attachment.file_url, attachment.file_type,
-        deadline || null, visibility.visible_from, visibility.is_hidden, req.params.id,
+        deadline || null, visibility.visible_from ?? null, visibility.is_hidden ?? 0, req.params.id,
       ]
     );
     if (result.affectedRows === 0) {
@@ -308,18 +309,33 @@ const setAssignmentVisibility = async (req, res) => {
     }
     if (!(await assertClassAccess(req.user, classId, res, { manage: true }))) return;
 
+    const [existing] = await pool.query(
+      'SELECT visible_from, is_hidden FROM assignments WHERE id = ?',
+      [req.params.id],
+    );
+    if (!existing.length) {
+      return res.status(404).json({ message: 'Không tìm thấy bài tập' });
+    }
+
     const visibility = parseVisibilityFields(req.body);
+    const visibleFrom = visibility.visible_from !== undefined
+      ? visibility.visible_from
+      : existing[0].visible_from;
+    const isHidden = visibility.is_hidden !== undefined
+      ? visibility.is_hidden
+      : existing[0].is_hidden;
+
     const [result] = await pool.query(
       'UPDATE assignments SET visible_from = ?, is_hidden = ? WHERE id = ?',
-      [visibility.visible_from, visibility.is_hidden, req.params.id]
+      [visibleFrom, isHidden, req.params.id]
     );
     if (result.affectedRows === 0) {
       return res.status(404).json({ message: 'Không tìm thấy bài tập' });
     }
     res.json({
-      message: visibility.is_hidden ? 'Đã ẩn bài tập' : 'Đã cập nhật hiển thị bài tập',
-      is_hidden: visibility.is_hidden,
-      visible_from: visibility.visible_from,
+      message: isHidden ? 'Đã ẩn bài tập' : 'Đã cập nhật hiển thị bài tập',
+      is_hidden: isHidden,
+      visible_from: visibleFrom,
     });
   } catch (err) {
     res.status(500).json({ message: 'Lỗi hệ thống', error: err.message });

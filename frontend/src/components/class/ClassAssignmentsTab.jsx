@@ -245,11 +245,10 @@ export default function ClassAssignmentsTab({
   };
 
   const handleToggleHide = async (assignment) => {
-    const hidden = assignment.is_hidden === 1 || assignment.is_hidden === true;
+    const hidden = Number(assignment.is_hidden) === 1 || assignment.is_hidden === true;
     try {
       await assignmentService.setVisibility(assignment.id, {
         is_hidden: !hidden,
-        visible_from: assignment.visible_from || null,
       });
       onUpdated();
     } catch (err) {

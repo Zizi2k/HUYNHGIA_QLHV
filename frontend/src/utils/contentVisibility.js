@@ -1,6 +1,6 @@
 export function getContentVisibilityStatus(item) {
   if (!item) return { label: '—', variant: 'secondary' };
-  if (item.is_hidden === 1 || item.is_hidden === true) {
+  if (Number(item.is_hidden) === 1 || item.is_hidden === true) {
     return { label: 'Đang ẩn', variant: 'secondary' };
   }
   if (item.visible_from && new Date(item.visible_from) > new Date()) {
