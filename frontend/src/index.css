@@ -1587,3 +1587,20 @@ a {
     transform: none;
   }
 }
+
+.schedule-slot-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 0.75rem;
+}
+
+.schedule-slot-btn {
+  min-height: 64px;
+  text-align: left;
+}
+
+.schedule-slot-student {
+  background: #fff;
+  min-height: 88px;
+}
+

@@ -178,9 +178,10 @@ const submitAttendance = async (req, res) => {
       'SELECT id FROM attendance_sessions WHERE class_id = ? AND session_date = ?',
       [class_id, session_date]
     );
+    const isUpdate = existing.length > 0;
 
     let sessionId;
-    if (existing.length > 0) {
+    if (isUpdate) {
       sessionId = existing[0].id;
       await conn.query(
         'UPDATE attendance_sessions SET note = ?, created_by = ?, submitted_at = NOW() WHERE id = ?',
@@ -214,7 +215,7 @@ const submitAttendance = async (req, res) => {
     });
 
     res.status(201).json({
-      message: 'Đã gửi báo cáo điểm danh cho quản trị viên',
+      message: isUpdate ? 'Đã cập nhật điểm danh' : 'Đã lưu điểm danh',
       session_id: sessionId,
     });
   } catch (err) {

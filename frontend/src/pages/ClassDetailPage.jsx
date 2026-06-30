@@ -454,6 +454,8 @@ export default function ClassDetailPage() {
               classId={id}
               students={classStudents}
               isTeacher={canManageClass}
+              isStudent={isStudent}
+              currentUserId={user?.id}
             />
           </Tab.Pane>
         </Tab.Content>

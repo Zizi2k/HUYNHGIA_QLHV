@@ -107,6 +107,13 @@ export const attendanceService = {
   }),
 };
 
+export const scheduleService = {
+  getMonth: (classId, month) => api.get(`/schedule/class/${classId}`, { params: { month } }),
+  save: (classId, data) => api.put(`/schedule/class/${classId}`, data),
+  book: (slotId) => api.post(`/schedule/slots/${slotId}/book`),
+  cancelBooking: (slotId) => api.delete(`/schedule/slots/${slotId}/book`),
+};
+
 export const onlineSessionService = {
   getByClass: (classId) => api.get('/online-sessions', { params: { class_id: classId } }),
   create: (data) => api.post('/online-sessions', data),

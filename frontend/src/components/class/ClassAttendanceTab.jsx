@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
-  Button, Form, Alert, Card, Spinner,
+  Button, Form, Alert, Card, Spinner, Badge,
 } from 'react-bootstrap';
 import { attendanceService } from '../../services';
 import DataTable, { DataTableEmpty } from '../common/DataTable';
+import TeacherSchedulePanel from './TeacherSchedulePanel';
 
 const STATUS_OPTIONS = [
   { value: 'present', label: 'Có mặt', icon: 'bi-check-circle-fill' },
@@ -24,11 +25,14 @@ function avatarColor(id) {
   return AVATAR_COLORS[id % AVATAR_COLORS.length];
 }
 
-export default function ClassAttendanceTab({ classId, students, isTeacher }) {
+export default function ClassAttendanceTab({
+  classId, students, isTeacher, isStudent, currentUserId,
+}) {
   const [sessionDate, setSessionDate] = useState(new Date().toISOString().split('T')[0]);
   const [note, setNote] = useState('');
   const [records, setRecords] = useState({});
   const [history, setHistory] = useState([]);
+  const [editingExisting, setEditingExisting] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
@@ -50,6 +54,7 @@ export default function ClassAttendanceTab({ classId, students, isTeacher }) {
   };
 
   const loadDateRecords = async (date) => {
+    if (!isTeacher) return;
     try {
       const res = await attendanceService.getByDate(classId, date);
       if (res.data?.records) {
@@ -57,29 +62,38 @@ export default function ClassAttendanceTab({ classId, students, isTeacher }) {
         res.data.records.forEach((r) => { map[r.student_id] = r.status; });
         setRecords(map);
         setNote(res.data.note || '');
+        setEditingExisting(true);
       } else {
         const map = {};
         students.forEach((s) => { map[s.id] = 'present'; });
         setRecords(map);
         setNote('');
+        setEditingExisting(false);
       }
     } catch {
       const map = {};
       students.forEach((s) => { map[s.id] = 'present'; });
       setRecords(map);
+      setEditingExisting(false);
     }
   };
 
   useEffect(() => { loadHistory(); }, [classId]);
 
   useEffect(() => {
-    if (students.length > 0) loadDateRecords(sessionDate);
-  }, [sessionDate, students]);
+    if (students.length > 0 && isTeacher) loadDateRecords(sessionDate);
+  }, [sessionDate, students, isTeacher]);
 
   const setAllStatus = (status) => {
     const map = {};
     students.forEach((s) => { map[s.id] = status; });
     setRecords(map);
+  };
+
+  const openHistoryDate = (dateStr) => {
+    const normalized = String(dateStr).slice(0, 10);
+    setSessionDate(normalized);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handleSubmit = async (e) => {
@@ -104,6 +118,7 @@ export default function ClassAttendanceTab({ classId, students, isTeacher }) {
       };
       const res = await attendanceService.submit(payload);
       setMessage(res.data.message);
+      setEditingExisting(true);
       loadHistory();
     } catch (err) {
       setError(err.response?.data?.message || err.response?.data?.error || 'Không thể lưu điểm danh');
@@ -118,6 +133,13 @@ export default function ClassAttendanceTab({ classId, students, isTeacher }) {
 
   return (
     <div>
+      <TeacherSchedulePanel
+        classId={classId}
+        isTeacher={isTeacher}
+        isStudent={isStudent}
+        currentUserId={currentUserId}
+      />
+
       {isTeacher && (
         <Card className="border-0 shadow-sm mb-4" style={{ borderRadius: 12, overflow: 'hidden' }}>
           <div className="pro-card-header">
@@ -186,6 +208,15 @@ export default function ClassAttendanceTab({ classId, students, isTeacher }) {
                   </div>
                 </div>
 
+                {editingExisting && (
+                  <Alert variant="info" className="mx-3 mt-3 mb-0 py-2 small">
+                    <i className="bi bi-pencil-square me-1" />
+                    Đang chỉnh sửa điểm danh ngày{' '}
+                    <strong>{new Date(sessionDate).toLocaleDateString('vi-VN')}</strong>.
+                    Thay đổi và bấm <strong>Lưu điểm danh</strong> để cập nhật.
+                  </Alert>
+                )}
+
                 <div className="px-3 py-2 d-flex flex-wrap gap-2 border-bottom">
                   {STATUS_OPTIONS.map((opt) => (
                     <span key={opt.value} className={`pro-stat-chip ${opt.value}`}>
@@ -243,9 +274,9 @@ export default function ClassAttendanceTab({ classId, students, isTeacher }) {
                 <div className="p-3 border-top bg-light">
                   <Button type="submit" variant="primary" disabled={saving} className="px-4">
                     {saving ? (
-                      <><Spinner size="sm" className="me-2" />Đang gửi...</>
+                      <><Spinner size="sm" className="me-2" />Đang lưu...</>
                     ) : (
-                      <><i className="bi bi-send me-2" />Lưu và gửi báo cáo</>
+                      <><i className="bi bi-save me-2" />{editingExisting ? 'Lưu điểm danh lại' : 'Lưu điểm danh'}</>
                     )}
                   </Button>
                 </div>
@@ -286,6 +317,7 @@ export default function ClassAttendanceTab({ classId, students, isTeacher }) {
               <th className="text-center">Muộn</th>
               <th className="text-center">Có phép</th>
               <th>Người điểm danh</th>
+              {isTeacher && <th style={{ width: 100 }}></th>}
             </tr>
           </thead>
           <tbody>
@@ -322,6 +354,17 @@ export default function ClassAttendanceTab({ classId, students, isTeacher }) {
                     {h.teacher_name}
                   </span>
                 </td>
+                {isTeacher && (
+                  <td>
+                    <Button
+                      variant="outline-primary"
+                      size="sm"
+                      onClick={() => openHistoryDate(h.session_date)}
+                    >
+                      Sửa
+                    </Button>
+                  </td>
+                )}
               </tr>
             ))}
           </tbody>
