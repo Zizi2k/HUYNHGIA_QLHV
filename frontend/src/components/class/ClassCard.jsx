@@ -36,19 +36,9 @@ export default function ClassCard({ cls, canManage, onEdit, onDelete }) {
       <div className="class-card-left">
         <div className="class-card-head">
           <div className="class-card-head-text">
-            <h5 className="class-card-title text-break">{cls.name}</h5>
+            <h5 className="class-card-title" title={cls.name}>{cls.name}</h5>
             <div className="class-card-title-line" aria-hidden="true" />
           </div>
-          {canManage && (
-            <div className="class-card-actions">
-              <button type="button" className="class-card-action-btn" title="Sửa lớp học" onClick={() => onEdit(cls)}>
-                <i className="bi bi-pencil" />
-              </button>
-              <button type="button" className="class-card-action-btn class-card-action-btn--danger" title="Xóa lớp học" onClick={() => onDelete(cls)}>
-                <i className="bi bi-trash" />
-              </button>
-            </div>
-          )}
         </div>
 
         <div className="class-card-badges">
@@ -64,10 +54,22 @@ export default function ClassCard({ cls, canManage, onEdit, onDelete }) {
           </div>
         </div>
 
-        <Button as={Link} to={`/classes/${cls.id}`} className="class-card-enter">
-          Vào lớp học
-          <i className="bi bi-arrow-right" />
-        </Button>
+        <div className="class-card-footer">
+          <Button as={Link} to={`/classes/${cls.id}`} className="class-card-enter">
+            Vào lớp học
+            <i className="bi bi-arrow-right" />
+          </Button>
+          {canManage && (
+            <div className="class-card-actions">
+              <button type="button" className="class-card-action-btn" title="Sửa lớp học" onClick={() => onEdit(cls)}>
+                <i className="bi bi-pencil" />
+              </button>
+              <button type="button" className="class-card-action-btn class-card-action-btn--danger" title="Xóa lớp học" onClick={() => onDelete(cls)}>
+                <i className="bi bi-trash" />
+              </button>
+            </div>
+          )}
+        </div>
       </div>
 
       <div className="class-card-right">
