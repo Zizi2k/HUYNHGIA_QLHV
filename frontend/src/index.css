@@ -235,21 +235,27 @@ svg {
   gap: 0.35rem;
   min-height: 108px;
   padding: 0.9rem 0.75rem 0.9rem 1rem;
-  border-radius: 18px;
+  border-radius: 14px;
   overflow: hidden;
-  background: linear-gradient(105deg, #4f6ef7 0%, #6378f8 28%, #8b7cf8 58%, #b8a4ff 100%);
-  box-shadow: 0 10px 28px rgba(79, 110, 247, 0.32);
+  background: linear-gradient(
+    135deg,
+    var(--app-primary-dark) 0%,
+    var(--app-primary) 58%,
+    #4a6eae 100%
+  );
+  border: 1px solid rgba(63, 106, 216, 0.22);
+  box-shadow: 0 4px 14px rgba(44, 74, 158, 0.16);
 }
 
 .app-sidebar-promo-tagline {
   margin: 0;
   flex: 1;
   min-width: 0;
-  color: #fff;
-  font-weight: 800;
-  font-size: 0.98rem;
-  line-height: 1.32;
-  letter-spacing: -0.02em;
+  color: rgba(255, 255, 255, 0.95);
+  font-weight: 700;
+  font-size: 0.92rem;
+  line-height: 1.35;
+  letter-spacing: -0.01em;
   z-index: 2;
 }
 
@@ -284,10 +290,10 @@ svg {
 .app-sidebar-promo-screen-cap {
   position: relative;
   z-index: 2;
-  color: #7dd3fc;
-  font-size: 1.35rem;
+  color: #93c5fd;
+  font-size: 1.25rem;
   margin-bottom: 4px;
-  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.35));
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.3));
 }
 
 .app-sidebar-promo-screen-bars {
@@ -297,10 +303,10 @@ svg {
   width: 18px;
   height: 22px;
   background:
-    linear-gradient(#60a5fa, #60a5fa) 0 100% / 4px 55% no-repeat,
-    linear-gradient(#93c5fd, #93c5fd) 8px 100% / 4px 80% no-repeat,
-    linear-gradient(#bfdbfe, #bfdbfe) 16px 100% / 4px 40% no-repeat;
-  opacity: 0.85;
+    linear-gradient(#5b8def, #5b8def) 0 100% / 4px 55% no-repeat,
+    linear-gradient(#7ba3f0, #7ba3f0) 8px 100% / 4px 80% no-repeat,
+    linear-gradient(#9bb8f2, #9bb8f2) 16px 100% / 4px 40% no-repeat;
+  opacity: 0.7;
 }
 
 .app-sidebar-promo-stand {
@@ -329,13 +335,13 @@ svg {
   width: 34px;
   height: 34px;
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.95);
+  background: rgba(255, 255, 255, 0.92);
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #4f6ef7;
-  font-size: 1rem;
-  box-shadow: 0 6px 16px rgba(15, 23, 42, 0.2);
+  color: var(--app-primary);
+  font-size: 0.95rem;
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.15);
   z-index: 3;
 }
 
@@ -345,7 +351,7 @@ svg {
   right: -8px;
   bottom: 0;
   height: 28px;
-  background: radial-gradient(ellipse 80% 100% at 50% 100%, rgba(191, 219, 254, 0.55), transparent 70%);
+  background: radial-gradient(ellipse 80% 100% at 50% 100%, rgba(91, 141, 239, 0.22), transparent 70%);
   z-index: 1;
 }
 
