@@ -6,6 +6,7 @@ import { Navigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { userService } from '../services';
 import PageHeader from '../components/layout/PageHeader';
+import DataTable, { DataTableEmpty } from '../components/common/DataTable';
 import { isSuperAdmin } from '../utils/adminScope';
 
 const scopeOptions = [
@@ -117,8 +118,9 @@ export default function AdminStaffPage() {
   };
 
   return (
-    <div className="page-container">
+    <div className="page-container module-page">
       <PageHeader
+        icon="bi-shield-check"
         title="Phân quyền admin"
         subtitle="Admin tối cao tạo admin phụ quản lý riêng học viên HG (LHG) hoặc EG (EGC)."
         actions={(
@@ -129,52 +131,58 @@ export default function AdminStaffPage() {
         )}
       />
 
-      <Alert variant="light" className="mb-4">
-        <strong>HG</strong> và <strong>EG</strong> là hai nhóm học viên tách biệt — admin phụ chỉ thấy và quản lý đúng tiền tố được giao.
-        Admin phụ HG/EG cũng có thể được phân công <strong>giáo viên phụ trách lớp</strong> tại tab Thành viên của lớp học.
-      </Alert>
+      <div className="module-info-banner">
+        <i className="bi bi-info-circle-fill" />
+        <div>
+          <strong>HG</strong> và <strong>EG</strong> là hai nhóm học viên tách biệt — admin phụ chỉ thấy và quản lý đúng tiền tố được giao.
+          Admin phụ HG/EG cũng có thể được phân công <strong>giáo viên phụ trách lớp</strong> tại tab Thành viên của lớp học.
+        </div>
+      </div>
 
-      {loading ? (
-        <div className="text-center py-5"><Spinner animation="border" /></div>
-      ) : (
-        <Table responsive hover className="bg-white shadow-sm rounded">
-          <thead className="table-light">
-            <tr>
-              <th>Họ tên</th>
-              <th>Tên đăng nhập</th>
-              <th>Mã đăng nhập</th>
-              <th>Phạm vi</th>
-              <th>Trạng thái</th>
-              <th style={{ width: 140 }}>Thao tác</th>
-            </tr>
-          </thead>
-          <tbody>
-            {admins.map((a) => (
-              <tr key={a.id}>
-                <td className="fw-semibold">{a.fullname}</td>
-                <td>{a.username}</td>
-                <td><code>{a.code}</code></td>
-                <td>{scopeBadge(a.admin_scope)}</td>
-                <td>
-                  <Badge bg={a.status ? 'success' : 'secondary'}>
-                    {a.status ? 'Hoạt động' : 'Khóa'}
-                  </Badge>
-                </td>
-                <td>
-                  <Button variant="outline-primary" size="sm" className="me-1" onClick={() => openEdit(a)}>
-                    Sửa
+      <DataTable
+        title="Danh sách admin phụ"
+        icon="bi-people"
+        count={admins.length}
+        loading={loading}
+      >
+        <thead>
+          <tr>
+            <th>Họ tên</th>
+            <th>Tên đăng nhập</th>
+            <th>Mã đăng nhập</th>
+            <th>Phạm vi</th>
+            <th>Trạng thái</th>
+            <th style={{ width: 140 }}>Thao tác</th>
+          </tr>
+        </thead>
+        <tbody>
+          {admins.length === 0 ? (
+            <DataTableEmpty message="Chưa có admin phụ." />
+          ) : admins.map((a) => (
+            <tr key={a.id}>
+              <td className="fw-semibold">{a.fullname}</td>
+              <td>{a.username}</td>
+              <td><code>{a.code}</code></td>
+              <td>{scopeBadge(a.admin_scope)}</td>
+              <td>
+                <Badge bg={a.status ? 'success' : 'secondary'}>
+                  {a.status ? 'Hoạt động' : 'Khóa'}
+                </Badge>
+              </td>
+              <td>
+                <Button variant="outline-primary" size="sm" className="me-1" onClick={() => openEdit(a)}>
+                  Sửa
+                </Button>
+                {a.id !== user.id && (
+                  <Button variant="outline-danger" size="sm" onClick={() => handleDelete(a)}>
+                    Xóa
                   </Button>
-                  {a.id !== user.id && (
-                    <Button variant="outline-danger" size="sm" onClick={() => handleDelete(a)}>
-                      Xóa
-                    </Button>
-                  )}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </Table>
-      )}
+                )}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </DataTable>
 
       <Modal show={showModal} onHide={() => setShowModal(false)}>
         <Modal.Header closeButton>

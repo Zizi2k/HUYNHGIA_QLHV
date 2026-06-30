@@ -8,24 +8,20 @@ import {
 export default function EnrollmentOverviewTable({ students, onEdit, onTransfer }) {
   if (!students.length) {
     return (
-      <DataTable>
+      <DataTable title="Danh sách học viên" icon="bi-people" count={0}>
         <tbody>
-          <tr>
-            <td className="p-0">
-              <DataTableEmpty
-                icon="bi-people"
-                message="Chưa có học viên nào"
-                hint="Thêm học viên mới hoặc điều chỉnh bộ lọc"
-              />
-            </td>
-          </tr>
+          <DataTableEmpty
+            icon="bi-people"
+            message="Chưa có học viên nào"
+            hint="Thêm học viên mới hoặc điều chỉnh bộ lọc"
+          />
         </tbody>
       </DataTable>
     );
   }
 
   return (
-    <DataTable>
+    <DataTable title="Danh sách học viên" icon="bi-people" count={students.length}>
       <thead>
         <tr>
           <th style={{ width: 48 }}>#</th>

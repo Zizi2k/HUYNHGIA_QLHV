@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Spinner, Alert, Form, Row, Col } from 'react-bootstrap';
 import { dashboardService, classService } from '../services';
 import PageHeader from '../components/layout/PageHeader';
+import FilterPanel from '../components/layout/FilterPanel';
 import HonorStudentFrame from '../components/honor/HonorStudentFrame';
 import UserAvatar from '../components/UserAvatar';
 
@@ -52,16 +53,16 @@ export default function HonorPage() {
   }
 
   return (
-    <div className="page-container honor-page">
+    <div className="page-container module-page honor-page">
       <PageHeader
+        icon="bi-trophy"
         title="Bảng vinh danh"
         subtitle="Xếp hạng học viên theo điểm trung bình bài tập và bài kiểm tra."
       />
 
       <Row className="mb-4">
         <Col md={5} lg={4}>
-          <Form.Group>
-            <Form.Label className="fw-semibold">Chọn lớp học</Form.Label>
+          <FilterPanel title="Chọn lớp học">
             <Form.Select
               value={selectedClassId}
               onChange={(e) => setSelectedClassId(e.target.value)}
@@ -73,7 +74,7 @@ export default function HonorPage() {
                 </option>
               ))}
             </Form.Select>
-          </Form.Group>
+          </FilterPanel>
         </Col>
       </Row>
 

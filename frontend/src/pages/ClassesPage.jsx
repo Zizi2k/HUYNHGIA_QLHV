@@ -3,6 +3,7 @@ import { Row, Col, Button, Modal, Form, Spinner, Alert, InputGroup, ButtonGroup 
 import { classService } from '../services';
 import { useAuth } from '../context/AuthContext';
 import PageHeader from '../components/layout/PageHeader';
+import FilterPanel from '../components/layout/FilterPanel';
 import ClassCard, { ClassMediaTile } from '../components/class/ClassCard';
 import { SUBJECT_OPTIONS } from '../components/tuition/tuitionConstants';
 import { isSuperAdmin } from '../utils/adminScope';
@@ -151,71 +152,74 @@ export default function ClassesPage() {
   };
 
   return (
-    <div className="page-container">
+    <div className="page-container module-page">
       <PageHeader
+        icon="bi-collection"
         title="Lớp học"
         subtitle="Danh sách và quản lý các lớp học trên hệ thống."
         actions={
           canManage ? (
-            <Button variant="success" size="sm" className="page-header-btn" onClick={openCreateModal}>
+            <Button variant="primary" size="sm" onClick={openCreateModal}>
               <i className="bi bi-plus-lg me-1" />Tạo lớp học
             </Button>
           ) : null
         }
       />
 
-      <Row className="mb-4 g-3">
-        <Col md={showSuperFilters ? 4 : 6} lg={showSuperFilters ? 4 : 5}>
-          <InputGroup>
-            <InputGroup.Text><i className="bi bi-search" /></InputGroup.Text>
-            <Form.Control
-              type="search"
-              placeholder="Tìm theo tên, mã hoặc mô tả lớp..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
-            {search && (
-              <Button variant="outline-secondary" onClick={() => setSearch('')}>
-                <i className="bi bi-x-lg" />
-              </Button>
-            )}
-          </InputGroup>
-        </Col>
-        {showSuperFilters && (
-          <>
-            <Col md={4} lg={3}>
-              <InputGroup>
-                <InputGroup.Text><i className="bi bi-person-badge" /></InputGroup.Text>
-                <Form.Control
-                  type="search"
-                  placeholder="Tìm theo giáo viên đảm nhiệm..."
-                  value={teacherSearch}
-                  onChange={(e) => setTeacherSearch(e.target.value)}
-                />
-                {teacherSearch && (
-                  <Button variant="outline-secondary" onClick={() => setTeacherSearch('')}>
-                    <i className="bi bi-x-lg" />
-                  </Button>
-                )}
-              </InputGroup>
-            </Col>
-            <Col md={4} lg={5} className="d-flex align-items-center">
-              <span className="text-muted small me-2 flex-shrink-0">Lọc nhánh:</span>
-              <ButtonGroup size="sm" className="flex-wrap">
-                {PREFIX_OPTIONS.map((opt) => (
-                  <Button
-                    key={opt.value || 'all'}
-                    variant={prefixFilter === opt.value ? 'primary' : 'outline-primary'}
-                    onClick={() => setPrefixFilter(opt.value)}
-                  >
-                    {opt.label}
-                  </Button>
-                ))}
-              </ButtonGroup>
-            </Col>
-          </>
-        )}
-      </Row>
+      <FilterPanel>
+        <Row className="g-3">
+          <Col md={showSuperFilters ? 4 : 6} lg={showSuperFilters ? 4 : 5}>
+            <InputGroup>
+              <InputGroup.Text><i className="bi bi-search" /></InputGroup.Text>
+              <Form.Control
+                type="search"
+                placeholder="Tìm theo tên, mã hoặc mô tả lớp..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+              {search && (
+                <Button variant="outline-secondary" onClick={() => setSearch('')}>
+                  <i className="bi bi-x-lg" />
+                </Button>
+              )}
+            </InputGroup>
+          </Col>
+          {showSuperFilters && (
+            <>
+              <Col md={4} lg={3}>
+                <InputGroup>
+                  <InputGroup.Text><i className="bi bi-person-badge" /></InputGroup.Text>
+                  <Form.Control
+                    type="search"
+                    placeholder="Tìm theo giáo viên đảm nhiệm..."
+                    value={teacherSearch}
+                    onChange={(e) => setTeacherSearch(e.target.value)}
+                  />
+                  {teacherSearch && (
+                    <Button variant="outline-secondary" onClick={() => setTeacherSearch('')}>
+                      <i className="bi bi-x-lg" />
+                    </Button>
+                  )}
+                </InputGroup>
+              </Col>
+              <Col md={4} lg={5} className="d-flex align-items-center">
+                <span className="text-muted small me-2 flex-shrink-0">Lọc nhánh:</span>
+                <ButtonGroup size="sm" className="flex-wrap">
+                  {PREFIX_OPTIONS.map((opt) => (
+                    <Button
+                      key={opt.value || 'all'}
+                      variant={prefixFilter === opt.value ? 'primary' : 'outline-primary'}
+                      onClick={() => setPrefixFilter(opt.value)}
+                    >
+                      {opt.label}
+                    </Button>
+                  ))}
+                </ButtonGroup>
+              </Col>
+            </>
+          )}
+        </Row>
+      </FilterPanel>
 
       {loading ? (
         <div className="text-center py-5"><Spinner animation="border" /></div>

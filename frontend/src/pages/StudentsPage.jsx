@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react';
 import {
-  Row, Col, Form, Button, Spinner, Card, Badge,
+  Row, Col, Form, Button, Spinner, Badge,
 } from 'react-bootstrap';
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import PageHeader from '../components/layout/PageHeader';
+import FilterPanel from '../components/layout/FilterPanel';
+import { StatCard, StatCardGrid } from '../components/layout/StatCard';
 import { studentService, classService } from '../services';
 import EnrollmentOverviewTable from '../components/students/EnrollmentOverviewTable';
 import AddEnrollmentModal from '../components/students/AddEnrollmentModal';
@@ -112,13 +114,14 @@ export default function StudentsPage() {
   }
 
   return (
-    <div className="page-container">
+    <div className="page-container module-page">
       <PageHeader
+        icon="bi-people"
         title="Quản lý học viên"
         subtitle="Tổng quan học viên theo môn, khóa học, lớp và học phí."
         actions={(
           <div className="d-flex gap-2 flex-wrap">
-            <Button variant="outline-secondary" size="sm" onClick={() => setShowCourses(true)}>
+            <Button variant="outline-primary" size="sm" onClick={() => setShowCourses(true)}>
               <i className="bi bi-journal-bookmark me-1" />
               Khóa học
             </Button>
@@ -130,121 +133,93 @@ export default function StudentsPage() {
         )}
       />
 
-      <Row className="g-3 mb-4">
-        <Col sm={6} lg={3}>
-          <Card className="border-0 shadow-sm h-100">
-            <Card.Body>
-              <div className="text-muted small">Tổng học viên</div>
-              <div className="fs-3 fw-bold">{summary.total}</div>
-            </Card.Body>
-          </Card>
-        </Col>
-        <Col sm={6} lg={3}>
-          <Card className="border-0 shadow-sm h-100">
-            <Card.Body>
-              <div className="text-muted small">Đang học</div>
-              <div className="fs-3 fw-bold text-success">{summary.active}</div>
-            </Card.Body>
-          </Card>
-        </Col>
-        <Col sm={6} lg={3}>
-          <Card className="border-0 shadow-sm h-100">
-            <Card.Body>
-              <div className="text-muted small">Sắp kết thúc</div>
-              <div className="fs-3 fw-bold text-warning">{summary.expiring}</div>
-            </Card.Body>
-          </Card>
-        </Col>
-        <Col sm={6} lg={3}>
-          <Card className="border-0 shadow-sm h-100">
-            <Card.Body>
-              <div className="text-muted small">Đã kết thúc</div>
-              <div className="fs-3 fw-bold text-secondary">{summary.expired}</div>
-            </Card.Body>
-          </Card>
-        </Col>
-      </Row>
+      <StatCardGrid>
+        <StatCard icon="people" tone="blue" label="Tổng học viên" value={summary.total} />
+        <StatCard icon="person-check" tone="green" label="Đang học" value={summary.active} />
+        <StatCard icon="hourglass-split" tone="orange" label="Sắp kết thúc" value={summary.expiring} />
+        <StatCard icon="person-x" tone="red" label="Đã kết thúc" value={summary.expired} />
+      </StatCardGrid>
 
-      <div className="d-flex flex-wrap gap-2 mb-4">
+      <div className="module-chip-row">
         {subjectCounts.map((s) => (
-          <Badge
+          <button
             key={s.value}
-            bg={subjectFilter === s.value ? 'primary' : 'light'}
-            text={subjectFilter === s.value ? 'white' : 'dark'}
-            className="px-3 py-2"
-            style={{ cursor: 'pointer' }}
+            type="button"
+            className={`module-chip${subjectFilter === s.value ? ' active' : ''}`}
             onClick={() => setSubjectFilter(subjectFilter === s.value ? '' : s.value)}
           >
             {s.label}: {s.count}
-          </Badge>
+          </button>
         ))}
       </div>
 
-      <div className="d-flex flex-wrap gap-2 mb-3">
-        {!scopeLocked && prefixCounts.map((p) => (
-          <Badge
-            key={p.value}
-            bg={codePrefixFilter === p.value ? 'dark' : 'light'}
-            text={codePrefixFilter === p.value ? 'white' : 'dark'}
-            className="px-3 py-2"
-            style={{ cursor: 'pointer' }}
-            onClick={() => setCodePrefixFilter(codePrefixFilter === p.value ? '' : p.value)}
-          >
-            {p.label}: {p.count}
-          </Badge>
-        ))}
-      </div>
+      {!scopeLocked && (
+        <div className="module-chip-row">
+          {prefixCounts.map((p) => (
+            <button
+              key={p.value}
+              type="button"
+              className={`module-chip${codePrefixFilter === p.value ? ' active' : ''}`}
+              onClick={() => setCodePrefixFilter(codePrefixFilter === p.value ? '' : p.value)}
+            >
+              {p.label}: {p.count}
+            </button>
+          ))}
+        </div>
+      )}
 
-      <Row className="g-2 mb-3">
-        <Col md={2}>
-          {scopeLocked ? (
-            <Form.Control value={scopeLabel(scopedPrefix)} readOnly className="bg-light" />
-          ) : (
-            <Form.Select value={codePrefixFilter} onChange={(e) => setCodePrefixFilter(e.target.value)}>
-              {CODE_PREFIX_OPTIONS.map((p) => (
-                <option key={p.value || 'all'} value={p.value}>{p.label}</option>
+      <FilterPanel>
+        <Row className="g-2">
+          <Col md={2}>
+            {scopeLocked ? (
+              <Form.Control value={scopeLabel(scopedPrefix)} readOnly className="bg-light" />
+            ) : (
+              <Form.Select value={codePrefixFilter} onChange={(e) => setCodePrefixFilter(e.target.value)}>
+                {CODE_PREFIX_OPTIONS.map((p) => (
+                  <option key={p.value || 'all'} value={p.value}>{p.label}</option>
+                ))}
+              </Form.Select>
+            )}
+          </Col>
+          <Col md={2}>
+            <Form.Select value={subjectFilter} onChange={(e) => setSubjectFilter(e.target.value)}>
+              <option value="">Tất cả môn</option>
+              {SUBJECT_OPTIONS.map((s) => (
+                <option key={s.value} value={s.value}>{s.label}</option>
               ))}
             </Form.Select>
-          )}
-        </Col>
-        <Col md={2}>
-          <Form.Select value={subjectFilter} onChange={(e) => setSubjectFilter(e.target.value)}>
-            <option value="">Tất cả môn</option>
-            {SUBJECT_OPTIONS.map((s) => (
-              <option key={s.value} value={s.value}>{s.label}</option>
-            ))}
-          </Form.Select>
-        </Col>
-        <Col md={2}>
-          <Form.Select value={classFilter} onChange={(e) => setClassFilter(e.target.value)}>
-            <option value="">Tất cả lớp</option>
-            {classes.map((c) => (
-              <option key={c.id} value={c.id}>{c.name}</option>
-            ))}
-          </Form.Select>
-        </Col>
-        <Col md={2}>
-          <Form.Select value={enrollmentFilter} onChange={(e) => setEnrollmentFilter(e.target.value)}>
-            <option value="">Tất cả TT khóa</option>
-            {Object.entries(ENROLLMENT_STATUS_LABELS).map(([k, v]) => (
-              <option key={k} value={k}>{v.label}</option>
-            ))}
-          </Form.Select>
-        </Col>
-        <Col md={3}>
-          <Form.Control
-            type="search"
-            placeholder="Tìm mã HV, tên, SĐT..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
-        </Col>
-        <Col md={1} className="d-flex align-items-center">
-          <small className="text-muted">
-            {subjectFilter ? subjectLabel(subjectFilter) : '4 môn'} · {students.length} HV
-          </small>
-        </Col>
-      </Row>
+          </Col>
+          <Col md={2}>
+            <Form.Select value={classFilter} onChange={(e) => setClassFilter(e.target.value)}>
+              <option value="">Tất cả lớp</option>
+              {classes.map((c) => (
+                <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
+            </Form.Select>
+          </Col>
+          <Col md={2}>
+            <Form.Select value={enrollmentFilter} onChange={(e) => setEnrollmentFilter(e.target.value)}>
+              <option value="">Tất cả TT khóa</option>
+              {Object.entries(ENROLLMENT_STATUS_LABELS).map(([k, v]) => (
+                <option key={k} value={k}>{v.label}</option>
+              ))}
+            </Form.Select>
+          </Col>
+          <Col md={3}>
+            <Form.Control
+              type="search"
+              placeholder="Tìm mã HV, tên, SĐT..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+          </Col>
+          <Col md={1} className="d-flex align-items-center">
+            <small className="text-muted">
+              {students.length} HV
+            </small>
+          </Col>
+        </Row>
+      </FilterPanel>
 
       {loading ? (
         <div className="text-center py-5"><Spinner animation="border" /></div>

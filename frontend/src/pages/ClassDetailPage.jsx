@@ -1,7 +1,7 @@
 import { useEffect, useState, useMemo } from 'react';
 import { useParams } from 'react-router-dom';
 import {
-  Nav, Tab, Card, Button, Form, Modal, Spinner, Badge, ListGroup, Alert,
+  Tab, Card, Button, Form, Modal, Spinner, Badge, ListGroup, Alert,
 } from 'react-bootstrap';
 import {
   classService, lessonService, assignmentService, quizService, discussionService,
@@ -20,6 +20,7 @@ import ClassOnlineTab from '../components/class/ClassOnlineTab';
 import ShareContentModal from '../components/class/ShareContentModal';
 import { notifyDeleteResult } from '../utils/deleteHelpers';
 import { ClassMediaTile } from '../components/class/ClassCard';
+import ModuleTabs from '../components/layout/ModuleTabs';
 import { canActAsClassTeacher } from '../utils/roles';
 
 import { API_BASE } from '../config/apiBase';
@@ -303,7 +304,7 @@ export default function ClassDetailPage() {
   }
 
   return (
-    <div className="page-container">
+    <div className="page-container module-page">
       <div className="class-detail-header mb-4">
         <div className="class-detail-header-text">
           <h2 className="mb-1 text-break">
@@ -357,18 +358,19 @@ export default function ClassDetailPage() {
         </div>
       </div>
 
-      <Tab.Container activeKey={activeTab} onSelect={(k) => setActiveTab(k || 'lessons')}>
-        <Nav variant="tabs" className="mb-3 app-nav-tabs-scroll flex-nowrap">
-          <Nav.Item><Nav.Link eventKey="lessons">Bài giảng</Nav.Link></Nav.Item>
-          <Nav.Item><Nav.Link eventKey="assignments">Bài tập</Nav.Link></Nav.Item>
-          <Nav.Item><Nav.Link eventKey="quizzes">Bài kiểm tra</Nav.Link></Nav.Item>
-          <Nav.Item><Nav.Link eventKey="discussions">Thảo luận</Nav.Link></Nav.Item>
-          <Nav.Item><Nav.Link eventKey="online">Lớp online</Nav.Link></Nav.Item>
-          <Nav.Item><Nav.Link eventKey="members">Thành viên</Nav.Link></Nav.Item>
-          <Nav.Item><Nav.Link eventKey="attendance">Điểm danh</Nav.Link></Nav.Item>
-        </Nav>
-
-        <Tab.Content>
+      <ModuleTabs
+        activeKey={activeTab}
+        onSelect={(k) => setActiveTab(k || 'lessons')}
+        tabs={[
+          { key: 'lessons', label: 'Bài giảng', icon: 'bi-journal-text' },
+          { key: 'assignments', label: 'Bài tập', icon: 'bi-clipboard-check' },
+          { key: 'quizzes', label: 'Bài kiểm tra', icon: 'bi-patch-question' },
+          { key: 'discussions', label: 'Thảo luận', icon: 'bi-chat-dots' },
+          { key: 'online', label: 'Lớp online', icon: 'bi-camera-video' },
+          { key: 'members', label: 'Thành viên', icon: 'bi-people' },
+          { key: 'attendance', label: 'Điểm danh', icon: 'bi-calendar-check' },
+        ]}
+      >
           <Tab.Pane eventKey="lessons">
             {canManageClass && (
               <Button className="mb-3" onClick={() => { resetLessonForm(); setShowLessonModal(true); }}>
@@ -543,8 +545,7 @@ export default function ClassDetailPage() {
               currentUserId={user?.id}
             />
           </Tab.Pane>
-        </Tab.Content>
-      </Tab.Container>
+      </ModuleTabs>
 
       <Modal show={showLessonModal} onHide={() => setShowLessonModal(false)} size="lg">
         <Modal.Header closeButton><Modal.Title>Đăng tài liệu</Modal.Title></Modal.Header>

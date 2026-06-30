@@ -1,10 +1,13 @@
 import { useEffect, useState } from 'react';
 import {
-  Nav, Tab, Row, Col, Form, Button, Spinner, Table, Badge, Modal, Alert,
+  Tab, Row, Col, Form, Button, Spinner, Badge, Modal, Alert,
 } from 'react-bootstrap';
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import PageHeader from '../components/layout/PageHeader';
+import ModuleTabs from '../components/layout/ModuleTabs';
+import FilterPanel from '../components/layout/FilterPanel';
+import DataTable, { DataTableEmpty } from '../components/common/DataTable';
 import { auditService } from '../services';
 import { isSuperAdmin } from '../utils/adminScope';
 import {
@@ -138,29 +141,25 @@ export default function AuditPage() {
   }
 
   return (
-    <div className="page-container">
+    <div className="page-container module-page">
       <PageHeader
+        icon="bi-journal-text"
         title="Nhật ký & duyệt xóa"
         subtitle="Theo dõi thao tác của giáo viên và duyệt yêu cầu xóa trước khi thực hiện."
       />
 
-      <Tab.Container activeKey={activeTab} onSelect={(k) => setActiveTab(k || 'logs')}>
-        <Nav variant="tabs" className="mb-4 app-nav-tabs-scroll flex-nowrap">
-          <Nav.Item><Nav.Link eventKey="logs">Lịch sử thao tác</Nav.Link></Nav.Item>
-          <Nav.Item>
-            <Nav.Link eventKey="requests">
-              Yêu cầu xóa
-              {pendingCount > 0 && (
-                <Badge bg="danger" className="ms-2">{pendingCount}</Badge>
-              )}
-            </Nav.Link>
-          </Nav.Item>
-        </Nav>
-
-        <Tab.Content>
-          <Tab.Pane eventKey="logs">
-            {logsError && <Alert variant="danger">{logsError}</Alert>}
-            <Row className="g-2 mb-3">
+      <ModuleTabs
+        activeKey={activeTab}
+        onSelect={(k) => setActiveTab(k || 'logs')}
+        tabs={[
+          { key: 'logs', label: 'Lịch sử thao tác', icon: 'bi-clock-history' },
+          { key: 'requests', label: 'Yêu cầu xóa', icon: 'bi-trash', badge: pendingCount > 0 ? pendingCount : null },
+        ]}
+      >
+        <Tab.Pane eventKey="logs">
+          {logsError && <Alert variant="danger">{logsError}</Alert>}
+          <FilterPanel>
+            <Row className="g-2">
               <Col md={2}>
                 <Form.Select value={actionFilter} onChange={(e) => setActionFilter(e.target.value)}>
                   {ACTION_OPTIONS.map((o) => (
@@ -183,7 +182,7 @@ export default function AuditPage() {
                   <option value="admin">Admin</option>
                 </Form.Select>
               </Col>
-              <Col md={3}>
+              <Col md={4}>
                 <Form.Control
                   type="search"
                   placeholder="Tìm người thao tác, nội dung..."
@@ -191,54 +190,54 @@ export default function AuditPage() {
                   onChange={(e) => setSearch(e.target.value)}
                 />
               </Col>
-              <Col md={3} className="text-md-end">
+              <Col md={2} className="text-md-end">
                 <Button variant="outline-secondary" size="sm" onClick={loadLogs}>
                   <i className="bi bi-arrow-clockwise me-1" />Làm mới
                 </Button>
               </Col>
             </Row>
+          </FilterPanel>
 
-            {loadingLogs ? (
-              <div className="text-center py-5"><Spinner animation="border" /></div>
-            ) : (
-              <Table responsive hover size="sm" className="bg-white shadow-sm rounded">
-                <thead className="table-light">
-                  <tr>
-                    <th>Thời gian</th>
-                    <th>Người thao tác</th>
-                    <th>Thao tác</th>
-                    <th>Loại</th>
-                    <th>Nội dung</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {logs.map((log) => (
-                    <tr key={log.id}>
-                      <td className="text-nowrap small">{formatDateTime(log.created_at)}</td>
-                      <td>
-                        <div className="fw-semibold">{log.actor_name}</div>
-                        <small className="text-muted">{roleLabel(log.actor_role)}</small>
-                      </td>
-                      <td>
-                        <Badge bg={actionBadge(log.action)}>{log.action_label}</Badge>
-                      </td>
-                      <td>{log.resource_type_label}</td>
-                      <td>{log.resource_label || `#${log.resource_id || '—'}`}</td>
-                    </tr>
-                  ))}
-                  {logs.length === 0 && (
-                    <tr>
-                      <td colSpan={5} className="text-center text-muted py-4">Chưa có nhật ký</td>
-                    </tr>
-                  )}
-                </tbody>
-              </Table>
-            )}
-          </Tab.Pane>
+          <DataTable
+            title="Nhật ký thao tác"
+            icon="bi-list-ul"
+            count={logs.length}
+            loading={loadingLogs}
+          >
+            <thead>
+              <tr>
+                <th>Thời gian</th>
+                <th>Người thao tác</th>
+                <th>Thao tác</th>
+                <th>Loại</th>
+                <th>Nội dung</th>
+              </tr>
+            </thead>
+            <tbody>
+              {logs.length === 0 ? (
+                <DataTableEmpty message="Chưa có nhật ký" />
+              ) : logs.map((log) => (
+                <tr key={log.id}>
+                  <td className="text-nowrap small">{formatDateTime(log.created_at)}</td>
+                  <td>
+                    <div className="fw-semibold">{log.actor_name}</div>
+                    <small className="text-muted">{roleLabel(log.actor_role)}</small>
+                  </td>
+                  <td>
+                    <Badge bg={actionBadge(log.action)}>{log.action_label}</Badge>
+                  </td>
+                  <td>{log.resource_type_label}</td>
+                  <td>{log.resource_label || `#${log.resource_id || '—'}`}</td>
+                </tr>
+              ))}
+            </tbody>
+          </DataTable>
+        </Tab.Pane>
 
-          <Tab.Pane eventKey="requests">
-            {requestsError && <Alert variant="danger">{requestsError}</Alert>}
-            <Row className="g-2 mb-3">
+        <Tab.Pane eventKey="requests">
+          {requestsError && <Alert variant="danger">{requestsError}</Alert>}
+          <FilterPanel title="Bộ lọc yêu cầu">
+            <Row className="g-2 align-items-center">
               <Col md={3}>
                 <Form.Select value={requestStatus} onChange={(e) => setRequestStatus(e.target.value)}>
                   <option value="pending">Chờ duyệt</option>
@@ -253,65 +252,63 @@ export default function AuditPage() {
                 </Button>
               </Col>
             </Row>
+          </FilterPanel>
 
-            {loadingRequests ? (
-              <div className="text-center py-5"><Spinner animation="border" /></div>
-            ) : (
-              <Table responsive hover size="sm" className="bg-white shadow-sm rounded">
-                <thead className="table-light">
-                  <tr>
-                    <th>Thời gian</th>
-                    <th>Người yêu cầu</th>
-                    <th>Loại</th>
-                    <th>Nội dung xóa</th>
-                    <th>Trạng thái</th>
-                    <th className="text-end">Thao tác</th>
+          <DataTable
+            title="Yêu cầu xóa"
+            icon="bi-trash"
+            count={requests.length}
+            loading={loadingRequests}
+          >
+            <thead>
+              <tr>
+                <th>Thời gian</th>
+                <th>Người yêu cầu</th>
+                <th>Loại</th>
+                <th>Nội dung xóa</th>
+                <th>Trạng thái</th>
+                <th className="text-end">Thao tác</th>
+              </tr>
+            </thead>
+            <tbody>
+              {requests.length === 0 ? (
+                <DataTableEmpty
+                  message={requestStatus === 'pending' ? 'Không có yêu cầu chờ duyệt' : 'Không có dữ liệu'}
+                />
+              ) : requests.map((req) => {
+                const st = REQUEST_STATUS[req.status] || REQUEST_STATUS.pending;
+                return (
+                  <tr key={req.id}>
+                    <td className="text-nowrap small">{formatDateTime(req.created_at)}</td>
+                    <td>
+                      <div className="fw-semibold">{req.requester_name}</div>
+                      <small className="text-muted">{roleLabel(req.requester_role)}</small>
+                    </td>
+                    <td>{req.resource_type_label}</td>
+                    <td>{req.resource_label || `#${req.resource_id}`}</td>
+                    <td><Badge bg={st.bg}>{st.label}</Badge></td>
+                    <td className="text-end">
+                      {req.status === 'pending' ? (
+                        <Button
+                          size="sm"
+                          variant="outline-primary"
+                          onClick={() => { setReviewItem(req); setReviewNote(''); }}
+                        >
+                          Xem & duyệt
+                        </Button>
+                      ) : (
+                        <small className="text-muted">
+                          {req.reviewer_name ? `${req.reviewer_name}` : '—'}
+                        </small>
+                      )}
+                    </td>
                   </tr>
-                </thead>
-                <tbody>
-                  {requests.map((req) => {
-                    const st = REQUEST_STATUS[req.status] || REQUEST_STATUS.pending;
-                    return (
-                      <tr key={req.id}>
-                        <td className="text-nowrap small">{formatDateTime(req.created_at)}</td>
-                        <td>
-                          <div className="fw-semibold">{req.requester_name}</div>
-                          <small className="text-muted">{roleLabel(req.requester_role)}</small>
-                        </td>
-                        <td>{req.resource_type_label}</td>
-                        <td>{req.resource_label || `#${req.resource_id}`}</td>
-                        <td><Badge bg={st.bg}>{st.label}</Badge></td>
-                        <td className="text-end">
-                          {req.status === 'pending' ? (
-                            <Button
-                              size="sm"
-                              variant="outline-primary"
-                              onClick={() => { setReviewItem(req); setReviewNote(''); }}
-                            >
-                              Xem & duyệt
-                            </Button>
-                          ) : (
-                            <small className="text-muted">
-                              {req.reviewer_name ? `${req.reviewer_name}` : '—'}
-                            </small>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                  {requests.length === 0 && (
-                    <tr>
-                      <td colSpan={6} className="text-center text-muted py-4">
-                        {requestStatus === 'pending' ? 'Không có yêu cầu chờ duyệt' : 'Không có dữ liệu'}
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </Table>
-            )}
-          </Tab.Pane>
-        </Tab.Content>
-      </Tab.Container>
+                );
+              })}
+            </tbody>
+          </DataTable>
+        </Tab.Pane>
+      </ModuleTabs>
 
       <Modal show={!!reviewItem} onHide={() => setReviewItem(null)}>
         <Modal.Header closeButton>

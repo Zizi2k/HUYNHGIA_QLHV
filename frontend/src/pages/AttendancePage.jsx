@@ -5,6 +5,8 @@ import {
 import { attendanceService, classService } from '../services';
 import { useAuth } from '../context/AuthContext';
 import PageHeader from '../components/layout/PageHeader';
+import FilterPanel from '../components/layout/FilterPanel';
+import DataTable, { DataTableEmpty } from '../components/common/DataTable';
 
 const STATUS_LABELS = {
   present: 'Có mặt',
@@ -94,8 +96,9 @@ export default function AttendancePage() {
   }
 
   return (
-    <div className="page-container">
+    <div className="page-container module-page">
       <PageHeader
+        icon="bi-calendar-check"
         title="Báo cáo điểm danh"
         subtitle={
           user?.role === 'admin'
@@ -107,7 +110,6 @@ export default function AttendancePage() {
             <Button
               variant="danger"
               size="sm"
-              className="page-header-btn"
               onClick={handleExportPdf}
               disabled={exporting || !classFilter}
             >
@@ -121,39 +123,46 @@ export default function AttendancePage() {
         }
       />
 
-      <Row className="mb-4 g-3">
-        <Col md={4}>
-          <Form.Label>Lọc theo lớp</Form.Label>
-          <Form.Select value={classFilter} onChange={(e) => setClassFilter(e.target.value)}>
-            <option value="">Tất cả lớp</option>
-            {classes.map((c) => (
-              <option key={c.id} value={c.id}>{c.name}</option>
-            ))}
-          </Form.Select>
-        </Col>
-        <Col md={4}>
-          <Form.Label>Lọc theo tháng</Form.Label>
-          <Form.Control
-            type="month"
-            value={monthFilter}
-            onChange={(e) => setMonthFilter(e.target.value)}
-          />
-        </Col>
-      </Row>
+      <FilterPanel title="Bộ lọc báo cáo">
+        <Row className="g-3">
+          <Col md={4}>
+            <Form.Label className="small fw-semibold">Lọc theo lớp</Form.Label>
+            <Form.Select value={classFilter} onChange={(e) => setClassFilter(e.target.value)}>
+              <option value="">Tất cả lớp</option>
+              {classes.map((c) => (
+                <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
+            </Form.Select>
+          </Col>
+          <Col md={4}>
+            <Form.Label className="small fw-semibold">Lọc theo tháng</Form.Label>
+            <Form.Control
+              type="month"
+              value={monthFilter}
+              onChange={(e) => setMonthFilter(e.target.value)}
+            />
+          </Col>
+        </Row>
+      </FilterPanel>
 
       {canExport && !classFilter && (
-        <Alert variant="info" className="py-2 small">
+        <Alert variant="info" className="py-2 small mb-0">
           Chọn lớp học để xuất báo cáo PDF theo tháng.
         </Alert>
       )}
 
-      {reports.length === 0 ? (
-        <Alert variant="light">
+      {reports.length === 0 && !loading ? (
+        <Alert variant="light" className="mb-0">
           Chưa có báo cáo điểm danh nào trong tháng đã chọn.
         </Alert>
       ) : (
-        <Table responsive hover className="bg-white shadow-sm rounded">
-          <thead className="table-light">
+        <DataTable
+          title="Danh sách buổi điểm danh"
+          icon="bi-list-check"
+          count={reports.length}
+          loading={loading}
+        >
+          <thead>
             <tr>
               <th>Ngày học</th>
               <th>Lớp</th>
@@ -185,7 +194,7 @@ export default function AttendancePage() {
               </tr>
             ))}
           </tbody>
-        </Table>
+        </DataTable>
       )}
 
       <Modal show={showDetail} onHide={() => setShowDetail(false)} size="lg">

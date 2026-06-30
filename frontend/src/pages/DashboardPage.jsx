@@ -1,30 +1,18 @@
 import { useEffect, useState } from 'react';
-import { Row, Col, Spinner, Button } from 'react-bootstrap';
+import { Spinner, Button } from 'react-bootstrap';
 import { Link } from 'react-router-dom';
 import { dashboardService, classService } from '../services';
 import { useAuth } from '../context/AuthContext';
 import PageHeader from '../components/layout/PageHeader';
+import { StatCard, StatCardGrid } from '../components/layout/StatCard';
+import ModuleSection from '../components/layout/ModuleSection';
+
 const metricStyles = [
   { icon: 'collection', tone: 'orange', label: 'Số lớp học' },
   { icon: 'journal-text', tone: 'red', label: 'Số bài tập' },
   { icon: 'patch-question', tone: 'green', label: 'Số bài kiểm tra' },
   { icon: 'star', tone: 'blue', label: 'Điểm trung bình' },
 ];
-
-function MetricBlock({ icon, tone, label, value, hint }) {
-  return (
-    <div className="dash-metric">
-      <div className={`dash-metric-icon tone-${tone}`}>
-        <i className={`bi bi-${icon}`} />
-      </div>
-      <div className="dash-metric-body">
-        <div className="dash-metric-label">{label}</div>
-        <div className="dash-metric-value">{value}</div>
-        {hint && <div className="dash-metric-hint">{hint}</div>}
-      </div>
-    </div>
-  );
-}
 
 export default function DashboardPage() {
   const { user } = useAuth();
@@ -50,82 +38,68 @@ export default function DashboardPage() {
 
   if (loading) {
     return (
-      <div className="page-container text-center py-5">
+      <div className="page-container module-page text-center py-5">
         <Spinner animation="border" variant="primary" />
       </div>
     );
   }
 
   return (
-    <div className="page-container">
+    <div className="page-container module-page">
       <PageHeader
+        icon="bi-speedometer2"
         title="Tổng quan"
         subtitle={`Xin chào, ${user?.fullname}! Đây là bảng điều khiển học tập của bạn.`}
-        actions={
-          <Button as={Link} to="/classes" variant="success" size="sm" className="page-header-btn">
+        actions={(
+          <Button as={Link} to="/classes" variant="primary" size="sm">
             <i className="bi bi-plus-lg me-1" />
             Xem lớp học
           </Button>
-        }
+        )}
       />
 
-      <div className="dash-card mb-4">
-        <div className="dash-card-header">
-          <h2 className="dash-card-title">Tổng quan học tập</h2>
-        </div>
-        <div className="dash-card-body">
-          <Row className="g-0 dash-metrics-row">
-            {metricStyles.map((m, i) => (
-              <Col key={m.label} md={6} lg={3}>
-                <MetricBlock
-                  icon={m.icon}
-                  tone={m.tone}
-                  label={m.label}
-                  value={metrics[i]}
-                />
-              </Col>
-            ))}
-          </Row>
-          {user?.role === 'student' && (
-            <Row className="g-0 dash-metrics-row border-top mt-2 pt-2">
-              <Col md={6}>
-                <MetricBlock
-                  icon="check-circle"
-                  tone="green"
-                  label="Bài đã nộp"
-                  value={stats?.submittedCount ?? 0}
-                />
-              </Col>
-              <Col md={6}>
-                <MetricBlock
-                  icon="exclamation-circle"
-                  tone="orange"
-                  label="Bài còn thiếu"
-                  value={stats?.missingCount ?? 0}
-                />
-              </Col>
-            </Row>
-          )}
-          <div className="text-center mt-4">
-            <Button as={Link} to="/classes" variant="dark" size="sm" className="dash-report-btn">
-              Xem tất cả lớp học
-            </Button>
-          </div>
-        </div>
-      </div>
+      <StatCardGrid>
+        {metricStyles.map((m, i) => (
+          <StatCard
+            key={m.label}
+            icon={m.icon}
+            tone={m.tone}
+            label={m.label}
+            value={metrics[i]}
+          />
+        ))}
+      </StatCardGrid>
 
-      <div className="dash-card">
-        <div className="dash-card-header dash-card-header-split">
-          <h2 className="dash-card-title">Lớp học của bạn</h2>
-          <span className="pro-count-badge">{classes.length}</span>
-        </div>
-        <div className="pro-table-wrap">
-          {classes.length === 0 ? (
-            <div className="pro-table-empty">
-              <i className="bi bi-collection pro-table-empty-icon" />
-              Chưa có lớp học nào.
-            </div>
-          ) : (
+      {user?.role === 'student' && (
+        <StatCardGrid>
+          <StatCard
+            icon="check-circle"
+            tone="green"
+            label="Bài đã nộp"
+            value={stats?.submittedCount ?? 0}
+          />
+          <StatCard
+            icon="exclamation-circle"
+            tone="orange"
+            label="Bài còn thiếu"
+            value={stats?.missingCount ?? 0}
+          />
+        </StatCardGrid>
+      )}
+
+      <ModuleSection
+        title="Lớp học của bạn"
+        icon="bi-collection"
+        count={classes.length}
+        flush
+      >
+        {classes.length === 0 ? (
+          <div className="pro-table-empty">
+            <i className="bi bi-collection pro-table-empty-icon" />
+            Chưa có lớp học nào.
+          </div>
+        ) : (
+          <div className="pro-table-wrap">
             <table className="pro-table">
               <thead>
                 <tr>
@@ -160,7 +134,7 @@ export default function DashboardPage() {
                       <Button
                         as={Link}
                         to={`/classes/${cls.id}`}
-                        variant="dark"
+                        variant="outline-primary"
                         size="sm"
                         className="dash-action-btn"
                       >
@@ -171,9 +145,9 @@ export default function DashboardPage() {
                 ))}
               </tbody>
             </table>
-          )}
-        </div>
-      </div>
+          </div>
+        )}
+      </ModuleSection>
     </div>
   );
 }

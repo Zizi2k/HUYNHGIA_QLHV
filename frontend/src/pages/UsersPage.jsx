@@ -4,6 +4,8 @@ import { Navigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { userService, classService } from '../services';
 import PageHeader from '../components/layout/PageHeader';
+import FilterPanel from '../components/layout/FilterPanel';
+import ModuleSection from '../components/layout/ModuleSection';
 import { isSuperAdmin, isScopedAdmin, lockedCodePrefix, scopeLabel } from '../utils/adminScope';
 
 const allRoleOptions = [
@@ -200,8 +202,9 @@ export default function UsersPage() {
   const totalCount = members.length + unassignedTeachers.length;
 
   return (
-    <div className="page-container">
+    <div className="page-container module-page">
       <PageHeader
+        icon="bi-person-gear"
         title="Quản lý người dùng"
         subtitle={
           isScopedAdmin(user)
@@ -209,16 +212,15 @@ export default function UsersPage() {
             : 'Tạo tài khoản và phân công giáo viên vào lớp học.'
         }
         actions={
-          <Button variant="success" size="sm" className="page-header-btn" onClick={openCreateModal}>
+          <Button variant="primary" size="sm" onClick={openCreateModal}>
             <i className="bi bi-person-plus me-1" />Tạo tài khoản
           </Button>
         }
       />
 
-      <Row className="mb-4 g-3">
-        <Col md={5} lg={4}>
-          <Form.Group>
-            <Form.Label className="fw-semibold">Lọc lớp học</Form.Label>
+      <FilterPanel title="Chọn lớp học">
+        <Row className="g-2">
+          <Col md={5} lg={4}>
             <Form.Control
               type="search"
               placeholder="Tìm lớp..."
@@ -240,12 +242,12 @@ export default function UsersPage() {
             {classSearch && filteredClasses.length === 0 && (
               <Form.Text className="text-muted">Không tìm thấy lớp phù hợp.</Form.Text>
             )}
-          </Form.Group>
-        </Col>
-      </Row>
+          </Col>
+        </Row>
+      </FilterPanel>
 
       {!selectedClassId ? (
-        <Alert variant="light" className="text-center py-4">
+        <Alert variant="light" className="text-center py-4 mb-0">
           <i className="bi bi-funnel d-block fs-3 text-muted mb-2" />
           Vui lòng chọn lớp học để xem danh sách tài khoản trong lớp.
         </Alert>
@@ -253,105 +255,103 @@ export default function UsersPage() {
         <div className="text-center py-5"><Spinner animation="border" /></div>
       ) : (
         <>
-          <div className="mb-3 text-muted small">
-            Lớp: <strong>{selectedClass?.name}</strong>
-            <span className="ms-2 badge bg-primary bg-opacity-10 text-primary">
-              {members.length} thành viên trong lớp
-            </span>
-            {unassignedTeachers.length > 0 && (
-              <span className="ms-2 badge bg-warning bg-opacity-10 text-warning">
-                {unassignedTeachers.length} giáo viên chưa phân lớp
-              </span>
-            )}
-          </div>
-
           {totalCount === 0 ? (
-            <Alert variant="light" className="text-center py-4">
+            <Alert variant="light" className="text-center py-4 mb-0">
               Lớp này chưa có tài khoản nào. Thêm học viên tại tab Thành viên trong lớp học.
             </Alert>
           ) : (
             <>
               {members.length > 0 && (
-                <>
-                  <h6 className="mb-3">Thành viên trong lớp</h6>
-                  <Table responsive hover className="bg-white shadow-sm rounded mb-4">
-                    <thead className="table-light">
-                      <tr>
-                        <th>Họ tên</th>
-                        <th>Tên đăng nhập</th>
-                        <th>Mã</th>
-                        <th>Vai trò</th>
-                        <th>Trạng thái</th>
-                        <th style={{ width: 140 }}>Thao tác</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {members.map((u) => (
-                        <UserTableRow
-                          key={u.id}
-                          user={u}
-                          onEdit={openEditModal}
-                          onDelete={handleDelete}
-                          canManage={canManageUser(u)}
-                        />
-                      ))}
-                    </tbody>
-                  </Table>
-                </>
+                <ModuleSection
+                  title="Thành viên trong lớp"
+                  icon="bi-people"
+                  count={members.length}
+                  flush
+                  className="mb-3"
+                >
+                  <div className="pro-table-wrap">
+                    <table className="pro-table">
+                      <thead>
+                        <tr>
+                          <th>Họ tên</th>
+                          <th>Tên đăng nhập</th>
+                          <th>Mã</th>
+                          <th>Vai trò</th>
+                          <th>Trạng thái</th>
+                          <th style={{ width: 140 }}>Thao tác</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {members.map((u) => (
+                          <UserTableRow
+                            key={u.id}
+                            user={u}
+                            onEdit={openEditModal}
+                            onDelete={handleDelete}
+                            canManage={canManageUser(u)}
+                          />
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </ModuleSection>
               )}
 
               {unassignedTeachers.length > 0 && (
-                <>
-                  <h6 className="mb-3">
-                    Giáo viên chưa được thêm vào lớp nào
-                    <span className="text-muted fw-normal ms-2 small">
-                      Có thể thêm trực tiếp vào lớp đang chọn
-                    </span>
-                  </h6>
-                  <Table responsive hover className="bg-white shadow-sm rounded">
-                    <thead className="table-light">
-                      <tr>
-                        <th>Họ tên</th>
-                        <th>Tên đăng nhập</th>
-                        <th>Mã</th>
-                        <th>Vai trò</th>
-                        <th>Trạng thái</th>
-                        <th style={{ width: 180 }}>Thao tác</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {unassignedTeachers.map((u) => (
-                        <UserTableRow
-                          key={u.id}
-                          user={u}
-                          onEdit={openEditModal}
-                          onDelete={handleDelete}
-                          canManage={canManageUser(u)}
-                          extraActions={(
-                            <Button
-                              variant="outline-success"
-                              size="sm"
-                              className="me-1"
-                              disabled={assigningId === u.id}
-                              onClick={() => handleAssignTeacher(u.id)}
-                            >
-                              {assigningId === u.id ? (
-                                <Spinner animation="border" size="sm" />
-                              ) : (
-                                <>
-                                  <i className="bi bi-person-plus me-1" />
-                                  Thêm vào lớp
-                                </>
-                              )}
-                            </Button>
-                          )}
-                        />
-                      ))}
-                    </tbody>
-                  </Table>
-                </>
+                <ModuleSection
+                  title="Giáo viên chưa được thêm vào lớp"
+                  icon="bi-person-badge"
+                  count={unassignedTeachers.length}
+                  flush
+                >
+                  <p className="text-muted small px-3 pt-2 mb-0">
+                    Có thể thêm trực tiếp vào lớp <strong>{selectedClass?.name}</strong>
+                  </p>
+                  <div className="pro-table-wrap">
+                    <table className="pro-table">
+                      <thead>
+                        <tr>
+                          <th>Họ tên</th>
+                          <th>Tên đăng nhập</th>
+                          <th>Mã</th>
+                          <th>Vai trò</th>
+                          <th>Trạng thái</th>
+                          <th style={{ width: 180 }}>Thao tác</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {unassignedTeachers.map((u) => (
+                          <UserTableRow
+                            key={u.id}
+                            user={u}
+                            onEdit={openEditModal}
+                            onDelete={handleDelete}
+                            canManage={canManageUser(u)}
+                            extraActions={(
+                              <Button
+                                variant="outline-success"
+                                size="sm"
+                                className="me-1"
+                                disabled={assigningId === u.id}
+                                onClick={() => handleAssignTeacher(u.id)}
+                              >
+                                {assigningId === u.id ? (
+                                  <Spinner animation="border" size="sm" />
+                                ) : (
+                                  <>
+                                    <i className="bi bi-person-plus me-1" />
+                                    Thêm vào lớp
+                                  </>
+                                )}
+                              </Button>
+                            )}
+                          />
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </ModuleSection>
               )}
-
             </>
           )}
         </>
