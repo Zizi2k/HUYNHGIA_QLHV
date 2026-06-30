@@ -21,5 +21,5 @@ CREATE TABLE IF NOT EXISTS student_schedule_bookings (
   booked_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (slot_id) REFERENCES teacher_schedule_slots(id) ON DELETE CASCADE,
   FOREIGN KEY (student_id) REFERENCES users(id) ON DELETE CASCADE,
-  UNIQUE KEY unique_slot_booking (slot_id)
+  UNIQUE KEY unique_slot_student (slot_id, student_id)
 );

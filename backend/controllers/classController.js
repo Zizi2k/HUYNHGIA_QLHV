@@ -210,6 +210,8 @@ const updateClass = async (req, res) => {
   }
 };
 
+const { saveMulterFile } = require('../utils/fileStorage');
+
 const uploadClassAvatar = async (req, res) => {
   try {
     if (!req.file) {
@@ -217,9 +219,9 @@ const uploadClassAvatar = async (req, res) => {
     }
     if (!(await assertClassAccess(req.user, req.params.id, res, { manage: true }))) return;
 
-    const avatarUrl = `/uploads/class-avatars/${req.file.filename}`;
-    await pool.query('UPDATE classes SET avatar_url = ? WHERE id = ?', [avatarUrl, req.params.id]);
-    res.json({ message: 'Đã cập nhật ảnh lớp học', avatar_url: avatarUrl });
+    const saved = await saveMulterFile(req);
+    await pool.query('UPDATE classes SET avatar_url = ? WHERE id = ?', [saved.file_url, req.params.id]);
+    res.json({ message: 'Đã cập nhật ảnh lớp học', avatar_url: saved.file_url });
   } catch (err) {
     res.status(500).json({ message: 'Lỗi hệ thống', error: err.message });
   }

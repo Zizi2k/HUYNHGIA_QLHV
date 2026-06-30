@@ -262,6 +262,23 @@ async function ensureSchema() {
     )
   `);
 
+  try {
+    await pool.query('ALTER TABLE student_schedule_bookings DROP INDEX unique_slot_booking');
+  } catch (err) {
+    if (err.code !== 'ER_CANT_DROP_FIELD_OR_KEY' && err.code !== 'ER_DROP_INDEX_FK') {
+      console.warn('ensureSchema drop unique_slot_booking:', err.message);
+    }
+  }
+  try {
+    await pool.query(
+      'ALTER TABLE student_schedule_bookings ADD UNIQUE KEY unique_slot_student (slot_id, student_id)',
+    );
+  } catch (err) {
+    if (err.code !== 'ER_DUP_KEYNAME') {
+      console.warn('ensureSchema unique_slot_student:', err.message);
+    }
+  }
+
   for (const table of ['assignments', 'lessons']) {
     try {
       await pool.query(`ALTER TABLE ${table} MODIFY COLUMN file_type VARCHAR(128) NULL`);

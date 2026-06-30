@@ -1,5 +1,6 @@
 const jwt = require('jsonwebtoken');
 const pool = require('../config/db');
+const { saveMulterFile } = require('../utils/fileStorage');
 const { findUserForStudentLogin, findStudentCodesForUser } = require('../utils/studentIdentity');
 const { SUBJECTS } = require('../utils/tuitionHelpers');
 
@@ -129,7 +130,8 @@ const updateProfile = async (req, res) => {
 
     let avatarUrl = null;
     if (req.file) {
-      avatarUrl = `/uploads/avatars/${req.file.filename}`;
+      const saved = await saveMulterFile(req);
+      avatarUrl = saved.file_url;
     }
 
     if (avatarUrl) {

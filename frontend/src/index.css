@@ -1811,6 +1811,38 @@ a {
   min-width: 120px;
 }
 
+.schedule-booking-dropdown {
+  cursor: pointer;
+}
+
+.schedule-booking-dropdown summary {
+  list-style: none;
+}
+
+.schedule-booking-dropdown summary::-webkit-details-marker {
+  display: none;
+}
+
+.schedule-booking-list {
+  margin: 0.5rem 0 0;
+  padding: 0.5rem 0.65rem;
+  list-style: none;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  font-size: 0.8125rem;
+  min-width: 180px;
+}
+
+.schedule-booking-list li {
+  padding: 0.25rem 0;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.schedule-booking-list li:last-child {
+  border-bottom: none;
+}
+
 @media (max-width: 768px) {
   .schedule-calendar-cell {
     min-height: 56px;

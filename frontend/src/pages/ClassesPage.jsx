@@ -107,14 +107,22 @@ export default function ClassesPage() {
     setError('');
     try {
       if (editingId) {
-        await classService.update(editingId, form);
+        await classService.update(editingId, {
+          name: form.name,
+          description: form.description,
+          subject: form.subject,
+        });
         if (form.avatarFile) {
           const fd = new FormData();
           fd.append('avatar', form.avatarFile);
           await classService.uploadAvatar(editingId, fd);
         }
       } else {
-        const res = await classService.create(form);
+        const res = await classService.create({
+          name: form.name,
+          description: form.description,
+          subject: form.subject,
+        });
         if (form.avatarFile && res.data?.id) {
           const fd = new FormData();
           fd.append('avatar', form.avatarFile);

@@ -74,6 +74,12 @@ export default function TeacherSchedulePanel({
     return { ...slot, is_available: available };
   };
 
+  const getBookings = (slot) => slot.bookings || [];
+
+  const isBookedByMe = (slot) => getBookings(slot).some((b) => b.student_id === currentUserId);
+
+  const hasBookings = (slot) => getBookings(slot).length > 0;
+
   const getDaySummary = (dateStr) => {
     const day = dayMap[dateStr];
     if (!day) return { open: 0, booked: 0, mine: false };
@@ -82,15 +88,15 @@ export default function TeacherSchedulePanel({
     let mine = false;
     day.slots.forEach((slot) => {
       const display = getDisplaySlot(slot);
-      if (display.is_available && !display.booking_id) open += 1;
-      if (display.booking_id) booked += 1;
-      if (display.booked_by === currentUserId) mine = true;
+      if (display.is_available && !isBookedByMe(display)) open += 1;
+      if (hasBookings(display)) booked += 1;
+      if (isBookedByMe(display)) mine = true;
     });
     return { open, booked, mine };
   };
 
   const toggleTeacherSlot = (slot) => {
-    if (slot.booking_id) return;
+    if (hasBookings(slot)) return;
     const key = slotStateKey(slot.slot_date, slot.start_time);
     const next = !getSlotState(slot);
     setPending((prev) => ({ ...prev, [key]: next }));
@@ -173,7 +179,7 @@ export default function TeacherSchedulePanel({
     ? (isStudent
       ? selectedDay.slots.filter((slot) => {
         const display = getDisplaySlot(slot);
-        return display.is_available || display.booked_by === currentUserId;
+        return display.is_available || isBookedByMe(display);
       })
       : selectedDay.slots)
     : [];
@@ -284,22 +290,23 @@ export default function TeacherSchedulePanel({
               <div className="schedule-slot-list">
                 {visibleSlots.map((slot) => {
                   const display = getDisplaySlot(slot);
-                  const isMine = display.booked_by === currentUserId;
-                  const isBooked = Boolean(display.booking_id);
+                  const bookings = getBookings(display);
+                  const mine = isBookedByMe(display);
+                  const booked = hasBookings(display);
                   const isBusy = bookingId?.startsWith(String(display.id));
                   const pendingKey = slotStateKey(slot.slot_date, slot.start_time);
                   const isPending = Object.prototype.hasOwnProperty.call(pending, pendingKey);
 
                   let stateClass = 'closed';
                   let statusText = 'Không dạy';
-                  if (display.is_available && !isBooked) {
+                  if (display.is_available && !booked) {
                     stateClass = 'open';
                     statusText = isStudent ? 'Còn trống — có thể đăng ký' : 'Có thể dạy';
-                  } else if (display.is_available && isBooked) {
-                    stateClass = isMine ? 'mine' : 'booked';
-                    statusText = isMine
-                      ? 'Bạn đã đăng ký'
-                      : `Đã có HS: ${display.booked_by_name || '...'}`;
+                  } else if (display.is_available && booked) {
+                    stateClass = mine ? 'mine' : 'booked';
+                    statusText = mine
+                      ? `Bạn đã đăng ký (${bookings.length} HS)`
+                      : `${bookings.length} học sinh đã đăng ký`;
                   }
 
                   return (
@@ -312,28 +319,47 @@ export default function TeacherSchedulePanel({
                         <span>{slot.label}</span>
                       </div>
                       <div className="schedule-slot-row-status">
-                        <Badge bg={stateClass === 'open' ? 'success' : stateClass === 'closed' ? 'secondary' : 'primary'}>
-                          {statusText}
-                        </Badge>
+                        {isTeacher && booked ? (
+                          <details className="schedule-booking-dropdown">
+                            <summary>
+                              <Badge bg="primary">
+                                {bookings.length} học sinh
+                                <i className="bi bi-chevron-down ms-1" />
+                              </Badge>
+                            </summary>
+                            <ul className="schedule-booking-list">
+                              {bookings.map((b) => (
+                                <li key={b.booking_id}>
+                                  <span className="fw-semibold">{b.fullname}</span>
+                                  {b.code && <span className="text-muted ms-1">({b.code})</span>}
+                                </li>
+                              ))}
+                            </ul>
+                          </details>
+                        ) : (
+                          <Badge bg={stateClass === 'open' ? 'success' : stateClass === 'closed' ? 'secondary' : 'primary'}>
+                            {statusText}
+                          </Badge>
+                        )}
                       </div>
                       <div className="schedule-slot-row-action">
                         {isTeacher && (
                           <Button
                             variant={display.is_available ? 'success' : 'outline-secondary'}
                             size="sm"
-                            disabled={Boolean(slot.booking_id)}
+                            disabled={booked}
                             onClick={() => toggleTeacherSlot(slot)}
-                            title={slot.booking_id ? 'Đã có học sinh đăng ký' : undefined}
+                            title={booked ? 'Đã có học sinh đăng ký' : undefined}
                           >
                             {display.is_available ? 'Có thể dạy' : 'Không dạy'}
                           </Button>
                         )}
-                        {isStudent && display.is_available && !isBooked && display.id && (
+                        {isStudent && display.is_available && !mine && display.id && (
                           <Button size="sm" variant="success" disabled={isBusy} onClick={() => handleBook(display)}>
                             {isBusy ? <Spinner size="sm" /> : 'Đăng ký'}
                           </Button>
                         )}
-                        {isStudent && isMine && (
+                        {isStudent && mine && (
                           <Button size="sm" variant="outline-danger" disabled={isBusy} onClick={() => handleCancel(display)}>
                             Hủy
                           </Button>
