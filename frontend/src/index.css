@@ -2380,6 +2380,22 @@ a {
 }
 
 /* Class card — horizontal layout */
+.shrink-fit-text {
+  display: block;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+.shrink-fit-text-inner {
+  display: inline-block;
+  white-space: nowrap;
+  line-height: inherit;
+  font-weight: inherit;
+  color: inherit;
+  letter-spacing: inherit;
+}
+
 .class-card {
   display: flex;
   align-items: stretch;
@@ -2420,9 +2436,6 @@ a {
   color: #1e3a8a;
   letter-spacing: -0.02em;
   line-height: 1.2;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
   max-width: 100%;
 }
 
@@ -2475,10 +2488,10 @@ a {
 }
 
 .class-card-badge {
-  display: inline-flex;
+  display: flex;
   align-items: center;
   gap: 0.5rem;
-  align-self: flex-start;
+  align-self: stretch;
   padding: 0.45rem 0.85rem;
   border-radius: 10px;
   background: #eff6ff;
@@ -2486,12 +2499,13 @@ a {
   font-size: 0.8125rem;
   font-weight: 600;
   max-width: 100%;
+  min-width: 0;
 }
 
-.class-card-badge span {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.class-card-badge-text {
+  flex: 1;
+  min-width: 0;
+  font-weight: 600;
 }
 
 .class-card-badge i {
@@ -2504,7 +2518,7 @@ a {
   align-items: center;
   gap: 0.5rem;
   margin-top: auto;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
 }
 
 .class-card-enter {

@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom';
 import { Button } from 'react-bootstrap';
 import { getAvatarUrl, getInitials } from '../../utils/avatar';
+import ShrinkFitText from '../common/ShrinkFitText';
 
 export function ClassMediaTile({
   variant, src, alt, initials, label, icon, className = '',
@@ -36,7 +37,9 @@ export default function ClassCard({ cls, canManage, onEdit, onDelete }) {
       <div className="class-card-left">
         <div className="class-card-head">
           <div className="class-card-head-text">
-            <h5 className="class-card-title" title={cls.name}>{cls.name}</h5>
+            <ShrinkFitText as="h5" className="class-card-title" maxFontSize={22} minFontSize={11}>
+              {cls.name}
+            </ShrinkFitText>
             <div className="class-card-title-line" aria-hidden="true" />
           </div>
         </div>
@@ -45,7 +48,9 @@ export default function ClassCard({ cls, canManage, onEdit, onDelete }) {
           {cls.teacher_names && (
             <div className="class-card-badge">
               <i className="bi bi-person-badge" />
-              <span>GV: {cls.teacher_names}</span>
+              <ShrinkFitText className="class-card-badge-text" maxFontSize={13} minFontSize={9}>
+                {`GV: ${cls.teacher_names}`}
+              </ShrinkFitText>
             </div>
           )}
           <div className="class-card-badge">
