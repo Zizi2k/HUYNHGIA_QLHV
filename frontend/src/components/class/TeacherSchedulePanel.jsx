@@ -147,7 +147,7 @@ export default function TeacherSchedulePanel({
       <div className="pro-card-header">
         <h5 className="pro-card-header-title">
           <i className="bi bi-calendar3-week me-2" />
-          Lịch làm việc giáo viên theo tháng
+          {isStudent ? 'Đăng ký giờ học với giáo viên' : 'Lịch làm việc giáo viên theo tháng'}
         </h5>
       </div>
       <Card.Body>
@@ -164,16 +164,27 @@ export default function TeacherSchedulePanel({
               style={{ maxWidth: 180 }}
             />
           </Form.Group>
-          {isTeacher && pendingCount > 0 && (
-            <Button variant="primary" disabled={saving} onClick={handleSave}>
+          {isTeacher && (
+            <Button
+              variant="primary"
+              disabled={saving || pendingCount === 0}
+              onClick={handleSave}
+            >
               {saving ? (
                 <><Spinner size="sm" className="me-2" />Đang lưu...</>
               ) : (
-                <><i className="bi bi-save me-2" />Lưu lịch ({pendingCount} thay đổi)</>
+                <><i className="bi bi-save me-2" />Lưu lịch{pendingCount > 0 ? ` (${pendingCount})` : ''}</>
               )}
             </Button>
           )}
         </div>
+
+        {isTeacher && pendingCount > 0 && (
+          <Alert variant="warning" className="py-2 small">
+            <i className="bi bi-exclamation-triangle me-1" />
+            Bạn đã chọn {pendingCount} khung giờ — bấm <strong>Lưu lịch</strong> để học sinh thấy được.
+          </Alert>
+        )}
 
         <Alert variant="light" className="py-2 small">
           {isTeacher ? (
@@ -190,18 +201,23 @@ export default function TeacherSchedulePanel({
 
         <div className="d-flex flex-wrap gap-2 mb-3">
           {days.map((day) => {
-            const availableCount = day.slots.filter((s) => getSlotState(s)).length;
+            const availableCount = isStudent
+              ? day.slots.filter((s) => getSlotState(s) && !s.booking_id).length
+              : day.slots.filter((s) => getSlotState(s)).length;
             const bookedByMe = day.slots.some((s) => s.booked_by === currentUserId);
             return (
               <Button
                 key={day.date}
                 size="sm"
                 variant={selectedDate === day.date ? 'primary' : 'outline-secondary'}
+                className={!isTeacher && availableCount > 0 ? 'border-success' : undefined}
                 onClick={() => setSelectedDate(day.date)}
               >
                 {formatDayLabel(day.date)}
                 {availableCount > 0 && (
-                  <Badge bg="light" text="dark" className="ms-1">{availableCount}</Badge>
+                  <Badge bg={isStudent ? 'success' : 'light'} text={isStudent ? undefined : 'dark'} className="ms-1">
+                    {availableCount}
+                  </Badge>
                 )}
                 {bookedByMe && <i className="bi bi-bookmark-fill ms-1 text-warning" />}
               </Button>
@@ -210,8 +226,28 @@ export default function TeacherSchedulePanel({
         </div>
 
         {selectedDay ? (
+          (() => {
+            const visibleSlots = isStudent
+              ? selectedDay.slots.filter((slot) => {
+                const display = getDisplaySlot(slot);
+                return display.is_available || display.booked_by === currentUserId;
+              })
+              : selectedDay.slots;
+
+            if (isStudent && visibleSlots.length === 0) {
+              return (
+                <Alert variant="light" className="mb-0">
+                  <i className="bi bi-calendar-x me-2" />
+                  Giáo viên chưa mở khung giờ nào trong ngày{' '}
+                  <strong>{formatDayLabel(selectedDay.date)}</strong>.
+                  Hãy chọn ngày khác (có số trên nút ngày = số khung còn trống).
+                </Alert>
+              );
+            }
+
+            return (
           <div className="schedule-slot-grid">
-            {selectedDay.slots.map((slot) => {
+            {visibleSlots.map((slot) => {
               const display = getDisplaySlot(slot);
               const isMine = display.booked_by === currentUserId;
               const isBooked = Boolean(display.booking_id);
@@ -277,6 +313,8 @@ export default function TeacherSchedulePanel({
               );
             })}
           </div>
+            );
+          })()
         ) : (
           <Alert variant="light" className="mb-0">Chọn tháng để xem lịch.</Alert>
         )}

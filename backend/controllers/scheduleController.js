@@ -1,17 +1,6 @@
 const pool = require('../config/db');
 const { assertClassAccess } = require('../middleware/classAccess');
-const { TIME_SLOTS, getDaysInMonth, slotKey } = require('../utils/scheduleTimeSlots');
-
-function toDateKey(val) {
-  if (!val) return '';
-  if (val instanceof Date) {
-    const y = val.getFullYear();
-    const m = String(val.getMonth() + 1).padStart(2, '0');
-    const d = String(val.getDate()).padStart(2, '0');
-    return `${y}-${m}-${d}`;
-  }
-  return String(val).slice(0, 10);
-}
+const { TIME_SLOTS, getDaysInMonth, slotKey, toDateKey } = require('../utils/scheduleTimeSlots');
 
 function normalizeTime(val) {
   if (!val) return '';
@@ -46,6 +35,8 @@ const getMonthSchedule = async (req, res) => {
       slotMap[slotKey(row.slot_date, normalizeTime(row.start_time))] = row;
     });
 
+    const isSlotAvailable = (row) => row.is_available === 1 || row.is_available === true;
+
     const days = getDaysInMonth(month).map((date) => ({
       date,
       slots: TIME_SLOTS.map((ts) => {
@@ -56,7 +47,7 @@ const getMonthSchedule = async (req, res) => {
           start_time: ts.start,
           end_time: ts.end,
           label: ts.label,
-          is_available: existing ? existing.is_available === 1 : false,
+          is_available: existing ? isSlotAvailable(existing) : false,
           booking_id: existing?.booking_id || null,
           booked_by: existing?.student_id || null,
           booked_by_name: existing?.booked_by_name || null,
@@ -152,7 +143,7 @@ const bookScheduleSlot = async (req, res) => {
     if (req.user.role !== 'student') {
       return res.status(403).json({ message: 'Chỉ học sinh mới đăng ký khung giờ học' });
     }
-    if (!slot.is_available) {
+    if (slot.is_available !== 1 && slot.is_available !== true) {
       return res.status(400).json({ message: 'Khung giờ này giáo viên không dạy' });
     }
     if (slot.booking_id && slot.booked_by !== req.user.id) {
