@@ -2195,4 +2195,390 @@ a {
   width: 100%;
 }
 
+/* Honor board — vinh danh */
+.honor-page .page-header {
+  margin-bottom: 1rem;
+}
+
+.honor-board {
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: 0 12px 40px rgba(15, 23, 42, 0.12);
+  background: #fff;
+}
+
+.honor-board-header {
+  position: relative;
+  background: linear-gradient(135deg, #0c1f4a 0%, #1e3a8a 55%, #0f2744 100%);
+  padding: 2rem 1.5rem 2.25rem;
+  overflow: hidden;
+}
+
+.honor-board-header-accent {
+  position: absolute;
+  width: 42%;
+  height: 120%;
+  background: linear-gradient(135deg, rgba(212, 175, 55, 0.35), rgba(251, 191, 36, 0.15));
+  transform: skewX(-18deg);
+  pointer-events: none;
+}
+
+.honor-board-header-accent--left {
+  left: -8%;
+  top: -10%;
+}
+
+.honor-board-header-accent--right {
+  right: -8%;
+  top: -10%;
+}
+
+.honor-board-header-inner {
+  position: relative;
+  z-index: 1;
+  text-align: center;
+}
+
+.honor-board-logo {
+  width: 72px;
+  height: 72px;
+  object-fit: contain;
+  border-radius: 50%;
+  border: 3px solid #d4af37;
+  background: #fff;
+  padding: 4px;
+  margin-bottom: 0.75rem;
+}
+
+.honor-board-title {
+  margin: 0;
+  font-size: clamp(2rem, 5vw, 2.75rem);
+  font-weight: 800;
+  letter-spacing: 0.28em;
+  color: transparent;
+  background: linear-gradient(180deg, #fde68a 0%, #d4af37 45%, #b8860b 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  text-shadow: 0 2px 12px rgba(212, 175, 55, 0.35);
+}
+
+.honor-board-banner {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  margin-top: 1rem;
+  padding: 0.55rem 1.5rem;
+  background: rgba(15, 23, 42, 0.55);
+  border: 1px solid rgba(212, 175, 55, 0.45);
+  border-radius: 8px;
+}
+
+.honor-board-banner-main {
+  color: #fde68a;
+  font-weight: 700;
+  font-size: 1.05rem;
+  letter-spacing: 0.04em;
+}
+
+.honor-board-banner-sub {
+  color: #cbd5e1;
+  font-size: 0.8125rem;
+}
+
+.honor-board-body {
+  padding: 2rem 1.25rem 2.5rem;
+  background:
+    repeating-linear-gradient(
+      -45deg,
+      transparent,
+      transparent 18px,
+      rgba(148, 163, 184, 0.06) 18px,
+      rgba(148, 163, 184, 0.06) 19px
+    ),
+    #fafbfc;
+}
+
+.honor-podium {
+  max-width: 920px;
+  margin: 0 auto 2rem;
+}
+
+.honor-podium-main {
+  display: grid;
+  grid-template-columns: 1fr 1.15fr 1fr;
+  align-items: end;
+  gap: 0.75rem 1rem;
+  margin-bottom: 1.75rem;
+}
+
+.honor-podium-slot--first {
+  order: 0;
+  transform: translateY(-12px);
+}
+
+.honor-podium-slot--second {
+  order: -1;
+}
+
+.honor-podium-slot--third {
+  order: 1;
+}
+
+.honor-podium-secondary {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 1rem 1.25rem;
+}
+
+/* Honor student frame */
+.honor-frame {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  position: relative;
+}
+
+.honor-frame-crown {
+  position: absolute;
+  top: -8px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 3;
+  color: #d4af37;
+  font-size: 1.35rem;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.25));
+}
+
+.honor-frame--xl .honor-frame-crown {
+  font-size: 1.85rem;
+  top: -12px;
+}
+
+.honor-frame-ring {
+  position: relative;
+  border-radius: 50%;
+  padding: 5px;
+  background: linear-gradient(145deg, #fde68a, #d4af37 40%, #b8860b 70%, #fde68a);
+  box-shadow:
+    0 8px 24px rgba(184, 134, 11, 0.35),
+    inset 0 1px 0 rgba(255, 255, 255, 0.5);
+}
+
+.honor-frame--xl .honor-frame-ring {
+  padding: 7px;
+}
+
+.honor-frame-avatar {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 3px solid #fff;
+  background: #e2e8f0;
+}
+
+.honor-frame-avatar--fallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+  color: #1e3a8a;
+  background: linear-gradient(145deg, #eff6ff, #dbeafe);
+}
+
+.honor-frame--xl .honor-frame-ring {
+  width: 168px;
+  height: 168px;
+}
+
+.honor-frame--lg .honor-frame-ring {
+  width: 128px;
+  height: 128px;
+}
+
+.honor-frame--md .honor-frame-ring {
+  width: 96px;
+  height: 96px;
+}
+
+.honor-frame--xl .honor-frame-avatar--fallback {
+  font-size: 2.5rem;
+}
+
+.honor-frame--lg .honor-frame-avatar--fallback {
+  font-size: 2rem;
+}
+
+.honor-frame--md .honor-frame-avatar--fallback {
+  font-size: 1.5rem;
+}
+
+.honor-frame-placeholder {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: #f1f5f9;
+  color: #94a3b8;
+  font-size: 1.5rem;
+}
+
+.honor-frame--empty .honor-frame-ring {
+  width: 128px;
+  height: 128px;
+  opacity: 0.5;
+}
+
+.honor-frame-ribbon {
+  margin-top: -14px;
+  position: relative;
+  z-index: 2;
+  min-width: 120px;
+  max-width: 200px;
+  padding: 0.4rem 0.85rem 0.35rem;
+  background: linear-gradient(180deg, #fde68a, #d4af37);
+  border: 1px solid #b8860b;
+  border-radius: 6px;
+  box-shadow: 0 4px 10px rgba(184, 134, 11, 0.3);
+}
+
+.honor-frame-name {
+  display: block;
+  font-weight: 800;
+  font-size: 0.8125rem;
+  color: #0c1f4a;
+  line-height: 1.25;
+  word-break: break-word;
+}
+
+.honor-frame--xl .honor-frame-name {
+  font-size: 0.9375rem;
+}
+
+.honor-frame-rank {
+  display: block;
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: #1e3a8a;
+  letter-spacing: 0.08em;
+  margin-top: 0.1rem;
+}
+
+.honor-frame-score {
+  margin-top: 0.45rem;
+  font-size: 0.8125rem;
+  color: #475569;
+}
+
+.honor-frame-score strong {
+  color: #1d4ed8;
+  font-size: 1rem;
+}
+
+.honor-frame--champion .honor-frame-score strong {
+  font-size: 1.15rem;
+}
+
+.honor-rank-list {
+  max-width: 720px;
+  margin: 0 auto;
+  background: #fff;
+  border-radius: 14px;
+  border: 1px solid #e2e8f0;
+  padding: 1.25rem 1.5rem;
+  box-shadow: 0 4px 16px rgba(15, 23, 42, 0.06);
+}
+
+.honor-rank-list-title {
+  font-size: 1rem;
+  font-weight: 700;
+  color: #1e3a8a;
+  margin: 0 0 1rem;
+  padding-bottom: 0.65rem;
+  border-bottom: 2px solid #dbeafe;
+}
+
+.honor-rank-list-items {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.honor-rank-list-item {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  padding: 0.65rem 0;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.honor-rank-list-item:last-child {
+  border-bottom: none;
+}
+
+.honor-rank-list-rank {
+  width: 32px;
+  text-align: center;
+  font-weight: 800;
+  color: #64748b;
+  font-size: 0.9375rem;
+}
+
+.honor-rank-list-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.honor-rank-list-name {
+  display: block;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.honor-rank-list-code {
+  font-size: 0.75rem;
+  color: #94a3b8;
+}
+
+.honor-rank-list-score {
+  text-align: right;
+  flex-shrink: 0;
+}
+
+.honor-rank-list-score strong {
+  display: block;
+  color: #1d4ed8;
+  font-size: 1.05rem;
+}
+
+.honor-rank-list-score small {
+  color: #94a3b8;
+  font-size: 0.7rem;
+}
+
+@media (max-width: 768px) {
+  .honor-podium-main {
+    grid-template-columns: 1fr;
+    justify-items: center;
+  }
+
+  .honor-podium-slot--first {
+    order: -1;
+    transform: none;
+  }
+
+  .honor-podium-slot--second,
+  .honor-podium-slot--third {
+    order: 0;
+  }
+
+  .honor-board-title {
+    letter-spacing: 0.12em;
+  }
+}
 

@@ -100,7 +100,7 @@ const getHonorBoard = async (req, res) => {
     if (!(await assertClassAccess(req.user, classId, res))) return;
 
     const [rows] = await pool.query(
-      `SELECT u.id, u.fullname, u.username,
+      `SELECT u.id, u.fullname, u.username, u.code, u.avatar_url,
         ROUND(AVG(scores.score), 1) AS avg_score,
         COUNT(scores.score) AS graded_count
        FROM users u
