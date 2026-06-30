@@ -19,6 +19,7 @@ const STATUS_SHORT = {
   absent: 'V',
   late: 'M',
   excused: 'P',
+  dropped: 'NL',
 };
 
 function formatDateVi(dateStr) {

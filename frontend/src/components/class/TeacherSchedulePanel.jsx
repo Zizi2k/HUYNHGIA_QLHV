@@ -3,7 +3,14 @@ import {
   Button, Card, Form, Alert, Spinner, Badge,
 } from 'react-bootstrap';
 import { scheduleService } from '../../services';
-import { currentMonthValue, formatDayLabel, slotStateKey } from '../../utils/scheduleTimeSlots';
+import {
+  currentMonthValue,
+  formatDayLabel,
+  formatMonthTitle,
+  getCalendarWeeks,
+  shiftMonth,
+  slotStateKey,
+} from '../../utils/scheduleTimeSlots';
 
 export default function TeacherSchedulePanel({
   classId, isTeacher, isStudent, currentUserId,
@@ -18,6 +25,15 @@ export default function TeacherSchedulePanel({
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
 
+  const calendar = useMemo(() => getCalendarWeeks(month), [month]);
+  const today = new Date().toISOString().slice(0, 10);
+
+  const dayMap = useMemo(() => {
+    const map = {};
+    days.forEach((d) => { map[d.date] = d; });
+    return map;
+  }, [days]);
+
   const loadMonth = () => {
     setLoading(true);
     setError('');
@@ -27,7 +43,6 @@ export default function TeacherSchedulePanel({
         setDays(loadedDays);
         setPending({});
         if (!selectedDate && loadedDays.length > 0) {
-          const today = new Date().toISOString().slice(0, 10);
           const inMonth = loadedDays.find((d) => d.date === today);
           setSelectedDate(inMonth ? today : loadedDays[0].date);
         } else if (selectedDate && !loadedDays.some((d) => d.date === selectedDate)) {
@@ -44,10 +59,7 @@ export default function TeacherSchedulePanel({
     loadMonth();
   }, [classId, month]);
 
-  const selectedDay = useMemo(
-    () => days.find((d) => d.date === selectedDate) || null,
-    [days, selectedDate],
-  );
+  const selectedDay = dayMap[selectedDate] || null;
 
   const getSlotState = (slot) => {
     const key = slotStateKey(slot.slot_date, slot.start_time);
@@ -60,6 +72,21 @@ export default function TeacherSchedulePanel({
   const getDisplaySlot = (slot) => {
     const available = getSlotState(slot);
     return { ...slot, is_available: available };
+  };
+
+  const getDaySummary = (dateStr) => {
+    const day = dayMap[dateStr];
+    if (!day) return { open: 0, booked: 0, mine: false };
+    let open = 0;
+    let booked = 0;
+    let mine = false;
+    day.slots.forEach((slot) => {
+      const display = getDisplaySlot(slot);
+      if (display.is_available && !display.booking_id) open += 1;
+      if (display.booking_id) booked += 1;
+      if (display.booked_by === currentUserId) mine = true;
+    });
+    return { open, booked, mine };
   };
 
   const toggleTeacherSlot = (slot) => {
@@ -142,42 +169,40 @@ export default function TeacherSchedulePanel({
     return <div className="text-center py-4"><Spinner animation="border" /></div>;
   }
 
+  const visibleSlots = selectedDay
+    ? (isStudent
+      ? selectedDay.slots.filter((slot) => {
+        const display = getDisplaySlot(slot);
+        return display.is_available || display.booked_by === currentUserId;
+      })
+      : selectedDay.slots)
+    : [];
+
   return (
-    <Card className="border-0 shadow-sm mb-4" style={{ borderRadius: 12, overflow: 'hidden' }}>
+    <Card className="border-0 shadow-sm mb-4 schedule-calendar-card">
       <div className="pro-card-header">
         <h5 className="pro-card-header-title">
           <i className="bi bi-calendar3-week me-2" />
-          {isStudent ? 'Đăng ký giờ học với giáo viên' : 'Lịch làm việc giáo viên theo tháng'}
+          {isStudent ? 'Đăng ký giờ học với giáo viên' : 'Lịch làm việc giáo viên'}
         </h5>
+        {isTeacher && (
+          <Button
+            variant="primary"
+            size="sm"
+            disabled={saving || pendingCount === 0}
+            onClick={handleSave}
+          >
+            {saving ? (
+              <><Spinner size="sm" className="me-1" />Đang lưu...</>
+            ) : (
+              <><i className="bi bi-save me-1" />Lưu lịch{pendingCount > 0 ? ` (${pendingCount})` : ''}</>
+            )}
+          </Button>
+        )}
       </div>
       <Card.Body>
         {message && <Alert variant="success" className="py-2">{message}</Alert>}
         {error && <Alert variant="danger" className="py-2">{error}</Alert>}
-
-        <div className="d-flex flex-wrap align-items-end gap-3 mb-3">
-          <Form.Group>
-            <Form.Label className="small text-muted mb-1">Tháng</Form.Label>
-            <Form.Control
-              type="month"
-              value={month}
-              onChange={(e) => setMonth(e.target.value)}
-              style={{ maxWidth: 180 }}
-            />
-          </Form.Group>
-          {isTeacher && (
-            <Button
-              variant="primary"
-              disabled={saving || pendingCount === 0}
-              onClick={handleSave}
-            >
-              {saving ? (
-                <><Spinner size="sm" className="me-2" />Đang lưu...</>
-              ) : (
-                <><i className="bi bi-save me-2" />Lưu lịch{pendingCount > 0 ? ` (${pendingCount})` : ''}</>
-              )}
-            </Button>
-          )}
-        </div>
 
         {isTeacher && pendingCount > 0 && (
           <Alert variant="warning" className="py-2 small">
@@ -186,137 +211,142 @@ export default function TeacherSchedulePanel({
           </Alert>
         )}
 
-        <Alert variant="light" className="py-2 small">
-          {isTeacher ? (
-            <>
-              Chọn ngày → bấm vào <strong>khung giờ</strong> để đánh dấu <Badge bg="success">Có thể dạy</Badge> hoặc{' '}
-              <Badge bg="secondary">Không dạy</Badge>, rồi bấm <strong>Lưu lịch</strong>.
-            </>
-          ) : (
-            <>
-              Chọn ngày → đăng ký khung giờ <Badge bg="success">Có thể dạy</Badge> (còn trống) để học với giáo viên.
-            </>
-          )}
-        </Alert>
+        <div className="schedule-calendar-toolbar">
+          <div className="schedule-calendar-nav">
+            <Button variant="outline-secondary" size="sm" onClick={() => setMonth(shiftMonth(month, -1))}>
+              <i className="bi bi-chevron-left" />
+            </Button>
+            <h6 className="schedule-calendar-month-title mb-0">{formatMonthTitle(month)}</h6>
+            <Button variant="outline-secondary" size="sm" onClick={() => setMonth(shiftMonth(month, 1))}>
+              <i className="bi bi-chevron-right" />
+            </Button>
+          </div>
+          <Form.Control
+            type="month"
+            value={month}
+            onChange={(e) => setMonth(e.target.value)}
+            className="schedule-calendar-month-input"
+          />
+        </div>
 
-        <div className="d-flex flex-wrap gap-2 mb-3">
-          {days.map((day) => {
-            const availableCount = isStudent
-              ? day.slots.filter((s) => getSlotState(s) && !s.booking_id).length
-              : day.slots.filter((s) => getSlotState(s)).length;
-            const bookedByMe = day.slots.some((s) => s.booked_by === currentUserId);
+        <div className="schedule-legend mb-3">
+          <span><i className="schedule-legend-dot open" /> Có thể dạy / còn trống</span>
+          <span><i className="schedule-legend-dot closed" /> Không dạy</span>
+          <span><i className="schedule-legend-dot booked" /> Đã đăng ký</span>
+        </div>
+
+        <div className="schedule-calendar-grid">
+          {calendar.headers.map((h) => (
+            <div key={h} className="schedule-calendar-head">{h}</div>
+          ))}
+          {calendar.weeks.flat().map((dateStr, idx) => {
+            if (!dateStr) {
+              return <div key={`empty-${idx}`} className="schedule-calendar-cell empty" />;
+            }
+            const summary = getDaySummary(dateStr);
+            const isSelected = selectedDate === dateStr;
+            const isToday = dateStr === today;
+            const dayNum = parseInt(dateStr.slice(8, 10), 10);
+
             return (
-              <Button
-                key={day.date}
-                size="sm"
-                variant={selectedDate === day.date ? 'primary' : 'outline-secondary'}
-                className={!isTeacher && availableCount > 0 ? 'border-success' : undefined}
-                onClick={() => setSelectedDate(day.date)}
+              <button
+                key={dateStr}
+                type="button"
+                className={`schedule-calendar-cell${isSelected ? ' selected' : ''}${isToday ? ' today' : ''}`}
+                onClick={() => setSelectedDate(dateStr)}
               >
-                {formatDayLabel(day.date)}
-                {availableCount > 0 && (
-                  <Badge bg={isStudent ? 'success' : 'light'} text={isStudent ? undefined : 'dark'} className="ms-1">
-                    {availableCount}
-                  </Badge>
-                )}
-                {bookedByMe && <i className="bi bi-bookmark-fill ms-1 text-warning" />}
-              </Button>
+                <span className="schedule-calendar-day-num">{dayNum}</span>
+                <div className="schedule-calendar-dots">
+                  {summary.open > 0 && <span className="dot open" title={`${summary.open} khung trống`} />}
+                  {summary.booked > 0 && <span className="dot booked" title={`${summary.booked} đã đăng ký`} />}
+                  {summary.mine && <i className="bi bi-bookmark-fill mine" title="Bạn đã đăng ký" />}
+                </div>
+              </button>
             );
           })}
         </div>
 
         {selectedDay ? (
-          (() => {
-            const visibleSlots = isStudent
-              ? selectedDay.slots.filter((slot) => {
-                const display = getDisplaySlot(slot);
-                return display.is_available || display.booked_by === currentUserId;
-              })
-              : selectedDay.slots;
+          <div className="schedule-day-panel">
+            <div className="schedule-day-panel-head">
+              <h6 className="mb-0">
+                <i className="bi bi-clock me-2 text-primary" />
+                Khung giờ — <strong>{formatDayLabel(selectedDay.date)}</strong>
+              </h6>
+              <span className="text-muted small">{visibleSlots.length} khung</span>
+            </div>
 
-            if (isStudent && visibleSlots.length === 0) {
-              return (
-                <Alert variant="light" className="mb-0">
-                  <i className="bi bi-calendar-x me-2" />
-                  Giáo viên chưa mở khung giờ nào trong ngày{' '}
-                  <strong>{formatDayLabel(selectedDay.date)}</strong>.
-                  Hãy chọn ngày khác (có số trên nút ngày = số khung còn trống).
-                </Alert>
-              );
-            }
+            {isStudent && visibleSlots.length === 0 ? (
+              <Alert variant="light" className="mb-0 mt-3">
+                Giáo viên chưa mở khung giờ nào trong ngày này.
+              </Alert>
+            ) : (
+              <div className="schedule-slot-list">
+                {visibleSlots.map((slot) => {
+                  const display = getDisplaySlot(slot);
+                  const isMine = display.booked_by === currentUserId;
+                  const isBooked = Boolean(display.booking_id);
+                  const isBusy = bookingId?.startsWith(String(display.id));
+                  const pendingKey = slotStateKey(slot.slot_date, slot.start_time);
+                  const isPending = Object.prototype.hasOwnProperty.call(pending, pendingKey);
 
-            return (
-          <div className="schedule-slot-grid">
-            {visibleSlots.map((slot) => {
-              const display = getDisplaySlot(slot);
-              const isMine = display.booked_by === currentUserId;
-              const isBooked = Boolean(display.booking_id);
-              const isBusy = bookingId?.startsWith(String(display.id));
+                  let stateClass = 'closed';
+                  let statusText = 'Không dạy';
+                  if (display.is_available && !isBooked) {
+                    stateClass = 'open';
+                    statusText = isStudent ? 'Còn trống — có thể đăng ký' : 'Có thể dạy';
+                  } else if (display.is_available && isBooked) {
+                    stateClass = isMine ? 'mine' : 'booked';
+                    statusText = isMine
+                      ? 'Bạn đã đăng ký'
+                      : `Đã có HS: ${display.booked_by_name || '...'}`;
+                  }
 
-              let btnVariant = 'outline-secondary';
-              let statusText = 'Không dạy';
-              if (display.is_available && !isBooked) {
-                btnVariant = 'outline-success';
-                statusText = 'Có thể dạy — còn trống';
-              } else if (display.is_available && isBooked) {
-                btnVariant = isMine ? 'primary' : 'warning';
-                statusText = isMine
-                  ? 'Bạn đã đăng ký'
-                  : `Đã có HS: ${display.booked_by_name || '...'}`;
-              }
-
-              return (
-                <div key={slot.start_time} className="schedule-slot-item">
-                  {isTeacher ? (
-                    <Button
-                      variant={display.is_available ? 'success' : 'secondary'}
-                      size="sm"
-                      className="w-100 schedule-slot-btn"
-                      disabled={Boolean(slot.booking_id)}
-                      onClick={() => toggleTeacherSlot(slot)}
-                      title={slot.booking_id ? 'Đã có học sinh đăng ký, không thể đổi' : undefined}
+                  return (
+                    <div
+                      key={slot.start_time}
+                      className={`schedule-slot-row ${stateClass}${isPending ? ' pending' : ''}`}
                     >
-                      <div className="fw-semibold">{slot.label}</div>
-                      <div className="small opacity-75">
-                        {display.is_available ? 'Có thể dạy' : 'Không dạy'}
+                      <div className="schedule-slot-row-time">
+                        <i className="bi bi-clock" />
+                        <span>{slot.label}</span>
                       </div>
-                    </Button>
-                  ) : (
-                    <div className={`schedule-slot-student border rounded p-2 ${btnVariant.replace('outline-', 'border-')}`}>
-                      <div className="fw-semibold small">{slot.label}</div>
-                      <div className="text-muted small mb-2">{statusText}</div>
-                      {display.is_available && !isBooked && display.id && (
-                        <Button
-                          size="sm"
-                          variant="success"
-                          className="w-100"
-                          disabled={isBusy}
-                          onClick={() => handleBook(display)}
-                        >
-                          {isBusy ? <Spinner size="sm" /> : 'Đăng ký học'}
-                        </Button>
-                      )}
-                      {isMine && (
-                        <Button
-                          size="sm"
-                          variant="outline-danger"
-                          className="w-100 mt-1"
-                          disabled={isBusy}
-                          onClick={() => handleCancel(display)}
-                        >
-                          Hủy đăng ký
-                        </Button>
-                      )}
+                      <div className="schedule-slot-row-status">
+                        <Badge bg={stateClass === 'open' ? 'success' : stateClass === 'closed' ? 'secondary' : 'primary'}>
+                          {statusText}
+                        </Badge>
+                      </div>
+                      <div className="schedule-slot-row-action">
+                        {isTeacher && (
+                          <Button
+                            variant={display.is_available ? 'success' : 'outline-secondary'}
+                            size="sm"
+                            disabled={Boolean(slot.booking_id)}
+                            onClick={() => toggleTeacherSlot(slot)}
+                            title={slot.booking_id ? 'Đã có học sinh đăng ký' : undefined}
+                          >
+                            {display.is_available ? 'Có thể dạy' : 'Không dạy'}
+                          </Button>
+                        )}
+                        {isStudent && display.is_available && !isBooked && display.id && (
+                          <Button size="sm" variant="success" disabled={isBusy} onClick={() => handleBook(display)}>
+                            {isBusy ? <Spinner size="sm" /> : 'Đăng ký'}
+                          </Button>
+                        )}
+                        {isStudent && isMine && (
+                          <Button size="sm" variant="outline-danger" disabled={isBusy} onClick={() => handleCancel(display)}>
+                            Hủy
+                          </Button>
+                        )}
+                      </div>
                     </div>
-                  )}
-                </div>
-              );
-            })}
+                  );
+                })}
+              </div>
+            )}
           </div>
-            );
-          })()
         ) : (
-          <Alert variant="light" className="mb-0">Chọn tháng để xem lịch.</Alert>
+          <Alert variant="light" className="mb-0 mt-3">Chọn một ngày trên lịch để xem khung giờ.</Alert>
         )}
       </Card.Body>
     </Card>

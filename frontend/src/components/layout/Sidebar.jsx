@@ -59,6 +59,7 @@ export default function Sidebar({ collapsed, mobileOpen, onNavigate }) {
             <NavItem to="/students" icon="person-lines-fill" label="Quản lý học viên" />
             {isSuper && <NavItem to="/audit" icon="journal-text" label="Nhật ký & duyệt" />}
             <NavItem to="/tuition" icon="cash-coin" label="Học phí" />
+            <NavItem to="/fee-debts" icon="wallet2" label="Nợ phí" />
           </div>
         )}
       </nav>

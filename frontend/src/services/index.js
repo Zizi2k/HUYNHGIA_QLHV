@@ -91,6 +91,11 @@ export const quizService = {
   share: (id, targetClassIds) => api.post(`/quizzes/${id}/share`, { target_class_ids: targetClassIds }),
 };
 
+export const feeDebtService = {
+  getAll: () => api.get('/fee-debts'),
+  delete: (id, data) => api.delete(`/fee-debts/${id}`, { data }),
+};
+
 export const discussionService = {
   getByClass: (classId) => api.get(`/discussions/class/${classId}`),
   create: (data) => api.post('/discussions', data),

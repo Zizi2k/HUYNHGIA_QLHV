@@ -11,6 +11,7 @@ const STATUS_LABELS = {
   absent: 'Vắng',
   late: 'Đi muộn',
   excused: 'Có phép',
+  dropped: 'Nghỉ luôn',
 };
 
 function currentMonthValue() {
@@ -160,6 +161,7 @@ export default function AttendancePage() {
               <th>Vắng</th>
               <th>Muộn</th>
               <th>Có phép</th>
+              <th>Nghỉ luôn</th>
               <th>Giáo viên</th>
               <th></th>
             </tr>
@@ -173,6 +175,7 @@ export default function AttendancePage() {
                 <td><Badge bg="danger">{r.absent_count || 0}</Badge></td>
                 <td><Badge bg="warning" text="dark">{r.late_count || 0}</Badge></td>
                 <td><Badge bg="info">{r.excused_count || 0}</Badge></td>
+                <td><Badge bg="secondary">{r.dropped_count || 0}</Badge></td>
                 <td className="small">{r.teacher_name}</td>
                 <td>
                   <Button variant="outline-primary" size="sm" onClick={() => openDetail(r.id)}>

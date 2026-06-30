@@ -11,6 +11,7 @@ const STATUS_OPTIONS = [
   { value: 'absent', label: 'Vắng', icon: 'bi-x-circle-fill' },
   { value: 'late', label: 'Đi muộn', icon: 'bi-clock-fill' },
   { value: 'excused', label: 'Có phép', icon: 'bi-info-circle-fill' },
+  { value: 'dropped', label: 'Nghỉ luôn', icon: 'bi-person-x-fill' },
 ];
 
 const AVATAR_COLORS = ['#3b82f6', '#8b5cf6', '#06b6d4', '#10b981', '#f59e0b', '#ef4444'];
@@ -39,7 +40,7 @@ export default function ClassAttendanceTab({
   const [error, setError] = useState('');
 
   const stats = useMemo(() => {
-    const counts = { present: 0, absent: 0, late: 0, excused: 0 };
+    const counts = { present: 0, absent: 0, late: 0, excused: 0, dropped: 0 };
     students.forEach((s) => {
       const status = records[s.id] || 'present';
       counts[status] = (counts[status] || 0) + 1;
@@ -316,6 +317,7 @@ export default function ClassAttendanceTab({
               <th className="text-center">Vắng</th>
               <th className="text-center">Muộn</th>
               <th className="text-center">Có phép</th>
+              <th className="text-center">Nghỉ luôn</th>
               <th>Người điểm danh</th>
               {isTeacher && <th style={{ width: 100 }}></th>}
             </tr>
@@ -347,6 +349,9 @@ export default function ClassAttendanceTab({
                 </td>
                 <td className="text-center">
                   <span className="pro-history-badge info">{h.excused_count || 0}</span>
+                </td>
+                <td className="text-center">
+                  <span className="pro-history-badge secondary">{h.dropped_count || 0}</span>
                 </td>
                 <td>
                   <span className="text-muted small">

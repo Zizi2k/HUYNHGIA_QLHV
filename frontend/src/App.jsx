@@ -10,6 +10,7 @@ import UsersPage from './pages/UsersPage';
 import HonorPage from './pages/HonorPage';
 import AttendancePage from './pages/AttendancePage';
 import TuitionPage from './pages/TuitionPage';
+import FeeDebtPage from './pages/FeeDebtPage';
 import StudentsPage from './pages/StudentsPage';
 import AdminStaffPage from './pages/AdminStaffPage';
 import AuditPage from './pages/AuditPage';
@@ -29,6 +30,7 @@ function App() {
             <Route path="/honor" element={<HonorPage />} />
             <Route path="/attendance" element={<AttendancePage />} />
             <Route path="/tuition" element={<TuitionPage />} />
+            <Route path="/fee-debts" element={<FeeDebtPage />} />
             <Route path="/students" element={<StudentsPage />} />
             <Route path="/admin-staff" element={<AdminStaffPage />} />
             <Route path="/audit" element={<AuditPage />} />

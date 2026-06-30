@@ -278,6 +278,45 @@ async function ensureSchema() {
     if (err.code !== 'ER_DUP_FIELDNAME') throw err;
   }
 
+  try {
+    await pool.query(
+      `ALTER TABLE attendance_records
+       MODIFY COLUMN status ENUM('present','absent','late','excused','dropped') NOT NULL DEFAULT 'present'`,
+    );
+  } catch (err) {
+    if (err.code !== 'ER_BAD_FIELD_ERROR') {
+      console.warn('ensureSchema attendance status:', err.message);
+    }
+  }
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS fee_debt_records (
+      id INT PRIMARY KEY AUTO_INCREMENT,
+      user_id INT NULL,
+      student_code VARCHAR(50) NOT NULL,
+      fullname VARCHAR(100) NOT NULL,
+      phone VARCHAR(20) NULL,
+      zalo VARCHAR(100) NULL,
+      class_id INT NULL,
+      class_name VARCHAR(255) NULL,
+      subject VARCHAR(50) NULL,
+      tuition_profile_id INT NULL,
+      tuition_debt DECIMAL(12, 2) NOT NULL DEFAULT 0,
+      book_debt DECIMAL(12, 2) NOT NULL DEFAULT 0,
+      total_debt DECIMAL(12, 2) NOT NULL DEFAULT 0,
+      source VARCHAR(50) DEFAULT 'attendance_dropped',
+      left_at DATETIME NULL,
+      note TEXT NULL,
+      created_by INT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL,
+      FOREIGN KEY (tuition_profile_id) REFERENCES tuition_profiles(id) ON DELETE SET NULL,
+      FOREIGN KEY (class_id) REFERENCES classes(id) ON DELETE SET NULL,
+      INDEX idx_fee_debt_student_code (student_code)
+    )
+  `);
+
   } catch (err) {
     console.warn('ensureSchema:', err.message);
   }

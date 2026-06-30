@@ -1,13 +1,10 @@
-const TIME_SLOTS = [];
-for (let hour = 7; hour < 21; hour += 1) {
-  const start = `${String(hour).padStart(2, '0')}:00:00`;
-  const end = `${String(hour + 1).padStart(2, '0')}:00:00`;
-  TIME_SLOTS.push({
-    start,
-    end,
-    label: `${hour}:00 – ${hour + 1}:00`,
-  });
-}
+const TIME_SLOTS = [
+  { start: '07:00:00', end: '09:00:00', label: '7:00 – 9:00' },
+  { start: '09:00:00', end: '11:00:00', label: '9:00 – 11:00' },
+  { start: '12:45:00', end: '14:45:00', label: '12:45 – 14:45' },
+  { start: '14:45:00', end: '16:45:00', label: '14:45 – 16:45' },
+  { start: '16:45:00', end: '18:45:00', label: '16:45 – 18:45' },
+];
 
 function getDaysInMonth(month) {
   if (!/^\d{4}-\d{2}$/.test(month || '')) return [];

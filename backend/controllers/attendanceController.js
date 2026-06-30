@@ -21,12 +21,17 @@ function toDateKey(val) {
   return String(val).slice(0, 10);
 }
 
+const { syncFeeDebtForDroppedStudents } = require('../utils/feeDebt');
+
 const STATUS_LABELS = {
   present: 'Có mặt',
   absent: 'Vắng',
   late: 'Đi muộn',
   excused: 'Có phép',
+  dropped: 'Nghỉ luôn',
 };
+
+const DROPPED_SUM = `SUM(CASE WHEN r.status = 'dropped' THEN 1 ELSE 0 END) AS dropped_count`;
 
 const getSessionsByClass = async (req, res) => {
   try {
@@ -38,6 +43,7 @@ const getSessionsByClass = async (req, res) => {
         SUM(CASE WHEN r.status = 'absent' THEN 1 ELSE 0 END) AS absent_count,
         SUM(CASE WHEN r.status = 'late' THEN 1 ELSE 0 END) AS late_count,
         SUM(CASE WHEN r.status = 'excused' THEN 1 ELSE 0 END) AS excused_count,
+        ${DROPPED_SUM},
         COUNT(r.id) AS total_students
        FROM attendance_sessions s
        JOIN users u ON s.created_by = u.id
@@ -62,6 +68,7 @@ const getAllReports = async (req, res) => {
         SUM(CASE WHEN r.status = 'absent' THEN 1 ELSE 0 END) AS absent_count,
         SUM(CASE WHEN r.status = 'late' THEN 1 ELSE 0 END) AS late_count,
         SUM(CASE WHEN r.status = 'excused' THEN 1 ELSE 0 END) AS excused_count,
+        ${DROPPED_SUM},
         COUNT(r.id) AS total_students
       FROM attendance_sessions s
       JOIN classes c ON s.class_id = c.id
@@ -197,10 +204,29 @@ const submitAttendance = async (req, res) => {
     }
 
     for (const record of students) {
+      const status = record.status || 'present';
+      if (!['present', 'absent', 'late', 'excused', 'dropped'].includes(status)) {
+        await conn.rollback();
+        return res.status(400).json({ message: 'Trạng thái điểm danh không hợp lệ' });
+      }
       await conn.query(
         'INSERT INTO attendance_records (session_id, student_id, status) VALUES (?, ?, ?)',
-        [sessionId, record.student_id, record.status || 'present']
+        [sessionId, record.student_id, status]
       );
+    }
+
+    const droppedIds = students
+      .filter((r) => r.status === 'dropped')
+      .map((r) => r.student_id);
+
+    if (droppedIds.length > 0) {
+      const [classRows] = await conn.query('SELECT name FROM classes WHERE id = ?', [class_id]);
+      await syncFeeDebtForDroppedStudents(conn, {
+        classId: class_id,
+        className: classRows[0]?.name,
+        studentIds: droppedIds,
+        actorId: req.user.id,
+      });
     }
 
     await conn.commit();

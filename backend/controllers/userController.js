@@ -230,8 +230,9 @@ const updateUser = async (req, res) => {
 };
 
 const deleteUser = async (req, res) => {
+  const conn = await pool.getConnection();
   try {
-    const [users] = await pool.query(
+    const [users] = await conn.query(
       'SELECT id, fullname, role, code, admin_scope FROM users WHERE id = ?',
       [req.params.id]
     );
@@ -251,7 +252,14 @@ const deleteUser = async (req, res) => {
       return res.status(400).json({ message: 'Không thể xóa tài khoản của chính bạn' });
     }
 
-    await pool.query('DELETE FROM users WHERE id = ?', [req.params.id]);
+    await conn.beginTransaction();
+    const { snapshotFeeDebtBeforeUserDelete } = require('../utils/feeDebt');
+    if (users[0].role === 'student') {
+      await snapshotFeeDebtBeforeUserDelete(conn, users[0].id, req.user.id);
+    }
+    await conn.query('DELETE FROM users WHERE id = ?', [req.params.id]);
+    await conn.commit();
+
     await logAction({
       actorId: req.user.id,
       action: 'delete',
@@ -261,7 +269,10 @@ const deleteUser = async (req, res) => {
     });
     res.json({ message: 'Xóa thành công' });
   } catch (err) {
+    await conn.rollback();
     res.status(500).json({ message: 'Lỗi hệ thống', error: err.message });
+  } finally {
+    conn.release();
   }
 };
 
