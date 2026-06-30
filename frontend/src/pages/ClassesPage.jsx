@@ -3,7 +3,7 @@ import { Row, Col, Button, Modal, Form, Spinner, Alert, InputGroup, ButtonGroup 
 import { classService } from '../services';
 import { useAuth } from '../context/AuthContext';
 import PageHeader from '../components/layout/PageHeader';
-import ClassCard from '../components/class/ClassCard';
+import ClassCard, { ClassMediaTile } from '../components/class/ClassCard';
 import { SUBJECT_OPTIONS } from '../components/tuition/tuitionConstants';
 import { isSuperAdmin } from '../utils/adminScope';
 import { getAvatarUrl } from '../utils/avatar';
@@ -268,17 +268,14 @@ export default function ClassesPage() {
             <Form.Group className="mb-3">
               <Form.Label>Ảnh đại diện lớp học</Form.Label>
               <div className="d-flex align-items-center gap-3">
-                <div className="class-card-avatar class-card-avatar--class class-card-avatar--preview">
-                  <div className="class-card-avatar-ring">
-                    {avatarPreview ? (
-                      <img src={avatarPreview} alt="Preview" className="class-card-avatar-img" />
-                    ) : (
-                      <div className="class-card-avatar-fallback">
-                        <i className="bi bi-mortarboard" />
-                      </div>
-                    )}
-                  </div>
-                </div>
+                <ClassMediaTile
+                  variant="class"
+                  src={avatarPreview || undefined}
+                  alt="Preview"
+                  icon="mortarboard"
+                  label="Lớp học"
+                  className="class-card-preview-tile"
+                />
                 <Form.Control
                   type="file"
                   accept={LESSON_IMAGE_ACCEPT}

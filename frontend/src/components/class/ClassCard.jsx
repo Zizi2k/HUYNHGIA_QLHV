@@ -1,87 +1,93 @@
 import { Link } from 'react-router-dom';
-import { Card, Button, Badge } from 'react-bootstrap';
+import { Button } from 'react-bootstrap';
 import { getAvatarUrl, getInitials } from '../../utils/avatar';
 
-function AvatarFrame({
-  src, label, initials, variant = 'class', title,
+export function ClassMediaTile({
+  variant, src, alt, initials, label, icon, className = '',
 }) {
   const resolved = src ? getAvatarUrl(src) : null;
+  const isClass = variant === 'class';
+
   return (
-    <div className={`class-card-avatar class-card-avatar--${variant}`} title={title}>
-      <div className="class-card-avatar-ring">
+    <div className={`class-card-media class-card-media--${variant} ${className}`.trim()}>
+      <div className={`class-card-media-body ${isClass ? 'class-card-media-body--rect' : 'class-card-media-body--round'}`}>
         {resolved ? (
-          <img src={resolved} alt={title || label} className="class-card-avatar-img" />
+          <img src={resolved} alt={alt} className="class-card-media-img" />
         ) : (
-          <div className="class-card-avatar-fallback">
-            {initials || <i className={`bi bi-${variant === 'class' ? 'mortarboard' : 'person-badge'}`} />}
+          <div className="class-card-media-fallback">
+            {initials || <i className={`bi bi-${icon}`} />}
           </div>
         )}
       </div>
-      <span className="class-card-avatar-label">{label}</span>
+      <div className="class-card-media-footer">
+        <i className={`bi bi-${icon}`} />
+        <span>{label}</span>
+      </div>
     </div>
   );
 }
 
 export default function ClassCard({ cls, canManage, onEdit, onDelete }) {
-  const teacherInitials = getInitials((cls.teacher_names || 'GV').split(',')[0].trim());
+  const teacherName = cls.teacher_names?.split(',')[0]?.trim() || 'Giáo viên';
+  const teacherInitials = getInitials(teacherName);
 
   return (
-    <Card className="class-card h-100 border-0 shadow-sm">
-      <Card.Body className="class-card-body">
-        <div className="class-card-main">
-          <div className="class-card-info">
-            <div className="d-flex justify-content-between align-items-start gap-2 mb-1">
-              <h5 className="class-card-title text-break mb-0">{cls.name}</h5>
-              {canManage && (
-                <div className="d-flex gap-1 flex-shrink-0">
-                  <Button variant="outline-secondary" size="sm" title="Sửa lớp học" onClick={() => onEdit(cls)}>
-                    <i className="bi bi-pencil" />
-                  </Button>
-                  <Button variant="outline-danger" size="sm" title="Xóa lớp học" onClick={() => onDelete(cls)}>
-                    <i className="bi bi-trash" />
-                  </Button>
-                </div>
-              )}
-            </div>
-            {cls.code && (
-              <Badge bg="secondary" className="bg-opacity-10 text-secondary mb-2">{cls.code}</Badge>
-            )}
-            <p className="class-card-desc text-muted mb-2">{cls.description || '—'}</p>
-            {cls.teacher_names && (
-              <p className="small text-muted mb-2 class-card-teacher">
-                <i className="bi bi-person-workspace me-1" />
-                GV: {cls.teacher_names}
-              </p>
-            )}
-            <Badge bg="primary" className="bg-opacity-10 text-primary class-card-members">
-              {cls.member_count} thành viên
-            </Badge>
+    <article className="class-card">
+      <div className="class-card-left">
+        <div className="class-card-head">
+          <div className="class-card-head-text">
+            <h5 className="class-card-title text-break">{cls.name}</h5>
+            <div className="class-card-title-line" aria-hidden="true" />
           </div>
+          {canManage && (
+            <div className="class-card-actions">
+              <button type="button" className="class-card-action-btn" title="Sửa lớp học" onClick={() => onEdit(cls)}>
+                <i className="bi bi-pencil" />
+              </button>
+              <button type="button" className="class-card-action-btn class-card-action-btn--danger" title="Xóa lớp học" onClick={() => onDelete(cls)}>
+                <i className="bi bi-trash" />
+              </button>
+            </div>
+          )}
+        </div>
 
-          <div className="class-card-visual">
-            <AvatarFrame
-              src={cls.avatar_url}
-              label="Lớp học"
-              initials={getInitials(cls.name)}
-              variant="class"
-              title={cls.name}
-            />
-            <AvatarFrame
-              src={cls.teacher_avatar_url}
-              label="Giáo viên"
-              initials={teacherInitials}
-              variant="teacher"
-              title={cls.teacher_names?.split(',')[0]?.trim() || 'Giáo viên'}
-            />
+        <div className="class-card-badges">
+          {cls.teacher_names && (
+            <div className="class-card-badge">
+              <i className="bi bi-person-badge" />
+              <span>GV: {cls.teacher_names}</span>
+            </div>
+          )}
+          <div className="class-card-badge">
+            <i className="bi bi-people" />
+            <span>{cls.member_count} thành viên</span>
           </div>
         </div>
-      </Card.Body>
-      <Card.Footer className="class-card-footer bg-white border-0">
-        <Button as={Link} to={`/classes/${cls.id}`} variant="outline-primary" size="sm" className="class-card-enter">
+
+        <Button as={Link} to={`/classes/${cls.id}`} className="class-card-enter">
           Vào lớp học
-          <i className="bi bi-arrow-right-short ms-1" />
+          <i className="bi bi-arrow-right" />
         </Button>
-      </Card.Footer>
-    </Card>
+      </div>
+
+      <div className="class-card-right">
+        <ClassMediaTile
+          variant="class"
+          src={cls.avatar_url}
+          alt={cls.name}
+          initials={getInitials(cls.name)}
+          label="Lớp học"
+          icon="mortarboard"
+        />
+        <ClassMediaTile
+          variant="teacher"
+          src={cls.teacher_avatar_url}
+          alt={teacherName}
+          initials={teacherInitials}
+          label="Giáo viên"
+          icon="person"
+        />
+      </div>
+    </article>
   );
 }

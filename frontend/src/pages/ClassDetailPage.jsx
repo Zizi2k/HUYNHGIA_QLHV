@@ -18,8 +18,8 @@ import ClassAssignmentsTab from '../components/class/ClassAssignmentsTab';
 import ClassQuizzesTab from '../components/class/ClassQuizzesTab';
 import ClassOnlineTab from '../components/class/ClassOnlineTab';
 import { notifyDeleteResult } from '../utils/deleteHelpers';
+import { ClassMediaTile } from '../components/class/ClassCard';
 import { canActAsClassTeacher } from '../utils/roles';
-import { getAvatarUrl } from '../utils/avatar';
 
 import { API_BASE } from '../config/apiBase';
 
@@ -306,60 +306,45 @@ export default function ClassDetailPage() {
           </h2>
           <p className="text-muted mb-0 text-break">{classData.description}</p>
         </div>
-        <div className="class-card-visual class-detail-header-visual">
-          <div className="class-card-avatar class-card-avatar--class">
-            <div className="class-card-avatar-ring">
-              {classData.avatar_url ? (
-                <img
-                  src={getAvatarUrl(classData.avatar_url)}
-                  alt={classData.name}
-                  className="class-card-avatar-img"
-                />
-              ) : (
-                <div className="class-card-avatar-fallback">
-                  <i className="bi bi-mortarboard" />
-                </div>
-              )}
-            </div>
-            <span className="class-card-avatar-label">Lớp học</span>
-            {canManageClass && (
-              <>
-                <input
-                  id="class-avatar-upload"
-                  type="file"
-                  accept={LESSON_IMAGE_ACCEPT}
-                  className="d-none"
-                  onChange={handleClassAvatarUpload}
-                />
-                <Button
-                  as="label"
-                  htmlFor="class-avatar-upload"
-                  variant="link"
-                  size="sm"
-                  className="p-0 text-decoration-none small"
-                >
-                  Đổi ảnh lớp
-                </Button>
-              </>
+        <div className="class-detail-header-visual-wrap">
+          <div className="class-card-right class-detail-header-visual">
+            <ClassMediaTile
+              variant="class"
+              src={classData.avatar_url}
+              alt={classData.name}
+              icon="mortarboard"
+              label="Lớp học"
+            />
+            {primaryTeacher && (
+              <ClassMediaTile
+                variant="teacher"
+                src={primaryTeacher.avatar_url}
+                alt={primaryTeacher.fullname}
+                initials={primaryTeacher.fullname?.charAt(0) || 'G'}
+                icon="person-fill"
+                label="Giáo viên"
+              />
             )}
           </div>
-          {primaryTeacher && (
-            <div className="class-card-avatar class-card-avatar--teacher">
-              <div className="class-card-avatar-ring">
-                {primaryTeacher.avatar_url ? (
-                  <img
-                    src={getAvatarUrl(primaryTeacher.avatar_url)}
-                    alt={primaryTeacher.fullname}
-                    className="class-card-avatar-img"
-                  />
-                ) : (
-                  <div className="class-card-avatar-fallback">
-                    {primaryTeacher.fullname?.charAt(0) || 'G'}
-                  </div>
-                )}
-              </div>
-              <span className="class-card-avatar-label">Giáo viên</span>
-            </div>
+          {canManageClass && (
+            <>
+              <input
+                id="class-avatar-upload"
+                type="file"
+                accept={LESSON_IMAGE_ACCEPT}
+                className="d-none"
+                onChange={handleClassAvatarUpload}
+              />
+              <Button
+                as="label"
+                htmlFor="class-avatar-upload"
+                variant="link"
+                size="sm"
+                className="class-detail-change-avatar"
+              >
+                Đổi ảnh lớp
+              </Button>
+            </>
           )}
         </div>
       </div>
