@@ -262,6 +262,16 @@ async function ensureSchema() {
     )
   `);
 
+  for (const table of ['assignments', 'lessons']) {
+    try {
+      await pool.query(`ALTER TABLE ${table} MODIFY COLUMN file_type VARCHAR(128) NULL`);
+    } catch (err) {
+      if (err.code !== 'ER_BAD_FIELD_ERROR') {
+        console.warn(`ensureSchema file_type ${table}:`, err.message);
+      }
+    }
+  }
+
   } catch (err) {
     console.warn('ensureSchema:', err.message);
   }

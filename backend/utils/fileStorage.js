@@ -1,5 +1,33 @@
 const crypto = require('crypto');
+const path = require('path');
 const pool = require('../config/db');
+
+function resolveStoredFileType(file) {
+  const name = (file.originalname || '').toLowerCase();
+  const ext = path.extname(name);
+  const mime = (file.mimetype || '').toLowerCase();
+
+  const byExt = {
+    '.pdf': 'application/pdf',
+    '.doc': 'application/msword',
+    '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    '.xls': 'application/vnd.ms-excel',
+    '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    '.ppt': 'application/vnd.ms-powerpoint',
+    '.pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    '.jpg': 'image/jpeg',
+    '.jpeg': 'image/jpeg',
+    '.png': 'image/png',
+    '.gif': 'image/gif',
+    '.webp': 'image/webp',
+    '.mp4': 'video/mp4',
+  };
+  if (byExt[ext]) return byExt[ext];
+
+  if (mime.startsWith('image/')) return mime.slice(0, 127);
+  if (mime.startsWith('video/')) return mime.slice(0, 127);
+  return (mime || 'application/octet-stream').slice(0, 127);
+}
 
 async function persistUploadedFile(file) {
   if (!file?.buffer) {
@@ -8,7 +36,7 @@ async function persistUploadedFile(file) {
 
   const token = crypto.randomBytes(24).toString('hex');
   const originalName = file.originalname || 'file';
-  const mimeType = file.mimetype || 'application/octet-stream';
+  const mimeType = resolveStoredFileType(file);
 
   await pool.query(
     'INSERT INTO file_assets (token, original_name, mime_type, data) VALUES (?, ?, ?, ?)',
@@ -31,7 +59,7 @@ async function saveMulterFile(req) {
 
   return {
     file_url: `/uploads/${req.file.filename}`,
-    file_type: req.file.mimetype,
+    file_type: resolveStoredFileType(req.file),
   };
 }
 
