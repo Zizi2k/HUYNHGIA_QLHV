@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Form, Button, InputGroup, Spinner, Badge } from 'react-bootstrap';
+import { Form, Button, InputGroup, Spinner, Badge, Alert } from 'react-bootstrap';
 import {
   STUDENT_SUBMIT_FILE_ACCEPT,
   isStudentSubmitFileAllowed,
@@ -15,11 +15,16 @@ export default function StudentWorkSubmission({
   submissionAttachments,
   submissionUrl,
   submittedAt,
+  locked = false,
   onSubmitWork,
 }) {
   const [linkUrl, setLinkUrl] = useState('');
   const [pendingFiles, setPendingFiles] = useState([]);
   const [pendingLinks, setPendingLinks] = useState([]);
+
+  const hasSubmission = Boolean(
+    submissionUrl || submissionAttachments?.length,
+  );
 
   const handleFileChange = (e) => {
     const selected = Array.from(e.target.files || []);
@@ -84,108 +89,121 @@ export default function StudentWorkSubmission({
 
   return (
     <div className="mt-3 pt-3 border-top">
-      <Form onSubmit={handleSubmit}>
-        <Form.Label className="fw-semibold">
-          {submissionUrl || submissionAttachments?.length ? 'Nộp lại bài' : 'Nộp bài'}
-        </Form.Label>
+      {locked ? (
+        <>
+          <Form.Label className="fw-semibold">Bài đã nộp</Form.Label>
+          <Alert variant="warning" className="py-2 small mb-2">
+            Giáo viên đã chấm điểm. Bạn không thể sửa bài nộp.
+          </Alert>
+        </>
+      ) : (
+        <Form onSubmit={handleSubmit}>
+          <Form.Label className="fw-semibold">
+            {hasSubmission ? 'Sửa bài nộp' : 'Nộp bài'}
+          </Form.Label>
 
-        <div className="mb-2">
-          <InputGroup size="sm">
+          <div className="mb-2">
+            <InputGroup size="sm">
+              <Form.Control
+                type="url"
+                placeholder="Dán link bài làm (Google Docs, Drive, OneDrive...)"
+                value={linkUrl}
+                disabled={submitting}
+                onChange={(e) => setLinkUrl(e.target.value)}
+              />
+              <Button
+                type="button"
+                variant="outline-secondary"
+                disabled={submitting || !linkUrl.trim()}
+                onClick={addPendingLink}
+              >
+                Thêm link
+              </Button>
+            </InputGroup>
+            {linkUrl.trim() && !submitting && (
+              <ContentAttachmentPreview
+                item={{ file_url: linkUrl.trim(), file_type: 'link/document' }}
+                apiBase={API_BASE}
+                title="Xem trước link bài nộp"
+                defaultExpanded={false}
+              />
+            )}
+          </div>
+
+          <div className="d-flex align-items-center gap-2 flex-wrap mb-2">
             <Form.Control
-              type="url"
-              placeholder="Dán link bài làm (Google Docs, Drive, OneDrive...)"
-              value={linkUrl}
+              type="file"
+              size="sm"
+              multiple
+              accept={STUDENT_SUBMIT_FILE_ACCEPT}
               disabled={submitting}
-              onChange={(e) => setLinkUrl(e.target.value)}
+              onChange={handleFileChange}
+              className="flex-grow-1"
+              style={{ maxWidth: 320 }}
             />
-            <Button
-              type="button"
-              variant="outline-secondary"
-              disabled={submitting || !linkUrl.trim()}
-              onClick={addPendingLink}
-            >
-              Thêm link
-            </Button>
-          </InputGroup>
-          {linkUrl.trim() && !submitting && (
-            <ContentAttachmentPreview
-              item={{ file_url: linkUrl.trim(), file_type: 'link/document' }}
-              apiBase={API_BASE}
-              title="Xem trước link bài nộp"
-              defaultExpanded={false}
-            />
+            <span className="text-muted small">chọn nhiều file .docx / .xlsx</span>
+          </div>
+
+          {pendingFiles.length > 0 && (
+            <div className="mb-2">
+              {pendingFiles.map((file, idx) => (
+                <div key={`${file.name}-${idx}`} className="d-flex align-items-center gap-2 mb-1">
+                  <Badge bg="light" text="dark" className="text-truncate" style={{ maxWidth: 240 }}>
+                    {file.name}
+                  </Badge>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline-danger"
+                    disabled={submitting}
+                    onClick={() => removePendingFile(idx)}
+                  >
+                    <i className="bi bi-x" />
+                  </Button>
+                </div>
+              ))}
+            </div>
           )}
-        </div>
 
-        <div className="d-flex align-items-center gap-2 flex-wrap mb-2">
-          <Form.Control
-            type="file"
-            size="sm"
-            multiple
-            accept={STUDENT_SUBMIT_FILE_ACCEPT}
-            disabled={submitting}
-            onChange={handleFileChange}
-            className="flex-grow-1"
-            style={{ maxWidth: 320 }}
-          />
-          <span className="text-muted small">chọn nhiều file .docx / .xlsx</span>
-        </div>
+          {pendingLinks.length > 0 && (
+            <div className="mb-2">
+              {pendingLinks.map((url, idx) => (
+                <div key={url} className="d-flex align-items-center gap-2 mb-1">
+                  <Badge bg="light" text="dark" className="text-truncate" style={{ maxWidth: 280 }}>
+                    {url}
+                  </Badge>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline-danger"
+                    disabled={submitting}
+                    onClick={() => removePendingLink(idx)}
+                  >
+                    <i className="bi bi-x" />
+                  </Button>
+                </div>
+              ))}
+            </div>
+          )}
 
-        {pendingFiles.length > 0 && (
-          <div className="mb-2">
-            {pendingFiles.map((file, idx) => (
-              <div key={`${file.name}-${idx}`} className="d-flex align-items-center gap-2 mb-1">
-                <Badge bg="light" text="dark" className="text-truncate" style={{ maxWidth: 240 }}>
-                  {file.name}
-                </Badge>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline-danger"
-                  disabled={submitting}
-                  onClick={() => removePendingFile(idx)}
-                >
-                  <i className="bi bi-x" />
-                </Button>
-              </div>
-            ))}
-          </div>
-        )}
+          {hasPending && (
+            <Button type="submit" size="sm" variant="primary" disabled={submitting} className="mb-2">
+              {submitting ? (
+                <><Spinner size="sm" className="me-1" />Đang nộp...</>
+              ) : (
+                hasSubmission ? 'Cập nhật bài nộp' : 'Nộp bài'
+              )}
+            </Button>
+          )}
 
-        {pendingLinks.length > 0 && (
-          <div className="mb-2">
-            {pendingLinks.map((url, idx) => (
-              <div key={url} className="d-flex align-items-center gap-2 mb-1">
-                <Badge bg="light" text="dark" className="text-truncate" style={{ maxWidth: 280 }}>
-                  {url}
-                </Badge>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline-danger"
-                  disabled={submitting}
-                  onClick={() => removePendingLink(idx)}
-                >
-                  <i className="bi bi-x" />
-                </Button>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {hasPending && (
-          <Button type="submit" size="sm" variant="primary" disabled={submitting} className="mb-2">
-            {submitting ? <><Spinner size="sm" className="me-1" />Đang nộp...</> : 'Nộp bài'}
-          </Button>
-        )}
-
-        {pendingFiles.length === 1 && submitting && (
-          <LocalFilePreview file={pendingFiles[0]} height={200} />
-        )}
-      </Form>
+          {pendingFiles.length === 1 && submitting && (
+            <LocalFilePreview file={pendingFiles[0]} height={200} />
+          )}
+        </Form>
+      )}
 
       {submittedItem && (
-        <div className="mt-2">
+        <div className={locked ? '' : 'mt-2'}>
           {submissionAttachments?.length ? (
             <AttachmentList
               item={submittedItem}

@@ -20,6 +20,7 @@ const {
   attachSubmissionAttachmentsToRowsAsync,
   enrichRowsWithSubmissionAttachments,
   replaceSubmissionAttachments,
+  deleteSubmissionWithAttachments,
 } = require('../utils/submissionAttachments');
 
 const getAssignments = async (req, res) => {  try {
@@ -231,9 +232,15 @@ const uploadSubmission = async (req, res) => {
     const student_id = req.user.id;
 
     const [existing] = await conn.query(
-      'SELECT id FROM submissions WHERE assignment_id = ? AND student_id = ?',
+      'SELECT id, score FROM submissions WHERE assignment_id = ? AND student_id = ?',
       [assignment_id, student_id],
     );
+
+    if (existing.length > 0 && existing[0].score != null) {
+      return res.status(403).json({
+        message: 'Giáo viên đã chấm điểm. Bạn không thể sửa bài nộp.',
+      });
+    }
 
     await conn.beginTransaction();
 
@@ -241,7 +248,7 @@ const uploadSubmission = async (req, res) => {
     if (existing.length > 0) {
       submissionId = existing[0].id;
       await conn.query(
-        `UPDATE submissions SET file_url=?, score=NULL, feedback=NULL, submitted_at=NOW()
+        `UPDATE submissions SET file_url=?, submitted_at=NOW()
          WHERE id=?`,
         [legacy.file_url, submissionId],
       );
@@ -314,6 +321,31 @@ const gradeSubmission = async (req, res) => {
   }
 };
 
+const deleteSubmission = async (req, res) => {
+  const conn = await pool.getConnection();
+  try {
+    const classId = await getSubmissionClassId(req.params.id);
+    if (!classId) {
+      return res.status(404).json({ message: 'Không tìm thấy bài nộp' });
+    }
+    if (!(await assertClassAccess(req.user, classId, res, { manage: true }))) return;
+
+    await conn.beginTransaction();
+    const deleted = await deleteSubmissionWithAttachments(conn, 'assignment', req.params.id);
+    if (!deleted) {
+      await conn.rollback();
+      return res.status(404).json({ message: 'Không tìm thấy bài nộp' });
+    }
+    await conn.commit();
+    res.json({ message: 'Đã xóa bài nộp của học sinh' });
+  } catch (err) {
+    await conn.rollback();
+    res.status(500).json({ message: 'Lỗi hệ thống', error: err.message });
+  } finally {
+    conn.release();
+  }
+};
+
 const setAssignmentVisibility = async (req, res) => {
   try {
     const classId = await getAssignmentClassId(req.params.id);
@@ -363,5 +395,6 @@ module.exports = {
   uploadSubmission,
   getSubmissions,
   gradeSubmission,
+  deleteSubmission,
   setAssignmentVisibility,
 };

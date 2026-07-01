@@ -5,6 +5,7 @@ const {
   getAssignments, createAssignment, updateAssignment, deleteAssignment,
 
   uploadSubmission, getSubmissions, gradeSubmission, setAssignmentVisibility,
+  deleteSubmission,
 
 } = require('../controllers/assignmentController');
 
@@ -67,6 +68,7 @@ router.post('/', authorize('admin', 'teacher'), withOptionalMultiUpload(createAs
 router.post('/upload', authorize('student'), withOptionalMultiUpload(uploadSubmission));
 
 router.put('/submissions/:id/grade', authorize('admin', 'teacher'), gradeSubmission);
+router.delete('/submissions/:id', authorize('admin', 'teacher'), deleteSubmission);
 
 router.patch('/:id/visibility', authorize('admin', 'teacher'), setAssignmentVisibility);
 

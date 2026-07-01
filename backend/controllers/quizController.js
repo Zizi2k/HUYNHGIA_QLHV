@@ -20,6 +20,7 @@ const {
   attachSubmissionAttachmentsToRowsAsync,
   enrichRowsWithSubmissionAttachments,
   replaceSubmissionAttachments,
+  deleteSubmissionWithAttachments,
 } = require('../utils/submissionAttachments');
 
 function parseQuizBody(body) {
@@ -494,13 +495,19 @@ const submitQuizAttachment = async (req, res) => {
       });
     }
 
+    if (existing && existing.score != null) {
+      return res.status(403).json({
+        message: 'Giáo viên đã chấm điểm. Bạn không thể sửa bài nộp.',
+      });
+    }
+
     await conn.beginTransaction();
 
     let submissionId;
     if (existing) {
       submissionId = existing.id;
       await conn.query(
-        `UPDATE quiz_submissions SET file_url = ?, score = NULL, feedback = NULL, submitted_at = NOW()
+        `UPDATE quiz_submissions SET file_url = ?, submitted_at = NOW()
          WHERE id = ?`,
         [legacy.file_url, submissionId],
       );
@@ -566,6 +573,31 @@ const gradeQuizSubmission = async (req, res) => {
   }
 };
 
+const deleteQuizSubmission = async (req, res) => {
+  const conn = await pool.getConnection();
+  try {
+    const classId = await getQuizSubmissionClassId(req.params.id);
+    if (!classId) {
+      return res.status(404).json({ message: 'Không tìm thấy bài nộp' });
+    }
+    if (!(await assertClassAccess(req.user, classId, res, { manage: true }))) return;
+
+    await conn.beginTransaction();
+    const deleted = await deleteSubmissionWithAttachments(conn, 'quiz', req.params.id);
+    if (!deleted) {
+      await conn.rollback();
+      return res.status(404).json({ message: 'Không tìm thấy bài nộp' });
+    }
+    await conn.commit();
+    res.json({ message: 'Đã xóa bài nộp của học sinh' });
+  } catch (err) {
+    await conn.rollback();
+    res.status(500).json({ message: 'Lỗi hệ thống', error: err.message });
+  } finally {
+    conn.release();
+  }
+};
+
 const setQuizVisibility = async (req, res) => {
   try {
     const classId = await getQuizClassId(req.params.id);
@@ -617,6 +649,7 @@ module.exports = {
   submitQuiz,
   submitQuizAttachment,
   gradeQuizSubmission,
+  deleteQuizSubmission,
   importQuizFile,
   getQuizImportTemplate,
   setQuizVisibility,

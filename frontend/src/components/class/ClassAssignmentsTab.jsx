@@ -81,6 +81,24 @@ export default function ClassAssignmentsTab({
     }));
   };
 
+  const handleDeleteSubmission = async (submissionId, studentName) => {
+    if (!window.confirm(`Xóa bài nộp của "${studentName}"? Học sinh có thể nộp lại.`)) return;
+    setSaving(true);
+    setError('');
+    try {
+      await assignmentService.deleteSubmission(submissionId);
+      if (gradeAssignmentId) {
+        const res = await assignmentService.getSubmissions(gradeAssignmentId);
+        setSubmissions(res.data);
+      }
+      onUpdated();
+    } catch (err) {
+      setError(err.response?.data?.message || 'Không thể xóa bài nộp');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const handleGrade = async (submissionId) => {
     const draft = gradeDrafts[submissionId] || {};
     if (!draft.score) {
@@ -324,6 +342,7 @@ export default function ClassAssignmentsTab({
                   submissionAttachments={a.submission_attachments}
                   submissionUrl={a.submission_url}
                   submittedAt={a.submitted_at}
+                  locked={a.score != null}
                   onSubmitWork={handleSubmitWork}
                 />
               )}
@@ -452,16 +471,27 @@ export default function ClassAssignmentsTab({
                       )}
                     </td>
                     <td>
-                      {s.score == null && (
+                      <div className="d-flex gap-1 flex-nowrap">
+                        {s.score == null && (
+                          <Button
+                            size="sm"
+                            variant="success"
+                            disabled={saving}
+                            onClick={() => handleGrade(s.id)}
+                          >
+                            Chấm
+                          </Button>
+                        )}
                         <Button
                           size="sm"
-                          variant="success"
+                          variant="outline-danger"
                           disabled={saving}
-                          onClick={() => handleGrade(s.id)}
+                          title="Xóa bài nộp"
+                          onClick={() => handleDeleteSubmission(s.id, s.fullname)}
                         >
-                          Chấm
+                          <i className="bi bi-trash" />
                         </Button>
-                      )}
+                      </div>
                     </td>
                   </tr>
                 ))}

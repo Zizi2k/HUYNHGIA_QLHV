@@ -110,6 +110,16 @@ async function replaceSubmissionAttachments(conn, submissionType, submissionId, 
   }
 }
 
+async function deleteSubmissionWithAttachments(conn, submissionType, submissionId) {
+  await conn.query(
+    'DELETE FROM submission_attachments WHERE submission_type = ? AND submission_id = ?',
+    [submissionType, submissionId],
+  );
+  const table = submissionType === 'assignment' ? 'submissions' : 'quiz_submissions';
+  const [result] = await conn.query(`DELETE FROM ${table} WHERE id = ?`, [submissionId]);
+  return result.affectedRows > 0;
+}
+
 async function migrateLegacySubmissionAttachments() {
   const [[flag]] = await pool.query(
     "SELECT meta_value FROM app_meta WHERE meta_key = 'submission_attachments_migrated_v1'",
@@ -154,5 +164,6 @@ module.exports = {
   attachSubmissionAttachmentsToRowsAsync,
   enrichRowsWithSubmissionAttachments,
   replaceSubmissionAttachments,
+  deleteSubmissionWithAttachments,
   migrateLegacySubmissionAttachments,
 };

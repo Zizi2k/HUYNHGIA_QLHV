@@ -143,6 +143,24 @@ export default function ClassQuizzesTab({
     }));
   };
 
+  const handleDeleteQuizSubmission = async (submissionId, studentName) => {
+    if (!window.confirm(`Xóa bài nộp của "${studentName}"? Học sinh có thể nộp lại.`)) return;
+    setSaving(true);
+    setError('');
+    try {
+      await quizService.deleteSubmission(submissionId);
+      if (resultsQuizId) {
+        const res = await quizService.getSubmissions(resultsQuizId);
+        setResults(res.data);
+      }
+      onUpdated();
+    } catch (err) {
+      setError(err.response?.data?.message || 'Không thể xóa bài nộp');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const handleGradeQuiz = async (submissionId) => {
     const draft = gradeDrafts[submissionId] || {};
     if (!draft.score) {
@@ -504,6 +522,7 @@ export default function ClassQuizzesTab({
                   submissionAttachments={q.submission_attachments}
                   submissionUrl={isFileSubmission(q) ? q.submission_url : null}
                   submittedAt={q.quiz_submitted_at}
+                  locked={isFileSubmission(q) && q.quiz_score != null}
                   onSubmitWork={handleSubmitQuizWork}
                 />
               )}
@@ -821,16 +840,27 @@ export default function ClassQuizzesTab({
                       {new Date(r.submitted_at).toLocaleString('vi-VN')}
                     </td>
                     <td>
-                      {isFile && r.score == null && (
+                      <div className="d-flex gap-1 flex-nowrap">
+                        {isFile && r.score == null && (
+                          <Button
+                            size="sm"
+                            variant="success"
+                            disabled={saving}
+                            onClick={() => handleGradeQuiz(r.id)}
+                          >
+                            Chấm
+                          </Button>
+                        )}
                         <Button
                           size="sm"
-                          variant="success"
+                          variant="outline-danger"
                           disabled={saving}
-                          onClick={() => handleGradeQuiz(r.id)}
+                          title="Xóa bài nộp"
+                          onClick={() => handleDeleteQuizSubmission(r.id, r.fullname)}
                         >
-                          Chấm
+                          <i className="bi bi-trash" />
                         </Button>
-                      )}
+                      </div>
                     </td>
                   </tr>
                   );
