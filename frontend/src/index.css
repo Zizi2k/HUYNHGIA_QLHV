@@ -1604,30 +1604,31 @@ a {
 
 .app-content .table-responsive,
 .page-container .table-responsive {
+  overflow-x: auto;
   max-width: 100%;
   -webkit-overflow-scrolling: touch;
 }
 
-.pro-table {
-  width: 100%;
-  margin-bottom: 0;
-  border-collapse: collapse;
-}
-
-.pro-table--nowrap {
+.table-responsive > .table,
+.table-responsive table.table {
   width: max-content;
   min-width: 100%;
+  margin-bottom: 0;
 }
 
-.pro-table--nowrap thead th,
-.pro-table--nowrap tbody td {
+.table-responsive > .table th,
+.table-responsive > .table td,
+.table-responsive table.table th,
+.table-responsive table.table td {
   white-space: nowrap;
-  overflow-wrap: normal;
-  word-break: normal;
+  vertical-align: middle;
 }
 
-.pro-table--nowrap .pro-badge-code {
-  white-space: nowrap;
+.pro-table {
+  width: max-content;
+  min-width: 100%;
+  margin-bottom: 0;
+  border-collapse: collapse;
 }
 
 .pro-table thead th {
@@ -1648,8 +1649,18 @@ a {
   vertical-align: middle;
   color: #334155;
   font-size: 0.925rem;
-  overflow-wrap: anywhere;
-  word-break: break-word;
+  white-space: nowrap;
+  overflow-wrap: normal;
+  word-break: normal;
+}
+
+.pro-table tbody td:has(.pro-table-empty) {
+  white-space: normal;
+  text-align: center;
+}
+
+.pro-table .pro-badge-code {
+  white-space: nowrap;
 }
 
 .pro-table tbody tr:last-child td {

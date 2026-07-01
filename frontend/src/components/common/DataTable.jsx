@@ -10,7 +10,6 @@ export default function DataTable({
   count,
   actions,
   loading = false,
-  nowrap = false,
 }) {
   const tableContent = loading ? (
     <div className="text-center py-5">
@@ -18,7 +17,7 @@ export default function DataTable({
     </div>
   ) : (
     <div className="pro-table-wrap">
-      <table className={`pro-table${nowrap ? ' pro-table--nowrap' : ''}`}>
+      <table className="pro-table">
         {children}
       </table>
     </div>

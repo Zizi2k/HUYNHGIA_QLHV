@@ -387,7 +387,7 @@ export default function TuitionPage() {
 
                 <ModuleSection title="Đã đóng trong tháng" icon="bi-check-circle" flush className="mb-3">
                   <div className="pro-table-wrap">
-                    <table className="pro-table pro-table--nowrap">
+                    <table className="pro-table">
                       <thead>
                         <tr>
                           <th>Mã HV</th><th>Họ tên</th><th>Lớp</th>
@@ -414,7 +414,7 @@ export default function TuitionPage() {
 
                 <ModuleSection title="Còn công nợ" icon="bi-exclamation-triangle" flush>
                   <div className="pro-table-wrap">
-                    <table className="pro-table pro-table--nowrap">
+                    <table className="pro-table">
                       <thead>
                         <tr>
                           <th>Mã HV</th><th>Họ tên</th><th>Lớp</th>
