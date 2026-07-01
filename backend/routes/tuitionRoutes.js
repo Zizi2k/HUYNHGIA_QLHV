@@ -6,7 +6,7 @@ const {
 } = require('../controllers/tuitionDiscountController');
 const {
   getProfiles, getProfileById, createProfile, updateProfile, deleteProfile,
-  createPayment, deletePayment, getPeriods, createPeriod,
+  createPayment, updatePayment, deletePayment, getPeriods, createPeriod,
   getMonthlyReport, exportMonthlyPdf,
   getPaymentReceiptPdf, getStudentReceipts,
 } = require('../controllers/tuitionController');
@@ -40,6 +40,7 @@ router.delete('/profiles/:id', deleteProfile);
 router.post('/payments', createPayment);
 router.get('/payments/import-template', downloadPaymentImportTemplate);
 router.post('/payments/import', excelUpload.single('file'), importPayments);
+router.put('/payments/:id', updatePayment);
 router.delete('/payments/:id', deletePayment);
 
 router.get('/periods', getPeriods);

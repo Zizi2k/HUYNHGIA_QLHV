@@ -47,6 +47,8 @@ export default function TuitionPage() {
   const [showImport, setShowImport] = useState(false);
   const [showImportPayments, setShowImportPayments] = useState(false);
   const [selectedProfile, setSelectedProfile] = useState(null);
+  const [editingPayment, setEditingPayment] = useState(null);
+  const [receiptProfile, setReceiptProfile] = useState(null);
   const [receiptPayments, setReceiptPayments] = useState([]);
   const [showReceipts, setShowReceipts] = useState(false);
 
@@ -159,8 +161,31 @@ export default function TuitionPage() {
   };
 
   const handleViewReceipts = (profile) => {
+    setReceiptProfile(profile);
     setReceiptPayments(profile.payments || []);
     setShowReceipts(true);
+  };
+
+  const handleEditPayment = (payment) => {
+    setSelectedProfile(receiptProfile);
+    setEditingPayment(payment);
+    setShowReceipts(false);
+    setShowPay(true);
+  };
+
+  const handleDeletePayment = async (payment) => {
+    if (!window.confirm(`Xóa phiếu thu #${String(payment.id).padStart(6, '0')}?`)) return;
+    try {
+      await tuitionService.deletePayment(payment.id);
+      setReceiptPayments((prev) => {
+        const next = prev.filter((p) => p.id !== payment.id);
+        if (next.length === 0) setShowReceipts(false);
+        return next;
+      });
+      loadProfiles();
+    } catch (err) {
+      alert(err.response?.data?.message || 'Không thể xóa phiếu thu');
+    }
   };
 
   const handleViewReceipt = async (paymentId) => {
@@ -318,7 +343,7 @@ export default function TuitionPage() {
             <TuitionProfileTable
               profiles={profiles}
               onEdit={(p) => { setSelectedProfile(p); setShowEdit(true); }}
-              onPay={(p) => { setSelectedProfile(p); setShowPay(true); }}
+              onPay={(p) => { setSelectedProfile(p); setEditingPayment(null); setShowPay(true); }}
               onDelete={handleDeleteProfile}
               onViewReceipts={handleViewReceipts}
             />
@@ -513,8 +538,9 @@ export default function TuitionPage() {
       />
       <PaymentModal
         show={showPay}
-        onHide={() => setShowPay(false)}
+        onHide={() => { setShowPay(false); setEditingPayment(null); }}
         profile={selectedProfile}
+        payment={editingPayment}
         onSuccess={loadProfiles}
       />
       <ImportTuitionModal
@@ -532,6 +558,8 @@ export default function TuitionPage() {
         onHide={() => setShowReceipts(false)}
         payments={receiptPayments}
         onViewReceipt={handleViewReceipt}
+        onEditPayment={handleEditPayment}
+        onDeletePayment={handleDeletePayment}
       />
     </div>
   );

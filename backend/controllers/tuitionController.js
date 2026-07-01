@@ -217,6 +217,9 @@ const getProfiles = async (req, res) => {
           payment_date: p.payment_date,
           amount: p.amount,
           payment_type: p.payment_type,
+          method: p.method,
+          period_month: p.period_month,
+          note: p.note,
         })),
       };
     });
@@ -479,6 +482,81 @@ const createPayment = async (req, res) => {
   }
 };
 
+const updatePayment = async (req, res) => {
+  try {
+    const { payment_type, amount, method, payment_date, period_month, note } = req.body;
+    if (!payment_type || amount == null || !period_month) {
+      return res.status(400).json({ message: 'Thiếu thông tin thanh toán' });
+    }
+    if (!['tuition', 'book', 'both'].includes(payment_type)) {
+      return res.status(400).json({ message: 'Loại thu không hợp lệ' });
+    }
+
+    const [payments] = await pool.query(
+      `SELECT tp.*, p.student_code
+       FROM tuition_payments tp
+       JOIN tuition_profiles p ON tp.profile_id = p.id
+       WHERE tp.id = ?`,
+      [req.params.id],
+    );
+    if (payments.length === 0) {
+      return res.status(404).json({ message: 'Không tìm thấy phiếu thu' });
+    }
+    try {
+      assertStudentCodeInScope(req.user, payments[0].student_code);
+    } catch (scopeErr) {
+      return res.status(scopeErr.status || 403).json({ message: scopeErr.message });
+    }
+
+    const old = payments[0];
+    const parsedAmount = parseAmount(amount);
+    const nextMethod = method || 'cash';
+    const nextDate = payment_date || old.payment_date;
+
+    await pool.query(
+      `UPDATE tuition_payments
+       SET payment_type = ?, amount = ?, method = ?, payment_date = ?, period_month = ?, note = ?
+       WHERE id = ?`,
+      [payment_type, parsedAmount, nextMethod, nextDate, period_month, note || null, req.params.id],
+    );
+
+    await logAction({
+      actorId: req.user.id,
+      action: 'update',
+      resourceType: 'tuition_payment',
+      resourceId: old.id,
+      resourceLabel: `Phiếu thu #${old.id}`,
+      metadata: {
+        profile_id: old.profile_id,
+        before: {
+          payment_type: old.payment_type,
+          amount: old.amount,
+          method: old.method,
+          payment_date: old.payment_date,
+          period_month: old.period_month,
+          note: old.note,
+        },
+        after: {
+          payment_type,
+          amount: parsedAmount,
+          method: nextMethod,
+          payment_date: nextDate,
+          period_month,
+          note: note || null,
+        },
+      },
+    });
+
+    res.json({
+      id: Number(req.params.id),
+      message: 'Cập nhật phiếu thu thành công',
+      receipt_url: `/api/tuition/payments/${req.params.id}/receipt`,
+    });
+  } catch (err) {
+    res.status(500).json({ message: 'Lỗi hệ thống', error: err.message });
+  }
+};
+
 const deletePayment = async (req, res) => {
   try {
     const [payments] = await pool.query(
@@ -689,7 +767,7 @@ const getStudentReceipts = async (req, res) => {
 
 module.exports = {
   getProfiles, getProfileById, createProfile, updateProfile, deleteProfile,
-  createPayment, deletePayment, getPeriods, createPeriod,
+  createPayment, updatePayment, deletePayment, getPeriods, createPeriod,
   getMonthlyReport, exportMonthlyPdf,
   getPaymentReceiptPdf, getStudentReceipts,
 };

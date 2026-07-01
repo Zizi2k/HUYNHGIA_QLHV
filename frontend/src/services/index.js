@@ -154,6 +154,7 @@ export const tuitionService = {
   downloadPaymentImportTemplate: () => api.get('/tuition/payments/import-template', { responseType: 'blob' }),
 
   createPayment: (data) => api.post('/tuition/payments', data),
+  updatePayment: (id, data) => api.put(`/tuition/payments/${id}`, data),
   deletePayment: (id) => api.delete(`/tuition/payments/${id}`),
   getMyReceipts: () => api.get('/tuition/student/receipts'),
   getPaymentReceipt: (id) => api.get(`/tuition/payments/${id}/receipt`, { responseType: 'blob' }),
