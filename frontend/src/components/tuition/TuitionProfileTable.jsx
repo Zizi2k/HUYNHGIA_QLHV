@@ -5,7 +5,7 @@ import { formatMoney, STATUS_LABELS, subjectLabel } from './tuitionConstants';
 export default function TuitionProfileTable({ profiles, onEdit, onPay, onDelete }) {
   if (profiles.length === 0) {
     return (
-      <DataTable title="Danh sách học phí" icon="bi-list-ul">
+      <DataTable title="Danh sách học phí" icon="bi-list-ul" nowrap>
         <tbody>
           <DataTableEmpty message="Không có dữ liệu học phí" />
         </tbody>
@@ -18,6 +18,7 @@ export default function TuitionProfileTable({ profiles, onEdit, onPay, onDelete 
       title="Danh sách học phí"
       icon="bi-list-ul"
       count={profiles.length}
+      nowrap
     >
       <thead>
         <tr>
@@ -57,7 +58,7 @@ export default function TuitionProfileTable({ profiles, onEdit, onPay, onDelete 
               <td className="text-end">{formatMoney(p.book_paid)}</td>
               <td className="text-end fw-semibold text-danger">{formatMoney(p.total_debt)}</td>
               <td><Badge bg={st.bg}>{st.label}</Badge></td>
-              <td>
+              <td className="text-nowrap">
                 <Button variant="outline-primary" size="sm" className="me-1" onClick={() => onEdit(p)}>
                   Sửa
                 </Button>
