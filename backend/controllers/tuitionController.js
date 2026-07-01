@@ -220,6 +220,8 @@ const getProfiles = async (req, res) => {
           method: p.method,
           period_month: p.period_month,
           note: p.note,
+          book_no: p.book_no,
+          receipt_no: p.receipt_no,
         })),
       };
     });
@@ -433,7 +435,7 @@ const deleteProfile = async (req, res) => {
 const createPayment = async (req, res) => {
   const conn = await pool.getConnection();
   try {
-    const { profile_id, payment_type, amount, method, payment_date, period_month, note } = req.body;
+    const { profile_id, payment_type, amount, method, payment_date, period_month, note, book_no, receipt_no } = req.body;
     if (!profile_id || !payment_type || !amount || !period_month) {
       return res.status(400).json({ message: 'Thiếu thông tin thanh toán' });
     }
@@ -461,12 +463,15 @@ const createPayment = async (req, res) => {
 
     const [result] = await conn.query(
       `INSERT INTO tuition_payments
-       (profile_id, payment_type, amount, method, payment_date, period_month, note, recorded_by)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+       (profile_id, payment_type, amount, method, payment_date, period_month, note, book_no, receipt_no, recorded_by)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         profile_id, payment_type, parseAmount(amount), method || 'cash',
         payment_date || new Date().toISOString().slice(0, 10),
-        period_month, note || null, req.user.id,
+        period_month, note || null,
+        book_no ? String(book_no).trim() : null,
+        receipt_no ? String(receipt_no).trim() : null,
+        req.user.id,
       ],
     );
 
@@ -484,7 +489,7 @@ const createPayment = async (req, res) => {
 
 const updatePayment = async (req, res) => {
   try {
-    const { payment_type, amount, method, payment_date, period_month, note } = req.body;
+    const { payment_type, amount, method, payment_date, period_month, note, book_no, receipt_no } = req.body;
     if (!payment_type || amount == null || !period_month) {
       return res.status(400).json({ message: 'Thiếu thông tin thanh toán' });
     }
@@ -515,9 +520,15 @@ const updatePayment = async (req, res) => {
 
     await pool.query(
       `UPDATE tuition_payments
-       SET payment_type = ?, amount = ?, method = ?, payment_date = ?, period_month = ?, note = ?
+       SET payment_type = ?, amount = ?, method = ?, payment_date = ?, period_month = ?, note = ?,
+           book_no = ?, receipt_no = ?
        WHERE id = ?`,
-      [payment_type, parsedAmount, nextMethod, nextDate, period_month, note || null, req.params.id],
+      [
+        payment_type, parsedAmount, nextMethod, nextDate, period_month, note || null,
+        book_no ? String(book_no).trim() : null,
+        receipt_no ? String(receipt_no).trim() : null,
+        req.params.id,
+      ],
     );
 
     await logAction({
@@ -750,7 +761,7 @@ const getStudentReceipts = async (req, res) => {
 
     const [payments] = await pool.query(
       `SELECT tp.id, tp.payment_type, tp.amount, tp.method, tp.payment_date,
-        tp.period_month, tp.note, tp.created_at,
+        tp.period_month, tp.note, tp.book_no, tp.receipt_no, tp.created_at,
         p.fullname, p.student_code, u.fullname AS recorder_name
        FROM tuition_payments tp
        JOIN tuition_profiles p ON tp.profile_id = p.id

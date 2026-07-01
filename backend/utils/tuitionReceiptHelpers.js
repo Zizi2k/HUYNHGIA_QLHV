@@ -34,14 +34,30 @@ function formatReceiptDate(dateValue) {
   };
 }
 
+function formatReceiptSerial(value, paymentId) {
+  if (value != null && String(value).trim() !== '') {
+    const s = String(value).trim();
+    if (/^\d+$/.test(s)) return s.padStart(6, '0');
+    return s;
+  }
+  return String(paymentId).padStart(6, '0');
+}
+
+function formatBookNo(value, paymentDate) {
+  if (value != null && String(value).trim() !== '') {
+    return String(value).trim();
+  }
+  return String(new Date(paymentDate || Date.now()).getFullYear());
+}
+
 function buildReceiptData(payment, profile, recorder) {
   const org = resolveReceiptOrg(profile.student_code);
   const date = formatReceiptDate(payment.payment_date);
   const amount = Number(payment.amount) || 0;
 
   return {
-    receiptNo: String(payment.id).padStart(6, '0'),
-    bookNo: String(new Date(payment.payment_date || Date.now()).getFullYear()),
+    receiptNo: formatReceiptSerial(payment.receipt_no, payment.id),
+    bookNo: formatBookNo(payment.book_no, payment.payment_date),
     org,
     payerName: profile.fullname,
     payerAddress: profile.current_class || profile.class_label || '',
@@ -64,4 +80,6 @@ module.exports = {
   paymentReasonLabel,
   buildReceiptData,
   formatReceiptDate,
+  formatReceiptSerial,
+  formatBookNo,
 };

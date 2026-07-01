@@ -1,5 +1,5 @@
 import { Modal, Table, Button, Badge } from 'react-bootstrap';
-import { formatMoney, PAYMENT_TYPE_LABELS } from './tuitionConstants';
+import { formatMoney, PAYMENT_TYPE_LABELS, displayBookNo, displayReceiptNo } from './tuitionConstants';
 
 export default function ReceiptListModal({
   show, onHide, payments, onViewReceipt, onEditPayment, onDeletePayment,
@@ -7,7 +7,7 @@ export default function ReceiptListModal({
   if (!payments?.length) return null;
 
   return (
-    <Modal show={show} onHide={onHide} size="lg" scrollable>
+    <Modal show={show} onHide={onHide} size="xl" scrollable>
       <Modal.Header closeButton>
         <Modal.Title>Phiếu thu</Modal.Title>
       </Modal.Header>
@@ -15,7 +15,8 @@ export default function ReceiptListModal({
         <Table responsive hover className="mb-0">
           <thead className="table-light">
             <tr>
-              <th>Số PT</th>
+              <th>Quyển số</th>
+              <th>Số</th>
               <th>Ngày thu</th>
               <th>Tháng</th>
               <th>Loại</th>
@@ -26,7 +27,8 @@ export default function ReceiptListModal({
           <tbody>
             {payments.map((p) => (
               <tr key={p.id}>
-                <td>{String(p.id).padStart(6, '0')}</td>
+                <td>{displayBookNo(p)}</td>
+                <td>{displayReceiptNo(p)}</td>
                 <td>{new Date(p.payment_date).toLocaleDateString('vi-VN')}</td>
                 <td>{String(p.period_month || '').slice(0, 7)}</td>
                 <td>

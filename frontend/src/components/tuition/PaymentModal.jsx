@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Modal, Form, Button } from 'react-bootstrap';
+import { Modal, Form, Button, Row, Col } from 'react-bootstrap';
 import { tuitionService } from '../../services';
 import { currentMonthValue } from './tuitionConstants';
 import { openPaymentReceipt } from '../../utils/tuitionReceipt';
@@ -10,6 +10,8 @@ const defaultForm = () => ({
   method: 'cash',
   payment_date: new Date().toISOString().slice(0, 10),
   period_month: currentMonthValue(),
+  book_no: String(new Date().getFullYear()),
+  receipt_no: '',
   note: '',
 });
 
@@ -41,6 +43,8 @@ export default function PaymentModal({
         method: payment.method || 'cash',
         payment_date: formatDateInput(payment.payment_date),
         period_month: formatMonthInput(payment.period_month),
+        book_no: payment.book_no || String(new Date(payment.payment_date || Date.now()).getFullYear()),
+        receipt_no: payment.receipt_no || '',
         note: payment.note || '',
       });
     } else {
@@ -58,6 +62,8 @@ export default function PaymentModal({
       const payload = {
         ...form,
         amount: Number(form.amount),
+        book_no: form.book_no?.trim() || null,
+        receipt_no: form.receipt_no?.trim() || null,
       };
       const res = isEdit
         ? await tuitionService.updatePayment(payment.id, payload)
@@ -80,7 +86,7 @@ export default function PaymentModal({
   };
 
   return (
-    <Modal show={show} onHide={onHide}>
+    <Modal show={show} onHide={onHide} size="lg">
       <Modal.Header closeButton>
         <Modal.Title>{isEdit ? 'Sửa phiếu thu' : 'Thu học phí / sách'}</Modal.Title>
       </Modal.Header>
@@ -122,6 +128,29 @@ export default function PaymentModal({
             <Form.Label>Tháng áp dụng</Form.Label>
             <Form.Control type="month" value={form.period_month} onChange={(e) => setForm({ ...form, period_month: e.target.value })} required />
           </Form.Group>
+          <Row>
+            <Col md={6}>
+              <Form.Group className="mb-3">
+                <Form.Label>Quyển số</Form.Label>
+                <Form.Control
+                  value={form.book_no}
+                  onChange={(e) => setForm({ ...form, book_no: e.target.value })}
+                  placeholder="VD: 2026"
+                />
+              </Form.Group>
+            </Col>
+            <Col md={6}>
+              <Form.Group className="mb-3">
+                <Form.Label>Số</Form.Label>
+                <Form.Control
+                  value={form.receipt_no}
+                  onChange={(e) => setForm({ ...form, receipt_no: e.target.value })}
+                  placeholder="VD: 000023"
+                />
+                <Form.Text className="text-muted">Để trống → hệ thống tự sinh theo mã phiếu</Form.Text>
+              </Form.Group>
+            </Col>
+          </Row>
           <Form.Group>
             <Form.Label>Ghi chú</Form.Label>
             <Form.Control as="textarea" rows={2} value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} />

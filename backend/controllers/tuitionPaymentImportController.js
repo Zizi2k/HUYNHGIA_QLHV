@@ -26,6 +26,15 @@ const PAYMENT_HEADER_MAP = {
   'ngày thu': 'payment_date',
   'thang ap dung': 'period_month',
   'tháng áp dụng': 'period_month',
+  'quyen so': 'book_no',
+  'quyển số': 'book_no',
+  'so pt': 'receipt_no',
+  'số pt': 'receipt_no',
+  'so phieu': 'receipt_no',
+  'số phiếu': 'receipt_no',
+  'so phieu thu': 'receipt_no',
+  'số phiếu thu': 'receipt_no',
+  'so': 'receipt_no',
   'ghi chu': 'note',
   'ghi chú': 'note',
 };
@@ -123,6 +132,8 @@ function parsePaymentSheet(filePath) {
       method: parseMethod(get('method')),
       payment_date: paymentDate,
       period_month: parsePeriodMonth(get('period_month'), paymentDate),
+      book_no: String(get('book_no') ?? '').trim(),
+      receipt_no: String(get('receipt_no') ?? '').trim(),
       note: String(get('note') ?? '').trim(),
     };
   }).filter((r) => r.student_code);
@@ -205,8 +216,8 @@ const importPayments = async (req, res) => {
 
         const [insertResult] = await conn.query(
           `INSERT INTO tuition_payments
-           (profile_id, payment_type, amount, method, payment_date, period_month, note, recorded_by)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+           (profile_id, payment_type, amount, method, payment_date, period_month, note, book_no, receipt_no, recorded_by)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           [
             profile.id,
             row.payment_type,
@@ -215,6 +226,8 @@ const importPayments = async (req, res) => {
             row.payment_date,
             row.period_month,
             row.note || null,
+            row.book_no || null,
+            row.receipt_no || null,
             req.user.id,
           ],
         );
@@ -253,20 +266,22 @@ const downloadPaymentImportTemplate = async (_req, res) => {
     'Phương thức',
     'Ngày thu',
     'Tháng áp dụng',
+    'Quyển số',
+    'Số',
     'Ghi chú',
   ];
   const samples = [
     [
       'EGC0003', 'Cao Nguyễn Hoài An', 'Tiếng Anh', 'Học phí', 1500000,
-      'Tiền mặt', '07/01/2026', '2026-01', 'Đóng tháng 1',
+      'Tiền mặt', '07/01/2026', '2026-01', '2026', '000023', 'Đóng tháng 1',
     ],
     [
       'HGTT0244', 'Bùi Anh Thư', 'Tiếng Trung', 'Sách', 150000,
-      'Chuyển khoản', '07/01/2026', '2026-01', '',
+      'Chuyển khoản', '07/01/2026', '2026-01', '2026', '000024', '',
     ],
     [
       'HGTA0001', 'Nguyễn Văn B', 'Tiếng Anh', 'Học phí + Sách', 2000000,
-      'Tiền mặt', '15/01/2026', '2026-01', 'Đóng HP và sách',
+      'Tiền mặt', '15/01/2026', '2026-01', '2026', '000025', 'Đóng HP và sách',
     ],
   ];
   const guide = [
@@ -276,13 +291,14 @@ const downloadPaymentImportTemplate = async (_req, res) => {
     'Phương thức: Tiền mặt | Chuyển khoản',
     'Ngày thu: dd/mm/yyyy (vd: 07/01/2026)',
     'Tháng áp dụng: yyyy-mm (vd: 2026-01) hoặc mm/yyyy',
+    'Quyển số / Số: hiển thị trên phiếu thu Mẫu 01-TT (để trống Số → hệ thống tự sinh)',
     'Môn học: Tiếng Anh | Tiếng Trung | Tin học | Tiếng Việt (bắt buộc nếu HV có nhiều môn)',
   ];
 
   const ws = XLSX.utils.aoa_to_sheet([headers, ...samples, ...guide.map((line) => [line])]);
   ws['!cols'] = [
     { wch: 14 }, { wch: 22 }, { wch: 14 }, { wch: 16 }, { wch: 12 },
-    { wch: 14 }, { wch: 12 }, { wch: 14 }, { wch: 24 },
+    { wch: 14 }, { wch: 12 }, { wch: 14 }, { wch: 10 }, { wch: 10 }, { wch: 24 },
   ];
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Thu hoc phi');

@@ -36,3 +36,19 @@ export function currentMonthValue() {
 export function subjectLabel(value) {
   return SUBJECT_OPTIONS.find((s) => s.value === value)?.label || value;
 }
+
+export function displayBookNo(payment) {
+  if (payment?.book_no) return String(payment.book_no).trim();
+  if (payment?.payment_date) return String(new Date(payment.payment_date).getFullYear());
+  return String(new Date().getFullYear());
+}
+
+export function displayReceiptNo(payment) {
+  if (payment?.receipt_no) {
+    const s = String(payment.receipt_no).trim();
+    if (/^\d+$/.test(s)) return s.padStart(6, '0');
+    return s;
+  }
+  if (payment?.id != null) return String(payment.id).padStart(6, '0');
+  return '—';
+}

@@ -63,6 +63,7 @@ export default function ImportPaymentsModal({ show, onHide, onSuccess }) {
             <li>Loại thu: Học phí / Sách / Học phí + Sách</li>
             <li>Phương thức: Tiền mặt / Chuyển khoản</li>
             <li>Ngày thu: dd/mm/yyyy — Tháng áp dụng: yyyy-mm</li>
+            <li>Quyển số / Số: hiển thị trên phiếu thu (để trống Số → tự sinh)</li>
           </ul>
           <Button variant="outline-secondary" size="sm" className="mb-3" type="button" onClick={handleDownloadTemplate}>
             <i className="bi bi-download me-1" />

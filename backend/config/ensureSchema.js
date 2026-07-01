@@ -128,6 +128,14 @@ async function ensureSchema() {
     }
   }
 
+  for (const col of ['book_no VARCHAR(20) NULL', 'receipt_no VARCHAR(20) NULL']) {
+    try {
+      await pool.query(`ALTER TABLE tuition_payments ADD COLUMN ${col}`);
+    } catch (err) {
+      if (err.code !== 'ER_DUP_FIELDNAME') throw err;
+    }
+  }
+
   const [courseCount] = await pool.query('SELECT COUNT(*) AS c FROM training_courses');
   if (courseCount[0].c === 0) {
     await pool.query(
