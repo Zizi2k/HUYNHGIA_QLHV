@@ -11,6 +11,9 @@ const {
   getPaymentReceiptPdf, getStudentReceipts,
 } = require('../controllers/tuitionController');
 const { importProfiles, downloadImportTemplate } = require('../controllers/tuitionImportController');
+const {
+  importPayments, downloadPaymentImportTemplate,
+} = require('../controllers/tuitionPaymentImportController');
 
 const router = express.Router();
 
@@ -35,6 +38,8 @@ router.put('/profiles/:id', updateProfile);
 router.delete('/profiles/:id', deleteProfile);
 
 router.post('/payments', createPayment);
+router.get('/payments/import-template', downloadPaymentImportTemplate);
+router.post('/payments/import', excelUpload.single('file'), importPayments);
 router.delete('/payments/:id', deletePayment);
 
 router.get('/periods', getPeriods);

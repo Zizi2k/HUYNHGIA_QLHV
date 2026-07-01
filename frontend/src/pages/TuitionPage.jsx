@@ -15,6 +15,7 @@ import DiscountManager from '../components/tuition/DiscountManager';
 import PaymentModal from '../components/tuition/PaymentModal';
 import ProfileEditModal from '../components/tuition/ProfileEditModal';
 import ImportTuitionModal from '../components/tuition/ImportTuitionModal';
+import ImportPaymentsModal from '../components/tuition/ImportPaymentsModal';
 import ReceiptListModal from '../components/tuition/ReceiptListModal';
 import { openPaymentReceipt } from '../utils/tuitionReceipt';
 import {
@@ -44,6 +45,7 @@ export default function TuitionPage() {
   const [showEdit, setShowEdit] = useState(false);
   const [showPay, setShowPay] = useState(false);
   const [showImport, setShowImport] = useState(false);
+  const [showImportPayments, setShowImportPayments] = useState(false);
   const [selectedProfile, setSelectedProfile] = useState(null);
   const [receiptPayments, setReceiptPayments] = useState([]);
   const [showReceipts, setShowReceipts] = useState(false);
@@ -216,7 +218,10 @@ export default function TuitionPage() {
             actions={(
               <>
                 <Button variant="outline-primary" onClick={() => setShowImport(true)}>
-                  <i className="bi bi-file-earmark-excel me-1" />Import Excel
+                  <i className="bi bi-file-earmark-excel me-1" />Import hồ sơ
+                </Button>
+                <Button variant="outline-success" onClick={() => setShowImportPayments(true)}>
+                  <i className="bi bi-cash-stack me-1" />Import thu tiền
                 </Button>
                 <Button variant="primary" onClick={() => { setSelectedProfile(null); setShowEdit(true); }}>
                   <i className="bi bi-plus-lg me-1" />Thêm hồ sơ
@@ -515,6 +520,11 @@ export default function TuitionPage() {
       <ImportTuitionModal
         show={showImport}
         onHide={() => setShowImport(false)}
+        onSuccess={loadProfiles}
+      />
+      <ImportPaymentsModal
+        show={showImportPayments}
+        onHide={() => setShowImportPayments(false)}
         onSuccess={loadProfiles}
       />
       <ReceiptListModal

@@ -150,6 +150,8 @@ export const tuitionService = {
   deleteProfile: (id) => api.delete(`/tuition/profiles/${id}`),
   importProfiles: (formData) => api.post('/tuition/profiles/import', formData),
   downloadImportTemplate: () => api.get('/tuition/profiles/import-template', { responseType: 'blob' }),
+  importPayments: (formData) => api.post('/tuition/payments/import', formData),
+  downloadPaymentImportTemplate: () => api.get('/tuition/payments/import-template', { responseType: 'blob' }),
 
   createPayment: (data) => api.post('/tuition/payments', data),
   deletePayment: (id) => api.delete(`/tuition/payments/${id}`),
