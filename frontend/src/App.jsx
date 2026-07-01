@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
+import AuthSessionHandler from './components/auth/AuthSessionHandler';
 import MainLayout from './layouts/MainLayout';
 import LoginPage from './pages/LoginPage';
 import DashboardPage from './pages/DashboardPage';
@@ -20,6 +21,7 @@ function App() {
   return (
     <AuthProvider>
       <BrowserRouter>
+        <AuthSessionHandler />
         <Routes>
           <Route path="/login" element={<LoginPage />} />
           <Route element={<MainLayout />}>

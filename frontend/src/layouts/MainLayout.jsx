@@ -4,6 +4,7 @@ import { Spinner } from 'react-bootstrap';
 import { useAuth } from '../context/AuthContext';
 import Sidebar from '../components/layout/Sidebar';
 import Topbar from '../components/layout/Topbar';
+import ScrollRestoration from '../components/common/ScrollRestoration';
 
 export default function MainLayout() {
   const { user, loading } = useAuth();
@@ -45,6 +46,7 @@ export default function MainLayout() {
           onToggleMobile={() => setMobileOpen((v) => !v)}
         />
         <div className="app-content">
+          <ScrollRestoration />
           <Outlet />
         </div>
       </div>

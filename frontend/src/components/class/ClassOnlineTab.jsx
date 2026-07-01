@@ -4,6 +4,8 @@ import {
 } from 'react-bootstrap';
 import { onlineSessionService } from '../../services';
 import { notifyDeleteResult } from '../../utils/deleteHelpers';
+import LoadingOverlay from '../common/LoadingOverlay';
+import { useSoftLoading } from '../../hooks/useSoftLoading';
 
 const JITSI_DOMAIN = import.meta.env.VITE_JITSI_DOMAIN || 'meet.jit.si';
 
@@ -111,6 +113,7 @@ export default function ClassOnlineTab({
 }) {
   const [sessions, setSessions] = useState([]);
   const [loading, setLoading] = useState(true);
+  const { showInitialSpinner, showOverlay } = useSoftLoading(loading);
   const [showCreate, setShowCreate] = useState(false);
   const [title, setTitle] = useState('');
   const [saving, setSaving] = useState(false);
@@ -183,11 +186,12 @@ export default function ClassOnlineTab({
   const activeSessions = sessions.filter((s) => s.is_active);
   const pastSessions = sessions.filter((s) => !s.is_active);
 
-  if (loading) {
+  if (showInitialSpinner) {
     return <div className="text-center py-4"><Spinner animation="border" /></div>;
   }
 
   return (
+    <LoadingOverlay loading={showOverlay}>
     <>
       <Alert variant="info" className="small py-2">
         <i className="bi bi-camera-video me-1" />
@@ -319,5 +323,6 @@ export default function ClassOnlineTab({
         </Form>
       </Modal>
     </>
+    </LoadingOverlay>
   );
 }

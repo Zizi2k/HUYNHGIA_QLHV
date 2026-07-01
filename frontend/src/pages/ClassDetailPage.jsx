@@ -76,7 +76,7 @@ export default function ClassDetailPage() {
       const fd = new FormData();
       fd.append('avatar', file);
       await classService.uploadAvatar(id, fd);
-      await loadData();
+      await refreshData();
     } catch (err) {
       alert(err.response?.data?.message || 'Không thể tải ảnh lớp');
     }
@@ -240,7 +240,7 @@ export default function ClassDetailPage() {
 
   const getLessonFileUrl = (fileUrl) => getLessonResourceUrl(fileUrl, API_BASE);
 
-  if (loading) {
+  if (loading && !classData) {
     return <div className="page-container text-center py-5"><Spinner animation="border" /></div>;
   }
 

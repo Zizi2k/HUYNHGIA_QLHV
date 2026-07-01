@@ -1,9 +1,11 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Button, Form, Alert, Card, Spinner, Badge,
 } from 'react-bootstrap';
 import { attendanceService } from '../../services';
 import DataTable, { DataTableEmpty } from '../common/DataTable';
+import LoadingOverlay from '../common/LoadingOverlay';
+import { useSoftLoading } from '../../hooks/useSoftLoading';
 import TeacherSchedulePanel from './TeacherSchedulePanel';
 
 const STATUS_OPTIONS = [
@@ -35,9 +37,11 @@ export default function ClassAttendanceTab({
   const [history, setHistory] = useState([]);
   const [editingExisting, setEditingExisting] = useState(false);
   const [loading, setLoading] = useState(true);
+  const { showInitialSpinner, showOverlay } = useSoftLoading(loading);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
+  const formRef = useRef(null);
 
   const stats = useMemo(() => {
     const counts = { present: 0, absent: 0, late: 0, excused: 0, dropped: 0 };
@@ -94,7 +98,9 @@ export default function ClassAttendanceTab({
   const openHistoryDate = (dateStr) => {
     const normalized = String(dateStr).slice(0, 10);
     setSessionDate(normalized);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    requestAnimationFrame(() => {
+      formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
   };
 
   const handleSubmit = async (e) => {
@@ -128,11 +134,12 @@ export default function ClassAttendanceTab({
     }
   };
 
-  if (loading) {
+  if (showInitialSpinner) {
     return <div className="text-center py-4"><Spinner animation="border" /></div>;
   }
 
   return (
+    <LoadingOverlay loading={showOverlay}>
     <div>
       <TeacherSchedulePanel
         classId={classId}
@@ -142,7 +149,7 @@ export default function ClassAttendanceTab({
       />
 
       {isTeacher && (
-        <Card className="border-0 shadow-sm mb-4" style={{ borderRadius: 12, overflow: 'hidden' }}>
+        <Card className="border-0 shadow-sm mb-4" style={{ borderRadius: 12, overflow: 'hidden' }} ref={formRef}>
           <div className="pro-card-header">
             <h5 className="pro-card-header-title">
               <i className="bi bi-calendar-check me-2" />
@@ -376,5 +383,6 @@ export default function ClassAttendanceTab({
         </DataTable>
       )}
     </div>
+    </LoadingOverlay>
   );
 }

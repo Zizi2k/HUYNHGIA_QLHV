@@ -16,6 +16,8 @@ import {
   SUBJECT_OPTIONS, ENROLLMENT_STATUS_LABELS, CODE_PREFIX_OPTIONS, subjectLabel,
 } from '../components/students/studentConstants';
 import { isScopedUser, lockedCodePrefix, scopeLabel } from '../utils/adminScope';
+import LoadingOverlay from '../components/common/LoadingOverlay';
+import { useSoftLoading } from '../hooks/useSoftLoading';
 
 const emptySummary = { total: 0, active: 0, expiring: 0, expired: 0 };
 
@@ -26,6 +28,7 @@ export default function StudentsPage() {
   const [classes, setClasses] = useState([]);
   const [courses, setCourses] = useState([]);
   const [loading, setLoading] = useState(true);
+  const { showInitialSpinner, showOverlay } = useSoftLoading(loading);
 
   const [subjectFilter, setSubjectFilter] = useState('');
   const [classFilter, setClassFilter] = useState('');
@@ -221,14 +224,16 @@ export default function StudentsPage() {
         </Row>
       </FilterPanel>
 
-      {loading ? (
+      {showInitialSpinner ? (
         <div className="text-center py-5"><Spinner animation="border" /></div>
       ) : (
-        <EnrollmentOverviewTable
-          students={students}
-          onEdit={handleEdit}
-          onTransfer={handleTransfer}
-        />
+        <LoadingOverlay loading={showOverlay}>
+          <EnrollmentOverviewTable
+            students={students}
+            onEdit={handleEdit}
+            onTransfer={handleTransfer}
+          />
+        </LoadingOverlay>
       )}
 
       <AddEnrollmentModal

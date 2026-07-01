@@ -9,6 +9,8 @@ import { SUBJECT_OPTIONS } from '../components/tuition/tuitionConstants';
 import { isSuperAdmin } from '../utils/adminScope';
 import { getAvatarUrl } from '../utils/avatar';
 import { LESSON_IMAGE_ACCEPT, isLessonImageAllowed } from '../utils/fileTypes';
+import LoadingOverlay from '../components/common/LoadingOverlay';
+import { useSoftLoading } from '../hooks/useSoftLoading';
 
 const emptyForm = { name: '', description: '', subject: '', avatarFile: null };
 
@@ -22,6 +24,7 @@ export default function ClassesPage() {
   const { user } = useAuth();
   const [classes, setClasses] = useState([]);
   const [loading, setLoading] = useState(true);
+  const { showInitialSpinner, showOverlay } = useSoftLoading(loading);
   const [search, setSearch] = useState('');
   const [teacherSearch, setTeacherSearch] = useState('');
   const [prefixFilter, setPrefixFilter] = useState('');
@@ -221,7 +224,7 @@ export default function ClassesPage() {
         </Row>
       </FilterPanel>
 
-      {loading ? (
+      {showInitialSpinner ? (
         <div className="text-center py-5"><Spinner animation="border" /></div>
       ) : classes.length === 0 ? (
         <Alert variant="light">
@@ -232,18 +235,20 @@ export default function ClassesPage() {
               : 'Chưa có lớp học nào.'}
         </Alert>
       ) : (
-        <Row className="g-3">
-          {classes.map((cls) => (
-            <Col md={4} key={cls.id}>
-              <ClassCard
-                cls={cls}
-                canManage={canManage}
-                onEdit={openEditModal}
-                onDelete={handleDelete}
-              />
-            </Col>
-          ))}
-        </Row>
+        <LoadingOverlay loading={showOverlay}>
+          <Row className="g-3">
+            {classes.map((cls) => (
+              <Col md={4} key={cls.id}>
+                <ClassCard
+                  cls={cls}
+                  canManage={canManage}
+                  onEdit={openEditModal}
+                  onDelete={handleDelete}
+                />
+              </Col>
+            ))}
+          </Row>
+        </LoadingOverlay>
       )}
 
       <Modal show={showModal} onHide={closeModal}>

@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Table, Button, Modal, Form, Badge, Spinner } from 'react-bootstrap';
 import { tuitionService } from '../../services';
+import LoadingOverlay from '../common/LoadingOverlay';
+import { useSoftLoading } from '../../hooks/useSoftLoading';
 
 const emptyForm = {
   name: '', discount_type: 'fixed', discount_value: '', default_reason: '', is_active: true,
@@ -9,6 +11,7 @@ const emptyForm = {
 export default function DiscountManager() {
   const [discounts, setDiscounts] = useState([]);
   const [loading, setLoading] = useState(true);
+  const { showInitialSpinner, showOverlay } = useSoftLoading(loading);
   const [showModal, setShowModal] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [form, setForm] = useState(emptyForm);
@@ -73,7 +76,9 @@ export default function DiscountManager() {
     load();
   };
 
-  if (loading) return <div className="text-center py-4"><Spinner animation="border" /></div>;
+  if (showInitialSpinner) {
+    return <div className="text-center py-4"><Spinner animation="border" /></div>;
+  }
 
   return (
     <>
@@ -84,43 +89,45 @@ export default function DiscountManager() {
         </Button>
       </div>
 
-      <Table responsive hover className="bg-white shadow-sm rounded">
-        <thead className="table-light">
-          <tr>
-            <th>Tên mức giảm</th>
-            <th>Loại</th>
-            <th>Giá trị</th>
-            <th>Lý do mặc định</th>
-            <th>Trạng thái</th>
-            <th style={{ width: 120 }}>Thao tác</th>
-          </tr>
-        </thead>
-        <tbody>
-          {discounts.length === 0 ? (
-            <tr><td colSpan={6} className="text-center text-muted py-4">Chưa có mức giảm</td></tr>
-          ) : discounts.map((d) => (
-            <tr key={d.id}>
-              <td>{d.name}</td>
-              <td>{d.discount_type === 'percent' ? 'Phần trăm' : 'Cố định'}</td>
-              <td>{d.discount_type === 'percent' ? `${d.discount_value}%` : Number(d.discount_value).toLocaleString('vi-VN')}</td>
-              <td>{d.default_reason || '—'}</td>
-              <td>
-                <Badge bg={d.is_active ? 'success' : 'secondary'}>
-                  {d.is_active ? 'Đang dùng' : 'Tắt'}
-                </Badge>
-              </td>
-              <td>
-                <Button variant="outline-primary" size="sm" className="me-1" onClick={() => openEdit(d)}>
-                  <i className="bi bi-pencil" />
-                </Button>
-                <Button variant="outline-danger" size="sm" onClick={() => handleDelete(d.id)}>
-                  <i className="bi bi-trash" />
-                </Button>
-              </td>
+      <LoadingOverlay loading={showOverlay}>
+        <Table responsive hover className="bg-white shadow-sm rounded">
+          <thead className="table-light">
+            <tr>
+              <th>Tên mức giảm</th>
+              <th>Loại</th>
+              <th>Giá trị</th>
+              <th>Lý do mặc định</th>
+              <th>Trạng thái</th>
+              <th style={{ width: 120 }}>Thao tác</th>
             </tr>
-          ))}
-        </tbody>
-      </Table>
+          </thead>
+          <tbody>
+            {discounts.length === 0 ? (
+              <tr><td colSpan={6} className="text-center text-muted py-4">Chưa có mức giảm</td></tr>
+            ) : discounts.map((d) => (
+              <tr key={d.id}>
+                <td>{d.name}</td>
+                <td>{d.discount_type === 'percent' ? 'Phần trăm' : 'Cố định'}</td>
+                <td>{d.discount_type === 'percent' ? `${d.discount_value}%` : Number(d.discount_value).toLocaleString('vi-VN')}</td>
+                <td>{d.default_reason || '—'}</td>
+                <td>
+                  <Badge bg={d.is_active ? 'success' : 'secondary'}>
+                    {d.is_active ? 'Đang dùng' : 'Tắt'}
+                  </Badge>
+                </td>
+                <td>
+                  <Button variant="outline-primary" size="sm" className="me-1" onClick={() => openEdit(d)}>
+                    <i className="bi bi-pencil" />
+                  </Button>
+                  <Button variant="outline-danger" size="sm" onClick={() => handleDelete(d.id)}>
+                    <i className="bi bi-trash" />
+                  </Button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </Table>
+      </LoadingOverlay>
 
       <Modal show={showModal} onHide={() => setShowModal(false)}>
         <Modal.Header closeButton>

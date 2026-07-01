@@ -18,6 +18,8 @@ import ImportTuitionModal from '../components/tuition/ImportTuitionModal';
 import ImportPaymentsModal from '../components/tuition/ImportPaymentsModal';
 import ReceiptListModal from '../components/tuition/ReceiptListModal';
 import { openPaymentReceipt } from '../utils/tuitionReceipt';
+import LoadingOverlay from '../components/common/LoadingOverlay';
+import { useSoftLoading } from '../hooks/useSoftLoading';
 import {
   SUBJECT_OPTIONS, STATUS_LABELS, currentMonthValue, formatMoney, subjectLabel,
 } from '../components/tuition/tuitionConstants';
@@ -32,6 +34,7 @@ export default function TuitionPage() {
   const [discounts, setDiscounts] = useState([]);
   const [classes, setClasses] = useState([]);
   const [loading, setLoading] = useState(true);
+  const { showInitialSpinner, showOverlay } = useSoftLoading(loading);
 
   const [subjectFilter, setSubjectFilter] = useState('');
   const [classFilter, setClassFilter] = useState('');
@@ -337,16 +340,18 @@ export default function TuitionPage() {
             />
           </StatCardGrid>
 
-          {loading ? (
+          {showInitialSpinner ? (
             <div className="text-center py-5"><Spinner animation="border" /></div>
           ) : (
-            <TuitionProfileTable
-              profiles={profiles}
-              onEdit={(p) => { setSelectedProfile(p); setShowEdit(true); }}
-              onPay={(p) => { setSelectedProfile(p); setEditingPayment(null); setShowPay(true); }}
-              onDelete={handleDeleteProfile}
-              onViewReceipts={handleViewReceipts}
-            />
+            <LoadingOverlay loading={showOverlay}>
+              <TuitionProfileTable
+                profiles={profiles}
+                onEdit={(p) => { setSelectedProfile(p); setShowEdit(true); }}
+                onPay={(p) => { setSelectedProfile(p); setEditingPayment(null); setShowPay(true); }}
+                onDelete={handleDeleteProfile}
+                onViewReceipts={handleViewReceipts}
+              />
+            </LoadingOverlay>
           )}
         </Tab.Pane>
 

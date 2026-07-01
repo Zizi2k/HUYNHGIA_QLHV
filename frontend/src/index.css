@@ -72,6 +72,30 @@ svg {
   background: var(--app-bg);
 }
 
+.loading-overlay-host {
+  position: relative;
+}
+
+.loading-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.72);
+  backdrop-filter: blur(1px);
+  border-radius: inherit;
+  pointer-events: none;
+}
+
+.loading-overlay-host > .loading-overlay ~ *,
+.loading-overlay-host:has(.loading-overlay) .pro-table-wrap,
+.loading-overlay-host:has(.loading-overlay) .pro-table-card {
+  opacity: 0.55;
+  transition: opacity 0.15s ease;
+}
+
 .app-shell {
   display: flex;
   min-height: 100vh;
