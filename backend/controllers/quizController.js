@@ -6,7 +6,7 @@ const { teachingStaffRoleSql } = require('../utils/teachingStaff');
 const { parseQuizDocx, generateQuizSampleDocx } = require('../utils/quizDocxParser');
 const { parseQuizXlsx, generateQuizSampleXlsx } = require('../utils/quizXlsxParser');
 const { studentVisibilityClause, parseVisibilityFields, isVisibleToStudent } = require('../utils/contentVisibility');
-const { resolveStudentSubmissionInput } = require('../utils/studentSubmission');
+const { resolveStudentSubmissionAttachments } = require('../utils/studentSubmission');
 const { getUploadedFiles } = require('../utils/fileStorage');
 const {
   resolveNewAttachments,
@@ -15,6 +15,12 @@ const {
   insertAttachments,
   deleteAttachmentsForResource,
 } = require('../utils/contentAttachments');
+const {
+  syncLegacyColumns,
+  attachSubmissionAttachmentsToRowsAsync,
+  enrichRowsWithSubmissionAttachments,
+  replaceSubmissionAttachments,
+} = require('../utils/submissionAttachments');
 
 function parseQuizBody(body) {
   let questions = body.questions;
@@ -57,7 +63,12 @@ const getQuizzes = async (req, res) => {
          ORDER BY q.created_at DESC`,
         [req.user.id, classId]
       );
-      return res.json(await attachAttachmentsToRows(rows, 'quiz'));
+      return res.json(
+        await enrichRowsWithSubmissionAttachments(
+          await attachAttachmentsToRows(rows, 'quiz'),
+          'quiz',
+        ),
+      );
     }
 
     let query = `
@@ -296,7 +307,7 @@ const getQuizSubmissions = async (req, res) => {
        ORDER BY qs.score DESC, qs.submitted_at DESC`,
       [req.params.id]
     );
-    res.json(rows);
+    res.json(await attachSubmissionAttachmentsToRowsAsync(rows, 'quiz'));
   } catch (err) {
     res.status(500).json({ message: 'Lỗi hệ thống', error: err.message });
   }
@@ -466,12 +477,13 @@ const submitQuizAttachment = async (req, res) => {
       return res.status(403).json({ message: 'Bài kiểm tra chưa được mở cho học sinh' });
     }
 
-    let file_url;
+    let attachments;
     try {
-      ({ file_url } = await resolveStudentSubmissionInput(req));
+      attachments = await resolveStudentSubmissionAttachments(req);
     } catch (err) {
       return res.status(err.status || 400).json({ message: err.message });
     }
+    const legacy = syncLegacyColumns(attachments);
 
     const student_id = req.user.id;
     const existing = await getStudentQuizSubmission(conn, quiz_id, student_id);
@@ -482,21 +494,32 @@ const submitQuizAttachment = async (req, res) => {
       });
     }
 
+    await conn.beginTransaction();
+
+    let submissionId;
     if (existing) {
+      submissionId = existing.id;
       await conn.query(
         `UPDATE quiz_submissions SET file_url = ?, score = NULL, feedback = NULL, submitted_at = NOW()
          WHERE id = ?`,
-        [file_url, existing.id]
+        [legacy.file_url, submissionId],
       );
-      return res.json({ message: 'Nộp lại bài thành công', id: existing.id });
+    } else {
+      const [result] = await conn.query(
+        'INSERT INTO quiz_submissions (quiz_id, student_id, file_url, score) VALUES (?, ?, ?, NULL)',
+        [quiz_id, student_id, legacy.file_url],
+      );
+      submissionId = result.insertId;
     }
 
-    const [result] = await conn.query(
-      'INSERT INTO quiz_submissions (quiz_id, student_id, file_url, score) VALUES (?, ?, ?, NULL)',
-      [quiz_id, student_id, file_url]
-    );
-    res.status(201).json({ message: 'Nộp bài thành công', id: result.insertId });
+    await replaceSubmissionAttachments(conn, 'quiz', submissionId, attachments);
+    await conn.commit();
+
+    const message = existing ? 'Nộp lại bài thành công' : 'Nộp bài thành công';
+    const status = existing ? 200 : 201;
+    return res.status(status).json({ message, id: submissionId });
   } catch (err) {
+    await conn.rollback();
     res.status(500).json({ message: 'Lỗi hệ thống', error: err.message });
   } finally {
     conn.release();

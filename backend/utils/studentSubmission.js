@@ -1,7 +1,9 @@
 const path = require('path');
-const { saveMulterFile } = require('./fileStorage');
+const { saveMulterFiles, getUploadedFiles } = require('./fileStorage');
+const { parseLinksFromBody } = require('./contentAttachments');
 
 const ALLOWED_EXTENSIONS = ['.docx', '.xlsx', '.xls'];
+const MAX_SUBMISSION_FILES = 30;
 
 function isValidSubmissionUrl(url) {
   try {
@@ -12,31 +14,68 @@ function isValidSubmissionUrl(url) {
   }
 }
 
-async function resolveStudentSubmissionInput(req) {
-  if (req.file) {
-    const ext = path.extname(req.file.originalname || '').toLowerCase();
-    if (!ALLOWED_EXTENSIONS.includes(ext)) {
-      const err = new Error('Chỉ chấp nhận file .docx hoặc .xlsx');
-      err.status = 400;
-      throw err;
-    }
-    const saved = await saveMulterFile(req);
-    return { file_url: saved.file_url };
+function validateStudentFileExtension(file) {
+  const ext = path.extname(file.originalname || '').toLowerCase();
+  if (!ALLOWED_EXTENSIONS.includes(ext)) {
+    const err = new Error('Chỉ chấp nhận file .docx hoặc .xlsx');
+    err.status = 400;
+    throw err;
+  }
+}
+
+async function resolveStudentSubmissionAttachments(req) {
+  const uploaded = getUploadedFiles(req);
+  const files = uploaded.length ? uploaded : (req.file ? [req.file] : []);
+
+  if (files.length > MAX_SUBMISSION_FILES) {
+    const err = new Error(`Tối đa ${MAX_SUBMISSION_FILES} tệp mỗi lần nộp`);
+    err.status = 400;
+    throw err;
   }
 
-  const link = (req.body?.link_url || '').trim();
-  if (link) {
-    if (!isValidSubmissionUrl(link)) {
+  for (const file of files) {
+    validateStudentFileExtension(file);
+  }
+
+  const attachments = files.length
+    ? await saveMulterFiles({ files, file: req.file })
+    : [];
+
+  let links = [];
+  try {
+    links = parseLinksFromBody(req.body || {});
+  } catch (err) {
+    err.status = err.status || 400;
+    throw err;
+  }
+
+  const legacyLink = (req.body?.link_url || '').trim();
+  if (!links.length && legacyLink) {
+    if (!isValidSubmissionUrl(legacyLink)) {
       const err = new Error('Link không hợp lệ. Vui lòng dùng http:// hoặc https://');
       err.status = 400;
       throw err;
     }
-    return { file_url: link };
+    links = [{
+      file_url: legacyLink,
+      file_type: 'link/document',
+      original_name: null,
+    }];
   }
 
-  const err = new Error('Vui lòng chọn file (.docx, .xlsx) hoặc dán link');
-  err.status = 400;
-  throw err;
+  const all = [...attachments, ...links];
+  if (!all.length) {
+    const err = new Error('Vui lòng chọn file (.docx, .xlsx) hoặc dán link');
+    err.status = 400;
+    throw err;
+  }
+
+  return all;
+}
+
+async function resolveStudentSubmissionInput(req) {
+  const attachments = await resolveStudentSubmissionAttachments(req);
+  return { file_url: attachments[0].file_url, attachments };
 }
 
 function isExternalSubmissionUrl(fileUrl) {
@@ -45,7 +84,9 @@ function isExternalSubmissionUrl(fileUrl) {
 
 module.exports = {
   ALLOWED_EXTENSIONS,
+  MAX_SUBMISSION_FILES,
   isValidSubmissionUrl,
   resolveStudentSubmissionInput,
+  resolveStudentSubmissionAttachments,
   isExternalSubmissionUrl,
 };

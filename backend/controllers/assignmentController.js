@@ -15,7 +15,12 @@ const {
   deleteAttachmentsForResource,
 } = require('../utils/contentAttachments');
 const { studentVisibilityClause, parseVisibilityFields, isVisibleToStudent } = require('../utils/contentVisibility');
-const { resolveStudentSubmissionInput } = require('../utils/studentSubmission');
+const { resolveStudentSubmissionAttachments } = require('../utils/studentSubmission');
+const {
+  attachSubmissionAttachmentsToRowsAsync,
+  enrichRowsWithSubmissionAttachments,
+  replaceSubmissionAttachments,
+} = require('../utils/submissionAttachments');
 
 const getAssignments = async (req, res) => {  try {
     const classId = req.query.class_id;
@@ -33,7 +38,12 @@ const getAssignments = async (req, res) => {  try {
          ORDER BY a.created_at DESC`,
         [req.user.id, classId]
       );
-      return res.json(await attachAttachmentsToRows(rows, 'assignment'));
+      return res.json(
+        await enrichRowsWithSubmissionAttachments(
+          await attachAttachmentsToRows(rows, 'assignment'),
+          'assignment',
+        ),
+      );
     }
 
     let query = `
@@ -189,6 +199,7 @@ const deleteAssignment = async (req, res) => {
 };
 
 const uploadSubmission = async (req, res) => {
+  const conn = await pool.getConnection();
   try {
     const { assignment_id } = req.body;
     if (!assignment_id) {
@@ -209,36 +220,50 @@ const uploadSubmission = async (req, res) => {
       return res.status(403).json({ message: 'Bài tập chưa được mở cho học sinh' });
     }
 
-    let file_url;
+    let attachments;
     try {
-      ({ file_url } = await resolveStudentSubmissionInput(req));
+      attachments = await resolveStudentSubmissionAttachments(req);
     } catch (err) {
       return res.status(err.status || 400).json({ message: err.message });
     }
+    const legacy = syncLegacyColumns(attachments);
 
     const student_id = req.user.id;
 
-    const [existing] = await pool.query(
+    const [existing] = await conn.query(
       'SELECT id FROM submissions WHERE assignment_id = ? AND student_id = ?',
-      [assignment_id, student_id]
+      [assignment_id, student_id],
     );
 
+    await conn.beginTransaction();
+
+    let submissionId;
     if (existing.length > 0) {
-      await pool.query(
+      submissionId = existing[0].id;
+      await conn.query(
         `UPDATE submissions SET file_url=?, score=NULL, feedback=NULL, submitted_at=NOW()
          WHERE id=?`,
-        [file_url, existing[0].id]
+        [legacy.file_url, submissionId],
       );
-      return res.json({ message: 'Nộp lại bài thành công', id: existing[0].id });
+    } else {
+      const [result] = await conn.query(
+        'INSERT INTO submissions (assignment_id, student_id, file_url) VALUES (?, ?, ?)',
+        [assignment_id, student_id, legacy.file_url],
+      );
+      submissionId = result.insertId;
     }
 
-    const [result] = await pool.query(
-      'INSERT INTO submissions (assignment_id, student_id, file_url) VALUES (?, ?, ?)',
-      [assignment_id, student_id, file_url]
-    );
-    res.status(201).json({ message: 'Nộp bài thành công', id: result.insertId });
+    await replaceSubmissionAttachments(conn, 'assignment', submissionId, attachments);
+    await conn.commit();
+
+    const message = existing.length > 0 ? 'Nộp lại bài thành công' : 'Nộp bài thành công';
+    const status = existing.length > 0 ? 200 : 201;
+    return res.status(status).json({ message, id: submissionId });
   } catch (err) {
+    await conn.rollback();
     res.status(500).json({ message: 'Lỗi hệ thống', error: err.message });
+  } finally {
+    conn.release();
   }
 };
 
@@ -257,7 +282,7 @@ const getSubmissions = async (req, res) => {
        ORDER BY s.submitted_at DESC`,
       [req.params.id]
     );
-    res.json(rows);
+    res.json(await attachSubmissionAttachmentsToRowsAsync(rows, 'assignment'));
   } catch (err) {
     res.status(500).json({ message: 'Lỗi hệ thống', error: err.message });
   }

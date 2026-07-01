@@ -206,34 +206,31 @@ export default function ClassAssignmentsTab({
     </>
   );
 
-  const handleSubmitFile = async (assignmentId, file) => {
-    if (!file) return;
+  const handleSubmitWork = async (assignmentId, { files = [], links = [] }) => {
+    if (!files.length && !links.length) return;
     setSubmittingId(assignmentId);
     try {
-      const formData = new FormData();
-      formData.append('assignment_id', assignmentId);
-      formData.append('file', file);
-      await assignmentService.upload(formData);
+      if (files.length) {
+        const formData = new FormData();
+        formData.append('assignment_id', assignmentId);
+        files.forEach((file) => formData.append('files', file));
+        if (links.length) {
+          formData.append('links', JSON.stringify(
+            links.map((url) => ({ url, link_type: 'document' })),
+          ));
+        }
+        await assignmentService.upload(formData);
+      } else {
+        await assignmentService.submitLink({
+          assignment_id: assignmentId,
+          links: links.map((url) => ({ url, link_type: 'document' })),
+        });
+      }
       onUpdated();
       alert('Nộp bài thành công!');
     } catch (err) {
       alert(err.response?.data?.message || 'Không thể nộp bài');
-    } finally {
-      setSubmittingId(null);
-    }
-  };
-
-  const handleSubmitLink = async (assignmentId, linkUrl) => {
-    setSubmittingId(assignmentId);
-    try {
-      await assignmentService.submitLink({
-        assignment_id: assignmentId,
-        link_url: linkUrl,
-      });
-      onUpdated();
-      alert('Nộp bài thành công!');
-    } catch (err) {
-      alert(err.response?.data?.message || 'Không thể nộp bài');
+      throw err;
     } finally {
       setSubmittingId(null);
     }
@@ -324,10 +321,10 @@ export default function ClassAssignmentsTab({
                 <StudentWorkSubmission
                   itemId={a.id}
                   submitting={submittingId === a.id}
+                  submissionAttachments={a.submission_attachments}
                   submissionUrl={a.submission_url}
                   submittedAt={a.submitted_at}
-                  onSubmitFile={handleSubmitFile}
-                  onSubmitLink={handleSubmitLink}
+                  onSubmitWork={handleSubmitWork}
                 />
               )}
             </Card.Body>
@@ -418,11 +415,10 @@ export default function ClassAssignmentsTab({
                       <div className="text-muted small">{s.code}</div>
                     </td>
                     <td>
-                      {s.file_url ? (
-                        <ContentAttachmentPreview
-                          item={{ file_url: s.file_url, file_type: s.file_type }}
+                      {(s.attachments?.length || s.file_url) ? (
+                        <AttachmentList
+                          item={{ attachments: s.attachments, file_url: s.file_url }}
                           apiBase={API_BASE}
-                          title={`Bài nộp — ${s.fullname}`}
                           compact
                         />
                       ) : '—'}

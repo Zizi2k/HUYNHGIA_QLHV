@@ -34,35 +34,6 @@ function handleQuizImportUpload(req, res, next) {
   });
 }
 
-router.use(authenticate);
-router.get('/', getQuizzes);
-router.get('/import-template', authorize('admin', 'teacher'), getQuizImportTemplate);
-router.post('/parse-docx', authorize('admin', 'teacher'), handleQuizImportUpload, importQuizFile);
-router.patch('/:id/visibility', authorize('admin', 'teacher'), setQuizVisibility);
-router.post('/:id/share', authorize('admin', 'teacher'), async (req, res) => {
-  try {
-    const result = await shareQuiz(req.user, req.params.id, req.body.target_class_ids);
-    return sendShareResult(res, result);
-  } catch (err) {
-    res.status(500).json({ message: 'Lỗi hệ thống', error: err.message });
-  }
-});
-router.post('/submit', authorize('student'), submitQuiz);
-router.post('/submit-attachment', authorize('student'), (req, res, next) => {
-  const contentType = req.headers['content-type'] || '';
-  if (contentType.includes('multipart/form-data')) {
-    uploadMemory.single('file')(req, res, (err) => {
-      if (err) return next(err);
-      submitQuizAttachment(req, res);
-    });
-  } else {
-    submitQuizAttachment(req, res);
-  }
-});
-router.put('/submissions/:id/grade', authorize('admin', 'teacher'), gradeQuizSubmission);
-router.get('/:id/submissions', authorize('admin', 'teacher'), getQuizSubmissions);
-router.get('/:id', getQuizById);
-
 const withOptionalQuizUpload = (handler) => (req, res, next) => {
   const contentType = req.headers['content-type'] || '';
   if (contentType.includes('multipart/form-data')) {
@@ -80,6 +51,25 @@ const withOptionalQuizUpload = (handler) => (req, res, next) => {
     handler(req, res);
   }
 };
+
+router.use(authenticate);
+router.get('/', getQuizzes);
+router.get('/import-template', authorize('admin', 'teacher'), getQuizImportTemplate);
+router.post('/parse-docx', authorize('admin', 'teacher'), handleQuizImportUpload, importQuizFile);
+router.patch('/:id/visibility', authorize('admin', 'teacher'), setQuizVisibility);
+router.post('/:id/share', authorize('admin', 'teacher'), async (req, res) => {
+  try {
+    const result = await shareQuiz(req.user, req.params.id, req.body.target_class_ids);
+    return sendShareResult(res, result);
+  } catch (err) {
+    res.status(500).json({ message: 'Lỗi hệ thống', error: err.message });
+  }
+});
+router.post('/submit', authorize('student'), submitQuiz);
+router.post('/submit-attachment', authorize('student'), withOptionalQuizUpload(submitQuizAttachment));
+router.put('/submissions/:id/grade', authorize('admin', 'teacher'), gradeQuizSubmission);
+router.get('/:id/submissions', authorize('admin', 'teacher'), getQuizSubmissions);
+router.get('/:id', getQuizById);
 
 router.post('/', authorize('admin', 'teacher'), withOptionalQuizUpload(createQuiz));
 router.put('/:id', authorize('admin', 'teacher'), withOptionalQuizUpload(updateQuiz));

@@ -168,31 +168,31 @@ export default function ClassQuizzesTab({
     }
   };
 
-  const handleSubmitQuizFile = async (quizId, file) => {
-    if (!file) return;
+  const handleSubmitQuizWork = async (quizId, { files = [], links = [] }) => {
+    if (!files.length && !links.length) return;
     setSubmittingId(quizId);
     try {
-      const formData = new FormData();
-      formData.append('quiz_id', quizId);
-      formData.append('file', file);
-      await quizService.submitAttachment(formData);
+      if (files.length) {
+        const formData = new FormData();
+        formData.append('quiz_id', quizId);
+        files.forEach((file) => formData.append('files', file));
+        if (links.length) {
+          formData.append('links', JSON.stringify(
+            links.map((url) => ({ url, link_type: 'document' })),
+          ));
+        }
+        await quizService.submitAttachment(formData);
+      } else {
+        await quizService.submitAttachment({
+          quiz_id: quizId,
+          links: links.map((url) => ({ url, link_type: 'document' })),
+        });
+      }
       onUpdated();
       alert('Nộp bài thành công!');
     } catch (err) {
       alert(err.response?.data?.message || 'Không thể nộp bài');
-    } finally {
-      setSubmittingId(null);
-    }
-  };
-
-  const handleSubmitQuizLink = async (quizId, linkUrl) => {
-    setSubmittingId(quizId);
-    try {
-      await quizService.submitAttachment({ quiz_id: quizId, link_url: linkUrl });
-      onUpdated();
-      alert('Nộp bài thành công!');
-    } catch (err) {
-      alert(err.response?.data?.message || 'Không thể nộp bài');
+      throw err;
     } finally {
       setSubmittingId(null);
     }
@@ -501,10 +501,10 @@ export default function ClassQuizzesTab({
                 <StudentWorkSubmission
                   itemId={q.id}
                   submitting={submittingId === q.id}
+                  submissionAttachments={q.submission_attachments}
                   submissionUrl={isFileSubmission(q) ? q.submission_url : null}
                   submittedAt={q.quiz_submitted_at}
-                  onSubmitFile={handleSubmitQuizFile}
-                  onSubmitLink={handleSubmitQuizLink}
+                  onSubmitWork={handleSubmitQuizWork}
                 />
               )}
             </Card.Body>
@@ -778,13 +778,9 @@ export default function ClassQuizzesTab({
                     <td>{isFile ? 'File/Link' : 'Trắc nghiệm'}</td>
                     <td>
                       {r.file_url ? (
-                        <ContentAttachmentPreview
-                          item={{
-                            file_url: r.file_url,
-                            file_type: /^https?:\/\//i.test(r.file_url) ? 'link/document' : undefined,
-                          }}
+                        <AttachmentList
+                          item={{ attachments: r.attachments, file_url: r.file_url }}
                           apiBase={API_BASE}
-                          title={`Bài nộp — ${r.fullname}`}
                           compact
                         />
                       ) : '—'}

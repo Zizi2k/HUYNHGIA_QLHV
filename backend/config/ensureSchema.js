@@ -310,6 +310,27 @@ async function ensureSchema() {
     console.warn('content attachments migration:', migrateErr.message);
   }
 
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS submission_attachments (
+      id INT PRIMARY KEY AUTO_INCREMENT,
+      submission_type ENUM('assignment', 'quiz') NOT NULL,
+      submission_id INT NOT NULL,
+      sort_order INT NOT NULL DEFAULT 0,
+      file_url TEXT NOT NULL,
+      file_type VARCHAR(128) NULL,
+      original_name VARCHAR(255) NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      INDEX idx_submission_attachments (submission_type, submission_id)
+    )
+  `);
+
+  try {
+    const { migrateLegacySubmissionAttachments } = require('../utils/submissionAttachments');
+    await migrateLegacySubmissionAttachments();
+  } catch (migrateErr) {
+    console.warn('submission attachments migration:', migrateErr.message);
+  }
+
   try {
     await pool.query('ALTER TABLE classes ADD COLUMN avatar_url TEXT NULL');
   } catch (err) {
