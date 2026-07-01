@@ -18,6 +18,8 @@ import ImportTuitionModal from '../components/tuition/ImportTuitionModal';
 import {
   SUBJECT_OPTIONS, STATUS_LABELS, currentMonthValue, formatMoney, subjectLabel,
 } from '../components/tuition/tuitionConstants';
+import { CODE_PREFIX_OPTIONS } from '../components/students/studentConstants';
+import { isScopedUser, lockedCodePrefix, scopeLabel } from '../utils/adminScope';
 
 export default function TuitionPage() {
   const { user } = useAuth();
@@ -30,8 +32,12 @@ export default function TuitionPage() {
 
   const [subjectFilter, setSubjectFilter] = useState('');
   const [classFilter, setClassFilter] = useState('');
+  const [codePrefixFilter, setCodePrefixFilter] = useState('');
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
+
+  const scopedPrefix = lockedCodePrefix(user);
+  const scopeLocked = isScopedUser(user);
 
   const [showEdit, setShowEdit] = useState(false);
   const [showPay, setShowPay] = useState(false);
@@ -54,6 +60,8 @@ export default function TuitionPage() {
     if (classFilter) params.class_id = classFilter;
     if (search.trim()) params.search = search.trim();
     if (statusFilter) params.status = statusFilter;
+    if (codePrefixFilter) params.code_prefix = codePrefixFilter;
+    else if (scopedPrefix) params.code_prefix = scopedPrefix;
     tuitionService.getProfiles(params)
       .then((res) => setProfiles(res.data))
       .finally(() => setLoading(false));
@@ -64,7 +72,11 @@ export default function TuitionPage() {
     classService.getAll().then((res) => setClasses(res.data));
   }, []);
 
-  useEffect(() => { loadProfiles(); }, [subjectFilter, classFilter, statusFilter]);
+  useEffect(() => {
+    if (scopedPrefix) setCodePrefixFilter(scopedPrefix);
+  }, [scopedPrefix]);
+
+  useEffect(() => { loadProfiles(); }, [subjectFilter, classFilter, statusFilter, codePrefixFilter]);
 
   useEffect(() => {
     const timer = setTimeout(loadProfiles, 300);
@@ -215,6 +227,26 @@ export default function TuitionPage() {
                     <option key={k} value={k}>{v.label}</option>
                   ))}
                 </Form.Select>
+              </Col>
+              <Col md={3} lg={2}>
+                {scopeLocked ? (
+                  <Form.Control
+                    value={scopeLabel(scopedPrefix)}
+                    readOnly
+                    className="bg-light"
+                    title="Phạm vi quản lý của tài khoản"
+                  />
+                ) : (
+                  <Form.Select
+                    value={codePrefixFilter}
+                    onChange={(e) => setCodePrefixFilter(e.target.value)}
+                    title="Lọc theo tiền tố mã học viên"
+                  >
+                    {CODE_PREFIX_OPTIONS.map((p) => (
+                      <option key={p.value || 'all'} value={p.value}>{p.label}</option>
+                    ))}
+                  </Form.Select>
+                )}
               </Col>
               <Col md={6} lg={4}>
                 <Form.Control
