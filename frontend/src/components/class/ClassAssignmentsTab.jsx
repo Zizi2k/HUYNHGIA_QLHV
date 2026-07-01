@@ -1,42 +1,29 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState } from 'react';
 import {
   Button, Card, Modal, Form, Alert, Badge, Spinner, Table,
 } from 'react-bootstrap';
 import { assignmentService } from '../../services';
 import { notifyDeleteResult } from '../../utils/deleteHelpers';
-import {
-  LESSON_FILE_ACCEPT, LESSON_IMAGE_ACCEPT,
-  isLessonFileAllowed, isLessonImageAllowed,
-  getLessonIcon, getLessonResourceUrl, getLessonLinkLabel, getLessonBadge, isImageLesson,
-  isExternalLessonUrl,
-} from '../../utils/fileTypes';
-
 import { API_BASE } from '../../config/apiBase';
 import {
   appendVisibilityFields, getContentVisibilityStatus, toDatetimeLocalValue,
 } from '../../utils/contentVisibility';
+import {
+  emptyAttachmentDraft, attachmentDraftFromItem,
+  appendAttachmentsToFormData, buildAttachmentJsonPayload,
+  shouldUseMultipartForAttachments, getItemAttachments,
+} from '../../utils/attachmentHelpers';
 import StudentWorkSubmission from './StudentWorkSubmission';
 import ShareContentModal from './ShareContentModal';
+import AttachmentManager from '../common/AttachmentManager';
+import AttachmentList from '../common/AttachmentList';
+import ContentAttachmentPreview from '../common/ContentAttachmentPreview';
 
 const emptyForm = {
   title: '', description: '', deadline: '',
   visible_from: '', is_hidden: false,
-  sourceType: 'none', file: null, linkUrl: '', removeAttachment: false,
+  attachments: emptyAttachmentDraft(),
 };
-
-function getAttachmentSourceType(a) {
-  if (!a?.file_url) return 'none';
-  if (a.file_type === 'link/website') return 'website';
-  if (a.file_type === 'link/document') return 'document';
-  if (a.file_type === 'link/image') return 'image_link';
-  if ((a.file_type || '').startsWith('image/') || isImageLesson(a)) {
-    return isExternalLessonUrl(a.file_url) ? 'image_link' : 'image';
-  }
-  return 'file';
-}
-
-const isUploadSource = (type) => type === 'file' || type === 'image';
-const isLinkSource = (type) => type === 'document' || type === 'website' || type === 'image_link';
 
 export default function ClassAssignmentsTab({
   classId, assignments, isTeacher, isStudent, onUpdated,
@@ -53,22 +40,6 @@ export default function ClassAssignmentsTab({
   const [error, setError] = useState('');
   const [shareTarget, setShareTarget] = useState(null);
 
-  const imagePreviewUrl = useMemo(() => {
-    if (form.sourceType === 'image' && form.file) {
-      return URL.createObjectURL(form.file);
-    }
-    if (form.sourceType === 'image_link' && form.linkUrl.trim()) {
-      return form.linkUrl.trim();
-    }
-    return null;
-  }, [form.sourceType, form.file, form.linkUrl]);
-
-  useEffect(() => () => {
-    if (imagePreviewUrl?.startsWith('blob:')) {
-      URL.revokeObjectURL(imagePreviewUrl);
-    }
-  }, [imagePreviewUrl]);
-
   const openCreate = () => {
     setEditingId(null);
     setForm(emptyForm);
@@ -84,12 +55,7 @@ export default function ClassAssignmentsTab({
       deadline: a.deadline ? a.deadline.slice(0, 16) : '',
       visible_from: toDatetimeLocalValue(a.visible_from),
       is_hidden: a.is_hidden === 1 || a.is_hidden === true,
-      sourceType: getAttachmentSourceType(a),
-      linkUrl: isExternalLessonUrl(a.file_url) ? a.file_url : '',
-      file: null,
-      removeAttachment: false,
-      existingFileUrl: a.file_url,
-      existingFileType: a.file_type,
+      attachments: attachmentDraftFromItem(a),
     });
     setError('');
     setShowForm(true);
@@ -143,31 +109,6 @@ export default function ClassAssignmentsTab({
   const handleSave = async (e) => {
     e.preventDefault();
     setError('');
-
-    if (isUploadSource(form.sourceType) && form.sourceType !== 'none') {
-      if (!form.file && !form.existingFileUrl) {
-        setError(form.sourceType === 'image'
-          ? 'Vui lòng chọn hoặc dán ảnh đính kèm'
-          : 'Vui lòng chọn tệp tin đính kèm');
-        return;
-      }
-      if (form.file) {
-        if (form.sourceType === 'image' && !isLessonImageAllowed(form.file)) {
-          setError('Chỉ chấp nhận ảnh JPG, PNG, GIF, WEBP, BMP, SVG');
-          return;
-        }
-        if (form.sourceType === 'file' && !isLessonFileAllowed(form.file)) {
-          setError('Chỉ chấp nhận tệp PDF, Word, Excel, PowerPoint hoặc video');
-          return;
-        }
-      }
-    } else if (isLinkSource(form.sourceType)) {
-      if (!form.linkUrl.trim()) {
-        setError('Vui lòng dán link đính kèm');
-        return;
-      }
-    }
-
     setSaving(true);
     try {
       const base = {
@@ -177,46 +118,30 @@ export default function ClassAssignmentsTab({
       };
       appendVisibilityFields(base, form);
 
-      if (form.sourceType === 'none') {
-        const payload = editingId && form.existingFileUrl
-          ? { ...base, remove_attachment: true }
-          : base;
-        if (editingId) {
-          await assignmentService.update(editingId, payload);
-        } else {
-          await assignmentService.create({ ...payload, class_id: parseInt(classId, 10) });
-        }
-      } else if (isUploadSource(form.sourceType) && form.file) {
+      const draft = form.attachments;
+      const attachmentPayload = buildAttachmentJsonPayload(draft);
+
+      if (shouldUseMultipartForAttachments(draft)) {
         const formData = new FormData();
         formData.append('title', form.title);
         formData.append('description', form.description || '');
         formData.append('deadline', form.deadline || '');
         appendVisibilityFields(formData, form);
-        formData.append('file', form.file);
+        appendAttachmentsToFormData(formData, draft);
         if (!editingId) formData.append('class_id', classId);
         if (editingId) {
           await assignmentService.update(editingId, formData);
         } else {
           await assignmentService.create(formData);
         }
-      } else if (isLinkSource(form.sourceType)) {
-        const linkTypeMap = { document: 'document', website: 'website', image_link: 'image' };
-        const payload = {
-          ...base,
-          link_url: form.linkUrl.trim(),
-          link_type: linkTypeMap[form.sourceType],
-        };
-        if (editingId) {
-          await assignmentService.update(editingId, payload);
-        } else {
-          await assignmentService.create({ ...payload, class_id: parseInt(classId, 10) });
-        }
+      } else if (editingId) {
+        await assignmentService.update(editingId, { ...base, ...attachmentPayload });
       } else {
-        if (editingId) {
-          await assignmentService.update(editingId, base);
-        } else {
-          await assignmentService.create({ ...base, class_id: parseInt(classId, 10) });
-        }
+        await assignmentService.create({
+          ...base,
+          ...attachmentPayload,
+          class_id: parseInt(classId, 10),
+        });
       }
 
       setShowForm(false);
@@ -314,77 +239,6 @@ export default function ClassAssignmentsTab({
     }
   };
 
-  const handleFileChange = (e) => {
-    const file = e.target.files[0];
-    const isImage = form.sourceType === 'image';
-    if (file && (isImage ? !isLessonImageAllowed(file) : !isLessonFileAllowed(file))) {
-      setError(isImage
-        ? 'Chỉ chấp nhận ảnh JPG, PNG, GIF, WEBP, BMP, SVG'
-        : 'Chỉ chấp nhận tệp PDF, Word, PowerPoint hoặc video');
-      setForm({ ...form, file: null });
-      e.target.value = '';
-      return;
-    }
-    setError('');
-    setForm({ ...form, file: file || null });
-  };
-
-  const handlePasteImage = (e) => {
-    if (form.sourceType !== 'image') return;
-    const items = e.clipboardData?.items;
-    if (!items) return;
-    for (const item of items) {
-      if (item.type.startsWith('image/')) {
-        e.preventDefault();
-        const file = item.getAsFile();
-        if (file && isLessonImageAllowed(file)) {
-          setError('');
-          setForm({ ...form, file });
-        } else {
-          setError('Ảnh dán không hợp lệ');
-        }
-        return;
-      }
-    }
-  };
-
-  const getResourceUrl = (fileUrl) => getLessonResourceUrl(fileUrl, API_BASE);
-
-  const renderAttachment = (a) => {
-    if (!a.file_url) return null;
-    const badge = getLessonBadge(a);
-    const url = getResourceUrl(a.file_url);
-    const label = getLessonLinkLabel(a.file_type, a);
-    const icon = getLessonIcon(a);
-
-    return (
-      <div className="mt-2">
-        <a
-          href={url}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="btn btn-sm btn-outline-secondary"
-        >
-          <i className={`bi ${icon} me-1`} />
-          {label}
-        </a>
-        {badge && (
-          <Badge bg={badge.variant} className="ms-2">{badge.text}</Badge>
-        )}
-        {isImageLesson(a) && (
-          <div className="mt-2">
-            <img
-              src={url}
-              alt={a.title}
-              className="rounded border"
-              style={{ maxHeight: 160, maxWidth: '100%', objectFit: 'contain' }}
-            />
-          </div>
-        )}
-      </div>
-    );
-  };
-
   return (
     <>
       {isTeacher && (
@@ -406,7 +260,10 @@ export default function ClassAssignmentsTab({
                 <div className="flex-grow-1">
                   <h5 className="mb-1">{a.title}</h5>
                   {a.description && <p className="text-muted mb-2">{a.description}</p>}
-                  {renderAttachment(a)}
+                  <AttachmentList item={a} apiBase={API_BASE} defaultExpanded />
+                  {getItemAttachments(a).length > 1 && (
+                    <Badge bg="secondary" className="mb-2">{getItemAttachments(a).length} tài liệu</Badge>
+                  )}
                   <div className="d-flex flex-wrap gap-2 mt-2">
                     {isTeacher && (
                       <Badge bg={visibility.variant}>{visibility.label}</Badge>
@@ -519,139 +376,11 @@ export default function ClassAssignmentsTab({
 
             {renderVisibilityFields()}
 
-            <Form.Label className="fw-semibold">Đính kèm (tùy chọn)</Form.Label>
-            <div className="d-flex flex-wrap gap-2 mb-3">
-              <Button
-                type="button"
-                size="sm"
-                variant={form.sourceType === 'none' ? 'secondary' : 'outline-secondary'}
-                onClick={() => setForm({ ...form, sourceType: 'none', file: null, linkUrl: '' })}
-              >
-                Không đính kèm
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                variant={form.sourceType === 'file' ? 'primary' : 'outline-primary'}
-                onClick={() => setForm({ ...form, sourceType: 'file', linkUrl: '' })}
-              >
-                <i className="bi bi-file-earmark me-1" />
-                Tệp tin
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                variant={form.sourceType === 'document' ? 'primary' : 'outline-primary'}
-                onClick={() => setForm({ ...form, sourceType: 'document', file: null })}
-              >
-                <i className="bi bi-link-45deg me-1" />
-                Link tài liệu
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                variant={form.sourceType === 'website' ? 'primary' : 'outline-primary'}
-                onClick={() => setForm({ ...form, sourceType: 'website', file: null })}
-              >
-                <i className="bi bi-globe2 me-1" />
-                Link web
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                variant={form.sourceType === 'image' ? 'primary' : 'outline-primary'}
-                onClick={() => setForm({ ...form, sourceType: 'image', linkUrl: '' })}
-              >
-                <i className="bi bi-image me-1" />
-                Tải ảnh
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                variant={form.sourceType === 'image_link' ? 'primary' : 'outline-primary'}
-                onClick={() => setForm({ ...form, sourceType: 'image_link', file: null })}
-              >
-                <i className="bi bi-link me-1" />
-                Link ảnh
-              </Button>
-            </div>
-
-            {form.sourceType === 'file' && (
-              <Form.Group className="mb-3">
-                <Form.Control
-                  type="file"
-                  accept={LESSON_FILE_ACCEPT}
-                  onChange={handleFileChange}
-                />
-                {form.existingFileUrl && !form.file && !isExternalLessonUrl(form.existingFileUrl) && (
-                  <Form.Text className="text-muted">
-                    Đang dùng tệp hiện tại. Chọn tệp mới để thay thế.
-                  </Form.Text>
-                )}
-              </Form.Group>
-            )}
-
-            {form.sourceType === 'image' && (
-              <Form.Group className="mb-3" onPaste={handlePasteImage}>
-                <Form.Control
-                  type="file"
-                  accept={LESSON_IMAGE_ACCEPT}
-                  onChange={handleFileChange}
-                />
-                <Form.Text className="text-muted">Có thể dán ảnh từ clipboard (Ctrl+V)</Form.Text>
-                {imagePreviewUrl && (
-                  <div className="mt-2">
-                    <img
-                      src={imagePreviewUrl}
-                      alt="Xem trước"
-                      className="rounded border"
-                      style={{ maxHeight: 120, maxWidth: '100%', objectFit: 'contain' }}
-                    />
-                  </div>
-                )}
-              </Form.Group>
-            )}
-
-            {isLinkSource(form.sourceType) && form.sourceType !== 'image_link' && (
-              <Form.Group className="mb-3">
-                <Form.Label>
-                  {form.sourceType === 'website' ? 'Link trang web' : 'Link tài liệu'}
-                </Form.Label>
-                <Form.Control
-                  type="url"
-                  placeholder={
-                    form.sourceType === 'website'
-                      ? 'https://example.com'
-                      : 'https://docs.google.com/...'
-                  }
-                  value={form.linkUrl}
-                  onChange={(e) => setForm({ ...form, linkUrl: e.target.value })}
-                />
-              </Form.Group>
-            )}
-
-            {form.sourceType === 'image_link' && (
-              <Form.Group className="mb-3">
-                <Form.Label>Link ảnh</Form.Label>
-                <Form.Control
-                  type="url"
-                  placeholder="https://..."
-                  value={form.linkUrl}
-                  onChange={(e) => setForm({ ...form, linkUrl: e.target.value })}
-                />
-                {imagePreviewUrl && (
-                  <div className="mt-2">
-                    <img
-                      src={imagePreviewUrl}
-                      alt="Xem trước"
-                      className="rounded border"
-                      style={{ maxHeight: 120, maxWidth: '100%', objectFit: 'contain' }}
-                      onError={(e) => { e.target.style.display = 'none'; }}
-                    />
-                  </div>
-                )}
-              </Form.Group>
-            )}
+            <AttachmentManager
+              value={form.attachments}
+              onChange={(attachments) => setForm({ ...form, attachments })}
+              apiBase={API_BASE}
+            />
           </Modal.Body>
           <Modal.Footer>
             <Button variant="secondary" onClick={() => setShowForm(false)}>Hủy</Button>
@@ -690,9 +419,12 @@ export default function ClassAssignmentsTab({
                     </td>
                     <td>
                       {s.file_url ? (
-                        <a href={getResourceUrl(s.file_url)} target="_blank" rel="noopener noreferrer">
-                          {/^https?:\/\//i.test(s.file_url) ? 'Mở link' : 'Tải về'}
-                        </a>
+                        <ContentAttachmentPreview
+                          item={{ file_url: s.file_url, file_type: s.file_type }}
+                          apiBase={API_BASE}
+                          title={`Bài nộp — ${s.fullname}`}
+                          compact
+                        />
                       ) : '—'}
                     </td>
                     <td style={{ width: 90 }}>

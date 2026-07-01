@@ -10,7 +10,14 @@ import {
 } from '../../utils/contentVisibility';
 import StudentWorkSubmission from './StudentWorkSubmission';
 import ShareContentModal from './ShareContentModal';
-import { getLessonResourceUrl } from '../../utils/fileTypes';
+import ContentAttachmentPreview from '../common/ContentAttachmentPreview';
+import AttachmentManager from '../common/AttachmentManager';
+import AttachmentList from '../common/AttachmentList';
+import {
+  emptyAttachmentDraft, attachmentDraftFromItem,
+  appendAttachmentsToFormData, buildAttachmentJsonPayload,
+  shouldUseMultipartForAttachments,
+} from '../../utils/attachmentHelpers';
 import { API_BASE } from '../../config/apiBase';
 
 const emptyQuestion = {
@@ -30,6 +37,7 @@ const mapImportedQuestion = (q) => ({
 const emptyForm = {
   title: '', time_limit: 30, visible_from: '', is_hidden: false,
   questions: [{ ...emptyQuestion }],
+  attachments: emptyAttachmentDraft(),
 };
 
 export default function ClassQuizzesTab({
@@ -55,7 +63,6 @@ export default function ClassQuizzesTab({
   const [gradeDrafts, setGradeDrafts] = useState({});
   const docxInputRef = useRef(null);
 
-  const getResourceUrl = (fileUrl) => getLessonResourceUrl(fileUrl, API_BASE);
   const isOnlineSubmission = (q) => q.submission_id && Number(q.answer_count) > 0;
   const isFileSubmission = (q) => q.submission_id && q.submission_url && Number(q.answer_count) === 0;
 
@@ -97,6 +104,7 @@ export default function ClassQuizzesTab({
         visible_from: toDatetimeLocalValue(data.visible_from),
         is_hidden: data.is_hidden === 1 || data.is_hidden === true,
         questions,
+        attachments: attachmentDraftFromItem(data),
       });
       setShowForm(true);
     } catch {
@@ -327,25 +335,45 @@ export default function ClassQuizzesTab({
     setSaving(true);
     setError('');
     try {
-      const payload = {
-        class_id: parseInt(classId, 10),
-        title: form.title,
-        time_limit: parseInt(form.time_limit, 10) || 30,
-        questions: form.questions.map((q) => ({
-          ...(q.id ? { id: q.id } : {}),
-          question: q.question.trim(),
-          optionA: q.optionA.trim(),
-          optionB: q.optionB.trim(),
-          optionC: q.optionC.trim(),
-          optionD: q.optionD.trim(),
-          answer: q.answer,
-        })),
-      };
-      appendVisibilityFields(payload, form);
-      if (editingId) {
-        await quizService.update(editingId, payload);
+      const questionsPayload = form.questions.map((q) => ({
+        ...(q.id ? { id: q.id } : {}),
+        question: q.question.trim(),
+        optionA: q.optionA.trim(),
+        optionB: q.optionB.trim(),
+        optionC: q.optionC.trim(),
+        optionD: q.optionD.trim(),
+        answer: q.answer,
+      }));
+      const draft = form.attachments || emptyAttachmentDraft();
+      const attachmentPayload = buildAttachmentJsonPayload(draft);
+
+      if (shouldUseMultipartForAttachments(draft)) {
+        const formData = new FormData();
+        formData.append('title', form.title);
+        formData.append('time_limit', String(parseInt(form.time_limit, 10) || 30));
+        formData.append('questions', JSON.stringify(questionsPayload));
+        appendVisibilityFields(formData, form);
+        if (!editingId) formData.append('class_id', classId);
+        appendAttachmentsToFormData(formData, draft);
+        if (editingId) {
+          await quizService.update(editingId, formData);
+        } else {
+          await quizService.create(formData);
+        }
       } else {
-        await quizService.create(payload);
+        const payload = {
+          class_id: parseInt(classId, 10),
+          title: form.title,
+          time_limit: parseInt(form.time_limit, 10) || 30,
+          questions: questionsPayload,
+          ...attachmentPayload,
+        };
+        appendVisibilityFields(payload, form);
+        if (editingId) {
+          await quizService.update(editingId, payload);
+        } else {
+          await quizService.create(payload);
+        }
       }
       setShowForm(false);
       onUpdated();
@@ -416,6 +444,7 @@ export default function ClassQuizzesTab({
                     <Badge bg="warning" text="dark">Đã nộp — chờ chấm</Badge>
                   )}
                 </div>
+                <AttachmentList item={q} apiBase={API_BASE} defaultExpanded={false} />
               </div>
               <div className="d-flex gap-1 flex-shrink-0 flex-wrap justify-content-end">
                 {isStudent && !q.submission_id && (
@@ -543,6 +572,11 @@ export default function ClassQuizzesTab({
                     onChange={(e) => setForm({ ...form, is_hidden: e.target.checked })}
                   />
                 </Form.Group>
+                <AttachmentManager
+                  value={form.attachments}
+                  onChange={(attachments) => setForm({ ...form, attachments })}
+                  apiBase={API_BASE}
+                />
               </>
             )}
 
@@ -744,9 +778,15 @@ export default function ClassQuizzesTab({
                     <td>{isFile ? 'File/Link' : 'Trắc nghiệm'}</td>
                     <td>
                       {r.file_url ? (
-                        <a href={getResourceUrl(r.file_url)} target="_blank" rel="noopener noreferrer">
-                          {/^https?:\/\//i.test(r.file_url) ? 'Mở link' : 'Tải về'}
-                        </a>
+                        <ContentAttachmentPreview
+                          item={{
+                            file_url: r.file_url,
+                            file_type: /^https?:\/\//i.test(r.file_url) ? 'link/document' : undefined,
+                          }}
+                          apiBase={API_BASE}
+                          title={`Bài nộp — ${r.fullname}`}
+                          compact
+                        />
                       ) : '—'}
                     </td>
                     <td style={{ width: 90 }}>

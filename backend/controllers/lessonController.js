@@ -1,17 +1,15 @@
 const pool = require('../config/db');
-const { assertClassAccess, getLessonClassId } = require('../middleware/classAccess');
+const { assertClassAccess } = require('../middleware/classAccess');
 const { handleDeletion } = require('../utils/deletionPolicy');
 const { logAction } = require('../utils/auditLog');
-const { saveMulterFile } = require('../utils/fileStorage');
-
-function isValidUrl(url) {
-  try {
-    const parsed = new URL(url);
-    return ['http:', 'https:'].includes(parsed.protocol);
-  } catch {
-    return false;
-  }
-}
+const { getUploadedFiles } = require('../utils/fileStorage');
+const {
+  resolveNewAttachments,
+  syncLegacyColumns,
+  attachAttachmentsToRows,
+  insertAttachments,
+  deleteAttachmentsForResource,
+} = require('../utils/contentAttachments');
 
 const getLessons = async (req, res) => {
   try {
@@ -21,61 +19,54 @@ const getLessons = async (req, res) => {
       'SELECT * FROM lessons WHERE class_id = ? ORDER BY created_at ASC',
       [req.params.classId]
     );
-    res.json(rows);
+    res.json(await attachAttachmentsToRows(rows, 'lesson'));
   } catch (err) {
     res.status(500).json({ message: 'Lỗi hệ thống', error: err.message });
   }
 };
 
 const createLesson = async (req, res) => {
+  const conn = await pool.getConnection();
   try {
     if (!(await assertClassAccess(req.user, req.params.classId, res, { manage: true }))) return;
 
-    const { title, description, link_url, link_type } = req.body;
+    const { title, description } = req.body;
     if (!title?.trim()) {
       return res.status(400).json({ message: 'Vui lòng nhập tiêu đề' });
     }
 
-    let file_url;
-    let file_type;
-
-    if (req.file) {
-      const saved = await saveMulterFile(req);
-      file_url = saved.file_url;
-      file_type = saved.file_type;
-    } else if (link_url?.trim()) {
-      const url = link_url.trim();
-      if (!isValidUrl(url)) {
-        return res.status(400).json({
-          message: 'Link không hợp lệ. Vui lòng dùng địa chỉ bắt đầu bằng http:// hoặc https://',
-        });
-      }
-      file_url = url;
-      const linkTypeMap = {
-        website: 'link/website',
-        document: 'link/document',
-        image: 'link/image',
-      };
-      file_type = linkTypeMap[link_type] || 'link/document';
-    } else {
-      return res.status(400).json({ message: 'Vui lòng chọn tệp tin hoặc dán link' });
+    const attachments = await resolveNewAttachments(req.body, getUploadedFiles(req));
+    if (!attachments.length) {
+      return res.status(400).json({ message: 'Vui lòng chọn ít nhất một tệp tin hoặc dán link' });
     }
 
-    const [result] = await pool.query(
+    const legacy = syncLegacyColumns(attachments);
+    await conn.beginTransaction();
+
+    const [result] = await conn.query(
       'INSERT INTO lessons (class_id, title, description, file_url, file_type) VALUES (?, ?, ?, ?, ?)',
-      [req.params.classId, title.trim(), description || null, file_url, file_type]
+      [req.params.classId, title.trim(), description || null, legacy.file_url, legacy.file_type]
     );
+    const lessonId = result.insertId;
+    await insertAttachments(conn, 'lesson', lessonId, attachments);
+
+    await conn.commit();
     await logAction({
       actorId: req.user.id,
       action: 'create',
       resourceType: 'lesson',
-      resourceId: result.insertId,
+      resourceId: lessonId,
       resourceLabel: title.trim(),
       metadata: { class_id: Number(req.params.classId) },
     });
-    res.status(201).json({ message: 'Đăng tài liệu thành công', id: result.insertId });
+    res.status(201).json({ message: 'Đăng tài liệu thành công', id: lessonId });
   } catch (err) {
-    res.status(500).json({ message: 'Lỗi hệ thống', error: err.message });
+    await conn.rollback();
+    res.status(err.message?.includes('Link') ? 400 : 500).json({
+      message: err.message || 'Lỗi hệ thống',
+    });
+  } finally {
+    conn.release();
   }
 };
 
@@ -89,6 +80,8 @@ const deleteLesson = async (req, res) => {
     }
     const lesson = lessons[0];
     if (!(await assertClassAccess(req.user, lesson.class_id, res, { manage: true }))) return;
+
+    await deleteAttachmentsForResource('lesson', lesson.id);
 
     return handleDeletion(req, res, {
       resourceType: 'lesson',

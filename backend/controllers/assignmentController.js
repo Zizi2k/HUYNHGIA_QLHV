@@ -5,58 +5,19 @@ const {
 const { handleDeletion } = require('../utils/deletionPolicy');
 const { logAction } = require('../utils/auditLog');
 const { teachingStaffRoleSql } = require('../utils/teachingStaff');
-const { saveMulterFile } = require('../utils/fileStorage');
+const { getUploadedFiles } = require('../utils/fileStorage');
+const {
+  resolveNewAttachments,
+  mergeAttachmentsOnUpdate,
+  syncLegacyColumns,
+  attachAttachmentsToRows,
+  insertAttachments,
+  deleteAttachmentsForResource,
+} = require('../utils/contentAttachments');
 const { studentVisibilityClause, parseVisibilityFields, isVisibleToStudent } = require('../utils/contentVisibility');
 const { resolveStudentSubmissionInput } = require('../utils/studentSubmission');
 
-function isValidUrl(url) {
-  try {
-    const parsed = new URL(url);
-    return ['http:', 'https:'].includes(parsed.protocol);
-  } catch {
-    return false;
-  }
-}
-
-async function resolveAttachment(req, existing = {}) {
-  const { link_url, link_type, remove_attachment } = req.body;
-
-  if (remove_attachment === 'true' || remove_attachment === true) {
-    return { file_url: null, file_type: null };
-  }
-
-  if (req.file) {
-    const saved = await saveMulterFile(req);
-    return {
-      file_url: saved.file_url,
-      file_type: saved.file_type,
-    };
-  }
-
-  if (link_url?.trim()) {
-    const url = link_url.trim();
-    if (!isValidUrl(url)) {
-      throw new Error('Link không hợp lệ. Vui lòng dùng http:// hoặc https://');
-    }
-    const linkTypeMap = {
-      website: 'link/website',
-      document: 'link/document',
-      image: 'link/image',
-    };
-    return {
-      file_url: url,
-      file_type: linkTypeMap[link_type] || 'link/document',
-    };
-  }
-
-  return {
-    file_url: existing.file_url ?? null,
-    file_type: existing.file_type ?? null,
-  };
-}
-
-const getAssignments = async (req, res) => {
-  try {
+const getAssignments = async (req, res) => {  try {
     const classId = req.query.class_id;
 
     if (classId && !(await assertClassAccess(req.user, classId, res))) return;
@@ -72,7 +33,7 @@ const getAssignments = async (req, res) => {
          ORDER BY a.created_at DESC`,
         [req.user.id, classId]
       );
-      return res.json(rows);
+      return res.json(await attachAttachmentsToRows(rows, 'assignment'));
     }
 
     let query = `
@@ -95,13 +56,14 @@ const getAssignments = async (req, res) => {
     query += ' GROUP BY a.id ORDER BY a.created_at DESC';
 
     const [rows] = await pool.query(query, params);
-    res.json(rows);
+    res.json(await attachAttachmentsToRows(rows, 'assignment'));
   } catch (err) {
     res.status(500).json({ message: 'Lỗi hệ thống', error: err.message });
   }
 };
 
 const createAssignment = async (req, res) => {
+  const conn = await pool.getConnection();
   try {
     const { class_id, title, description, deadline } = req.body;
     if (!title?.trim()) {
@@ -109,19 +71,28 @@ const createAssignment = async (req, res) => {
     }
     if (!(await assertClassAccess(req.user, class_id, res, { manage: true }))) return;
 
-    const attachment = await resolveAttachment(req);
+    const attachments = await resolveNewAttachments(req.body, getUploadedFiles(req));
+    const legacy = syncLegacyColumns(attachments);
     const visibility = parseVisibilityFields(req.body);
 
-    const [result] = await pool.query(
+    await conn.beginTransaction();
+
+    const [result] = await conn.query(
       `INSERT INTO assignments (class_id, title, description, file_url, file_type, deadline, visible_from, is_hidden)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         class_id, title.trim(), description || null,
-        attachment.file_url, attachment.file_type, deadline || null,
+        legacy.file_url, legacy.file_type, deadline || null,
         visibility.visible_from ?? null,
         visibility.is_hidden ?? 0,
       ]
     );
+
+    if (attachments.length) {
+      await insertAttachments(conn, 'assignment', result.insertId, attachments);
+    }
+
+    await conn.commit();
     await logAction({
       actorId: req.user.id,
       action: 'create',
@@ -132,11 +103,15 @@ const createAssignment = async (req, res) => {
     });
     res.status(201).json({ message: 'Giao bài tập thành công', id: result.insertId });
   } catch (err) {
+    await conn.rollback();
     res.status(400).json({ message: err.message || 'Không thể tạo bài tập' });
+  } finally {
+    conn.release();
   }
 };
 
 const updateAssignment = async (req, res) => {
+  const conn = await pool.getConnection();
   try {
     const classId = await getAssignmentClassId(req.params.id);
     if (!classId) {
@@ -145,24 +120,32 @@ const updateAssignment = async (req, res) => {
     if (!(await assertClassAccess(req.user, classId, res, { manage: true }))) return;
 
     const { title, description, deadline } = req.body;
-    const [existing] = await pool.query('SELECT file_url, file_type FROM assignments WHERE id = ?', [req.params.id]);
+    const [existing] = await pool.query('SELECT id FROM assignments WHERE id = ?', [req.params.id]);
     if (existing.length === 0) {
       return res.status(404).json({ message: 'Không tìm thấy bài tập' });
     }
 
-    const attachment = await resolveAttachment(req, existing[0]);
+    await conn.beginTransaction();
+
+    const attachments = await mergeAttachmentsOnUpdate(
+      conn, 'assignment', req.params.id, req.body, getUploadedFiles(req),
+    );
+    const legacy = syncLegacyColumns(attachments);
     const visibility = parseVisibilityFields(req.body);
 
-    const [result] = await pool.query(
+    const [result] = await conn.query(
       `UPDATE assignments SET title=?, description=?, file_url=?, file_type=?, deadline=?, visible_from=?, is_hidden=? WHERE id=?`,
       [
-        title, description || null, attachment.file_url, attachment.file_type,
+        title, description || null, legacy.file_url, legacy.file_type,
         deadline || null, visibility.visible_from ?? null, visibility.is_hidden ?? 0, req.params.id,
       ]
     );
     if (result.affectedRows === 0) {
+      await conn.rollback();
       return res.status(404).json({ message: 'Không tìm thấy bài tập' });
     }
+
+    await conn.commit();
     await logAction({
       actorId: req.user.id,
       action: 'update',
@@ -173,7 +156,10 @@ const updateAssignment = async (req, res) => {
     });
     res.json({ message: 'Cập nhật bài tập thành công' });
   } catch (err) {
+    await conn.rollback();
     res.status(400).json({ message: err.message || 'Không thể cập nhật bài tập' });
+  } finally {
+    conn.release();
   }
 };
 
@@ -187,6 +173,8 @@ const deleteAssignment = async (req, res) => {
     }
     const assignment = rows[0];
     if (!(await assertClassAccess(req.user, assignment.class_id, res, { manage: true }))) return;
+
+    await deleteAttachmentsForResource('assignment', assignment.id);
 
     return handleDeletion(req, res, {
       resourceType: 'assignment',

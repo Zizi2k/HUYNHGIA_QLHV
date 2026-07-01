@@ -7,6 +7,26 @@ const { parseQuizDocx, generateQuizSampleDocx } = require('../utils/quizDocxPars
 const { parseQuizXlsx, generateQuizSampleXlsx } = require('../utils/quizXlsxParser');
 const { studentVisibilityClause, parseVisibilityFields, isVisibleToStudent } = require('../utils/contentVisibility');
 const { resolveStudentSubmissionInput } = require('../utils/studentSubmission');
+const { getUploadedFiles } = require('../utils/fileStorage');
+const {
+  resolveNewAttachments,
+  mergeAttachmentsOnUpdate,
+  attachAttachmentsToRows,
+  insertAttachments,
+  deleteAttachmentsForResource,
+} = require('../utils/contentAttachments');
+
+function parseQuizBody(body) {
+  let questions = body.questions;
+  if (typeof questions === 'string') {
+    try {
+      questions = JSON.parse(questions);
+    } catch {
+      questions = [];
+    }
+  }
+  return { ...body, questions };
+}
 
 async function getStudentQuizSubmission(conn, quizId, studentId) {
   const [rows] = await conn.query(
@@ -37,7 +57,7 @@ const getQuizzes = async (req, res) => {
          ORDER BY q.created_at DESC`,
         [req.user.id, classId]
       );
-      return res.json(rows);
+      return res.json(await attachAttachmentsToRows(rows, 'quiz'));
     }
 
     let query = `
@@ -62,7 +82,7 @@ const getQuizzes = async (req, res) => {
     query += ' GROUP BY q.id ORDER BY q.created_at DESC';
 
     const [rows] = await pool.query(query, params);
-    res.json(rows);
+    res.json(await attachAttachmentsToRows(rows, 'quiz'));
   } catch (err) {
     res.status(500).json({ message: 'Lỗi hệ thống', error: err.message });
   }
@@ -101,7 +121,11 @@ const getQuizById = async (req, res) => {
       mySubmission = subs[0] || null;
     }
 
-    res.json({ ...quizzes[0], questions, mySubmission });
+    res.json({
+      ...(await attachAttachmentsToRows([quizzes[0]], 'quiz'))[0],
+      questions,
+      mySubmission,
+    });
   } catch (err) {
     res.status(500).json({ message: 'Lỗi hệ thống', error: err.message });
   }
@@ -110,13 +134,15 @@ const getQuizById = async (req, res) => {
 const createQuiz = async (req, res) => {
   const conn = await pool.getConnection();
   try {
-    const { class_id, title, time_limit, questions } = req.body;
+    const body = parseQuizBody(req.body);
+    const { class_id, title, time_limit, questions } = body;
     if (!questions?.length) {
       return res.status(400).json({ message: 'Vui lòng thêm ít nhất 1 câu hỏi' });
     }
     if (!(await assertClassAccess(req.user, class_id, res, { manage: true }))) return;
 
-    const visibility = parseVisibilityFields(req.body);
+    const attachments = await resolveNewAttachments(body, getUploadedFiles(req));
+    const visibility = parseVisibilityFields(body);
     await conn.beginTransaction();
 
     const [result] = await conn.query(
@@ -131,6 +157,10 @@ const createQuiz = async (req, res) => {
          VALUES (?, ?, ?, ?, ?, ?, ?)`,
         [quizId, q.question, q.optionA, q.optionB, q.optionC, q.optionD, q.answer]
       );
+    }
+
+    if (attachments.length) {
+      await insertAttachments(conn, 'quiz', quizId, attachments);
     }
 
     await conn.commit();
@@ -154,18 +184,19 @@ const createQuiz = async (req, res) => {
 const updateQuiz = async (req, res) => {
   const conn = await pool.getConnection();
   try {
+    const body = parseQuizBody(req.body);
     const classId = await getQuizClassId(req.params.id);
     if (!classId) {
       return res.status(404).json({ message: 'Không tìm thấy bài kiểm tra' });
     }
     if (!(await assertClassAccess(req.user, classId, res, { manage: true }))) return;
 
-    const { title, time_limit, questions } = req.body;
+    const { title, time_limit, questions } = body;
     if (!questions?.length) {
       return res.status(400).json({ message: 'Vui lòng thêm ít nhất 1 câu hỏi' });
     }
 
-    const visibility = parseVisibilityFields(req.body);
+    const visibility = parseVisibilityFields(body);
     await conn.beginTransaction();
 
     const [updated] = await conn.query(
@@ -176,6 +207,8 @@ const updateQuiz = async (req, res) => {
       await conn.rollback();
       return res.status(404).json({ message: 'Không tìm thấy bài kiểm tra' });
     }
+
+    await mergeAttachmentsOnUpdate(conn, 'quiz', req.params.id, body, getUploadedFiles(req));
 
     const keptIds = questions.filter((q) => q.id).map((q) => q.id);
     if (keptIds.length > 0) {
@@ -231,6 +264,8 @@ const deleteQuiz = async (req, res) => {
     }
     const quiz = rows[0];
     if (!(await assertClassAccess(req.user, quiz.class_id, res, { manage: true }))) return;
+
+    await deleteAttachmentsForResource('quiz', quiz.id);
 
     return handleDeletion(req, res, {
       resourceType: 'quiz',

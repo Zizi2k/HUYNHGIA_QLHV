@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import {
   Tab, Card, Button, Form, Modal, Spinner, Badge, ListGroup, Alert,
@@ -8,16 +8,22 @@ import {
 } from '../services';
 import { useAuth } from '../context/AuthContext';
 import {
-  LESSON_FILE_ACCEPT, LESSON_IMAGE_ACCEPT,
-  isLessonFileAllowed, isLessonImageAllowed,
-  getLessonIcon, getLessonResourceUrl, getLessonLinkLabel, getLessonBadge, isImageLesson,
+  LESSON_IMAGE_ACCEPT,
+  getLessonIcon, getLessonResourceUrl, getLessonBadge, isImageLesson,
 } from '../utils/fileTypes';
+import {
+  emptyAttachmentDraft, hasAttachmentDraftContent,
+  appendAttachmentsToFormData, buildAttachmentJsonPayload,
+  shouldUseMultipartForAttachments, getItemAttachments,
+} from '../utils/attachmentHelpers';
 import ClassMembersTab from '../components/class/ClassMembersTab';
 import ClassAttendanceTab from '../components/class/ClassAttendanceTab';
 import ClassAssignmentsTab from '../components/class/ClassAssignmentsTab';
 import ClassQuizzesTab from '../components/class/ClassQuizzesTab';
 import ClassOnlineTab from '../components/class/ClassOnlineTab';
 import ShareContentModal from '../components/class/ShareContentModal';
+import AttachmentManager from '../components/common/AttachmentManager';
+import AttachmentList from '../components/common/AttachmentList';
 import { notifyDeleteResult } from '../utils/deleteHelpers';
 import { ClassMediaTile } from '../components/class/ClassCard';
 import ModuleTabs from '../components/layout/ModuleTabs';
@@ -39,7 +45,7 @@ export default function ClassDetailPage() {
   const [showLessonModal, setShowLessonModal] = useState(false);
   const [showDiscussionModal, setShowDiscussionModal] = useState(false);
   const [lessonForm, setLessonForm] = useState({
-    title: '', description: '', file: null, sourceType: 'file', linkUrl: '',
+    title: '', description: '', attachments: emptyAttachmentDraft(),
   });
   const [discussionForm, setDiscussionForm] = useState({ title: '', content: '' });
   const [uploading, setUploading] = useState(false);
@@ -145,68 +151,33 @@ export default function ClassDetailPage() {
   }, [id]);
 
   const resetLessonForm = () => {
-    setLessonForm({ title: '', description: '', file: null, sourceType: 'file', linkUrl: '' });
+    setLessonForm({ title: '', description: '', attachments: emptyAttachmentDraft() });
     setUploadError('');
   };
-
-  const isUploadSource = (type) => type === 'file' || type === 'image';
-  const isLinkSource = (type) => !isUploadSource(type);
-
-  const imagePreviewUrl = useMemo(() => {
-    if (lessonForm.sourceType === 'image' && lessonForm.file) {
-      return URL.createObjectURL(lessonForm.file);
-    }
-    if (lessonForm.sourceType === 'image_link' && lessonForm.linkUrl.trim()) {
-      return lessonForm.linkUrl.trim();
-    }
-    return null;
-  }, [lessonForm.sourceType, lessonForm.file, lessonForm.linkUrl]);
-
-  useEffect(() => () => {
-    if (imagePreviewUrl?.startsWith('blob:')) {
-      URL.revokeObjectURL(imagePreviewUrl);
-    }
-  }, [imagePreviewUrl]);
 
   const handleUploadLesson = async (e) => {
     e.preventDefault();
     setUploadError('');
 
-    if (isUploadSource(lessonForm.sourceType)) {
-      if (!lessonForm.file) {
-        setUploadError(lessonForm.sourceType === 'image'
-          ? 'Vui lòng chọn hoặc dán ảnh để tải lên'
-          : 'Vui lòng chọn tệp tin để tải lên');
-        return;
-      }
-      if (lessonForm.sourceType === 'image' && !isLessonImageAllowed(lessonForm.file)) {
-        setUploadError('Chỉ chấp nhận ảnh JPG, PNG, GIF, WEBP, BMP, SVG');
-        return;
-      }
-      if (lessonForm.sourceType === 'file' && !isLessonFileAllowed(lessonForm.file)) {
-        setUploadError('Chỉ chấp nhận tệp PDF, Word, PowerPoint hoặc video');
-        return;
-      }
-    } else if (!lessonForm.linkUrl.trim()) {
-      setUploadError('Vui lòng dán link');
+    if (!hasAttachmentDraftContent(lessonForm.attachments)) {
+      setUploadError('Vui lòng chọn ít nhất một tệp tin hoặc thêm link');
       return;
     }
 
     setUploading(true);
     try {
-      if (isUploadSource(lessonForm.sourceType)) {
+      const draft = lessonForm.attachments;
+      if (shouldUseMultipartForAttachments(draft)) {
         const formData = new FormData();
         formData.append('title', lessonForm.title);
         formData.append('description', lessonForm.description || '');
-        formData.append('file', lessonForm.file);
+        appendAttachmentsToFormData(formData, draft);
         await lessonService.create(id, formData);
       } else {
-        const linkTypeMap = { document: 'document', website: 'website', image_link: 'image' };
         await lessonService.create(id, {
           title: lessonForm.title,
           description: lessonForm.description || '',
-          link_url: lessonForm.linkUrl.trim(),
-          link_type: linkTypeMap[lessonForm.sourceType],
+          ...buildAttachmentJsonPayload(draft),
         });
       }
       setShowLessonModal(false);
@@ -219,23 +190,7 @@ export default function ClassDetailPage() {
     }
   };
 
-  const handleLessonFileChange = (e) => {
-    const file = e.target.files[0];
-    const isImage = lessonForm.sourceType === 'image';
-    if (file && (isImage ? !isLessonImageAllowed(file) : !isLessonFileAllowed(file))) {
-      setUploadError(isImage
-        ? 'Chỉ chấp nhận ảnh JPG, PNG, GIF, WEBP, BMP, SVG'
-        : 'Chỉ chấp nhận tệp PDF, Word, PowerPoint hoặc video');
-      setLessonForm({ ...lessonForm, file: null });
-      e.target.value = '';
-      return;
-    }
-    setUploadError('');
-    setLessonForm({ ...lessonForm, file: file || null });
-  };
-
   const handlePasteImage = (e) => {
-    if (lessonForm.sourceType !== 'image') return;
     const items = e.clipboardData?.items;
     if (!items) return;
 
@@ -243,11 +198,15 @@ export default function ClassDetailPage() {
       if (item.type.startsWith('image/')) {
         e.preventDefault();
         const file = item.getAsFile();
-        if (file && isLessonImageAllowed(file)) {
+        if (file) {
           setUploadError('');
-          setLessonForm({ ...lessonForm, file });
-        } else {
-          setUploadError('Ảnh dán không hợp lệ');
+          setLessonForm((prev) => ({
+            ...prev,
+            attachments: {
+              ...prev.attachments,
+              newFiles: [...prev.attachments.newFiles, file],
+            },
+          }));
         }
         return;
       }
@@ -382,12 +341,15 @@ export default function ClassDetailPage() {
             ) : (
               <ListGroup>
                 {lessons.map((lesson) => {
-                  const badge = getLessonBadge(lesson);
-                  const resourceUrl = getLessonFileUrl(lesson.file_url);
+                  const attachments = getItemAttachments(lesson);
+                  const primary = attachments[0];
+                  const badge = primary ? getLessonBadge(primary) : getLessonBadge(lesson);
+                  const resourceUrl = primary ? getLessonFileUrl(primary.file_url) : '';
+                  const showThumb = primary && isImageLesson(primary);
                   return (
                   <ListGroup.Item key={lesson.id} className="d-flex justify-content-between align-items-center gap-3">
                     <div className="d-flex align-items-center gap-3">
-                      {isImageLesson(lesson) && lesson.file_url ? (
+                      {showThumb ? (
                         <img
                           src={resourceUrl}
                           alt={lesson.title}
@@ -396,52 +358,28 @@ export default function ClassDetailPage() {
                           onError={(e) => { e.target.style.display = 'none'; }}
                         />
                       ) : (
-                        <i className={`bi ${getLessonIcon(lesson)} fs-3 text-primary`} />
+                        <i className={`bi ${getLessonIcon(primary || lesson)} fs-3 text-primary`} />
                       )}
                       <div>
-                        {lesson.file_url ? (
-                          <a
-                            href={resourceUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="fw-semibold text-decoration-none"
-                          >
-                            {lesson.title}
-                          </a>
-                        ) : (
-                          <strong>{lesson.title}</strong>
-                        )}
+                        <strong>{lesson.title}</strong>
                         {lesson.description && (
                           <div className="text-muted small">{lesson.description}</div>
                         )}
-                        {badge && (
-                          <Badge bg={badge.variant} className="mt-1">{badge.text}</Badge>
+                        {attachments.length > 1 && (
+                          <Badge bg="secondary" className="mt-1">{attachments.length} tài liệu</Badge>
                         )}
-                        {!lesson.file_url && (
+                        {badge && (
+                          <Badge bg={badge.variant} className="mt-1 ms-1">{badge.text}</Badge>
+                        )}
+                        {!attachments.length && (
                           <Badge bg="warning" text="dark" className="mt-1">
                             Chưa có tệp — vui lòng tải lên lại
                           </Badge>
                         )}
+                        <AttachmentList item={lesson} apiBase={API_BASE} defaultExpanded={false} />
                       </div>
                     </div>
                     <div className="d-flex gap-2 flex-shrink-0">
-                      {lesson.file_url && (
-                        <Button
-                          as="a"
-                          href={resourceUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          variant="primary"
-                          size="sm"
-                        >
-                          <i className={`bi ${
-                            lesson.file_type?.startsWith('link/') || isImageLesson(lesson)
-                              ? 'bi-box-arrow-up-right'
-                              : 'bi-download'
-                          } me-1`} />
-                          {getLessonLinkLabel(lesson.file_type, lesson)}
-                        </Button>
-                      )}
                       {canManageClass && (
                         <>
                           <Button
@@ -570,152 +508,15 @@ export default function ClassDetailPage() {
               />
             </Form.Group>
 
-            <Form.Label className="mb-2">Nguồn tài liệu</Form.Label>
-            <div className="d-flex flex-wrap gap-2 mb-3">
-              <Button
-                type="button"
-                variant={lessonForm.sourceType === 'file' ? 'primary' : 'outline-primary'}
-                size="sm"
-                onClick={() => setLessonForm({ ...lessonForm, sourceType: 'file', linkUrl: '' })}
-              >
-                <i className="bi bi-upload me-1" />
-                Tải file lên
-              </Button>
-              <Button
-                type="button"
-                variant={lessonForm.sourceType === 'document' ? 'primary' : 'outline-primary'}
-                size="sm"
-                onClick={() => setLessonForm({ ...lessonForm, sourceType: 'document', file: null })}
-              >
-                <i className="bi bi-link-45deg me-1" />
-                Link tài liệu
-              </Button>
-              <Button
-                type="button"
-                variant={lessonForm.sourceType === 'website' ? 'primary' : 'outline-primary'}
-                size="sm"
-                onClick={() => setLessonForm({ ...lessonForm, sourceType: 'website', file: null })}
-              >
-                <i className="bi bi-globe2 me-1" />
-                Link trang web
-              </Button>
-              <Button
-                type="button"
-                variant={lessonForm.sourceType === 'image' ? 'primary' : 'outline-primary'}
-                size="sm"
-                onClick={() => setLessonForm({ ...lessonForm, sourceType: 'image', linkUrl: '' })}
-              >
-                <i className="bi bi-image me-1" />
-                Tải ảnh lên
-              </Button>
-              <Button
-                type="button"
-                variant={lessonForm.sourceType === 'image_link' ? 'primary' : 'outline-primary'}
-                size="sm"
-                onClick={() => setLessonForm({ ...lessonForm, sourceType: 'image_link', file: null })}
-              >
-                <i className="bi bi-link me-1" />
-                Link ảnh
-              </Button>
-            </div>
-
-            {lessonForm.sourceType === 'file' && (
-              <Form.Group>
-                <Form.Label>Tệp tin (PDF, Word, video, PowerPoint)</Form.Label>
-                <Form.Control
-                  type="file"
-                  accept={LESSON_FILE_ACCEPT}
-                  onChange={handleLessonFileChange}
-                />
-                <Form.Text className="text-muted">
-                  Hỗ trợ: PDF, DOC, DOCX, PPT, PPTX, MP4, AVI, MOV, WEBM (tối đa 50MB)
-                </Form.Text>
-              </Form.Group>
-            )}
-
-            {lessonForm.sourceType === 'image' && (
-              <Form.Group>
-                <Form.Label>Ảnh minh họa</Form.Label>
-                <div
-                  className="border border-2 border-dashed rounded-3 p-4 text-center bg-light"
-                  style={{ cursor: 'pointer' }}
-                  onClick={() => document.getElementById('lesson-image-input')?.click()}
-                >
-                  {imagePreviewUrl ? (
-                    <img
-                      src={imagePreviewUrl}
-                      alt="Xem trước"
-                      className="rounded mb-2"
-                      style={{ maxHeight: 200, maxWidth: '100%', objectFit: 'contain' }}
-                    />
-                  ) : (
-                    <i className="bi bi-image display-6 text-muted d-block mb-2" />
-                  )}
-                  <div className="text-muted small">
-                    Bấm để chọn ảnh hoặc <strong>Ctrl+V</strong> dán ảnh từ clipboard
-                  </div>
-                  <div className="text-muted small mt-1">
-                    JPG, PNG, GIF, WEBP, BMP, SVG (tối đa 50MB)
-                  </div>
-                </div>
-                <Form.Control
-                  id="lesson-image-input"
-                  type="file"
-                  accept={LESSON_IMAGE_ACCEPT}
-                  onChange={handleLessonFileChange}
-                  className="d-none"
-                />
-              </Form.Group>
-            )}
-
-            {isLinkSource(lessonForm.sourceType) && lessonForm.sourceType !== 'image_link' && (
-              <Form.Group>
-                <Form.Label>
-                  {lessonForm.sourceType === 'website' ? 'Link trang web' : 'Link tài liệu'}
-                </Form.Label>
-                <Form.Control
-                  type="url"
-                  value={lessonForm.linkUrl}
-                  onChange={(e) => setLessonForm({ ...lessonForm, linkUrl: e.target.value })}
-                  placeholder={
-                    lessonForm.sourceType === 'website'
-                      ? 'https://example.com/bai-hoc'
-                      : 'https://drive.google.com/... hoặc https://example.com/file.pdf'
-                  }
-                />
-                <Form.Text className="text-muted">
-                  {lessonForm.sourceType === 'website'
-                    ? 'Dán link trang web, bài đọc, video YouTube, v.v.'
-                    : 'Dán link Google Drive, OneDrive, PDF trực tuyến hoặc tài liệu trên web'}
-                </Form.Text>
-              </Form.Group>
-            )}
-
-            {lessonForm.sourceType === 'image_link' && (
-              <Form.Group>
-                <Form.Label>Link ảnh</Form.Label>
-                <Form.Control
-                  type="url"
-                  value={lessonForm.linkUrl}
-                  onChange={(e) => setLessonForm({ ...lessonForm, linkUrl: e.target.value })}
-                  placeholder="https://example.com/hinh-anh.jpg"
-                />
-                <Form.Text className="text-muted">
-                  Dán link ảnh trực tiếp (JPG, PNG, GIF, WEBP...)
-                </Form.Text>
-                {imagePreviewUrl && (
-                  <div className="mt-3 text-center">
-                    <img
-                      src={imagePreviewUrl}
-                      alt="Xem trước"
-                      className="rounded border"
-                      style={{ maxHeight: 200, maxWidth: '100%', objectFit: 'contain' }}
-                      onError={(e) => { e.target.style.display = 'none'; }}
-                    />
-                  </div>
-                )}
-              </Form.Group>
-            )}
+            <Form.Text className="text-muted d-block mb-2">
+              Có thể đính kèm nhiều tệp và link trong cùng một bài giảng. Dán ảnh bằng <strong>Ctrl+V</strong>.
+            </Form.Text>
+            <AttachmentManager
+              value={lessonForm.attachments}
+              onChange={(attachments) => setLessonForm({ ...lessonForm, attachments })}
+              apiBase={API_BASE}
+              required
+            />
 
           </Modal.Body>
           <Modal.Footer>

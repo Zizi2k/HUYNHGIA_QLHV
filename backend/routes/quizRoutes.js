@@ -62,8 +62,27 @@ router.post('/submit-attachment', authorize('student'), (req, res, next) => {
 router.put('/submissions/:id/grade', authorize('admin', 'teacher'), gradeQuizSubmission);
 router.get('/:id/submissions', authorize('admin', 'teacher'), getQuizSubmissions);
 router.get('/:id', getQuizById);
-router.post('/', authorize('admin', 'teacher'), createQuiz);
-router.put('/:id', authorize('admin', 'teacher'), updateQuiz);
+
+const withOptionalQuizUpload = (handler) => (req, res, next) => {
+  const contentType = req.headers['content-type'] || '';
+  if (contentType.includes('multipart/form-data')) {
+    uploadMemory.fields([
+      { name: 'files', maxCount: 30 },
+      { name: 'file', maxCount: 1 },
+    ])(req, res, (err) => {
+      if (err) return next(err);
+      if (req.files?.file?.length && !req.files?.files?.length) {
+        req.files = { files: req.files.file };
+      }
+      handler(req, res);
+    });
+  } else {
+    handler(req, res);
+  }
+};
+
+router.post('/', authorize('admin', 'teacher'), withOptionalQuizUpload(createQuiz));
+router.put('/:id', authorize('admin', 'teacher'), withOptionalQuizUpload(updateQuiz));
 router.delete('/:id', authorize('admin', 'teacher'), deleteQuiz);
 
 module.exports = router;

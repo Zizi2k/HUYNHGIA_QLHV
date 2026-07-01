@@ -100,3 +100,61 @@ export function getLessonBadge(lesson) {
   if (lesson.file_type === 'link/image' || isImageLesson(lesson)) return { text: 'Ảnh', variant: 'secondary' };
   return null;
 }
+
+const VIDEO_EXT_RE = /\.(mp4|webm|ogg|mov|avi|wmv|mkv)(\?|$)/i;
+const OFFICE_EXT_RE = /\.(doc|docx|xls|xlsx|ppt|pptx|pps|ppsx)(\?|$)/i;
+
+export function resolveAbsoluteResourceUrl(fileUrl, apiBase) {
+  const relative = getLessonResourceUrl(fileUrl, apiBase);
+  if (isExternalLessonUrl(relative)) return relative;
+  if (typeof window !== 'undefined') {
+    const base = (apiBase || '').replace(/\/$/, '');
+    if (relative.startsWith('http')) return relative;
+    return `${window.location.origin}${base}${relative.startsWith('/') ? relative : `/${relative}`}`;
+  }
+  return relative;
+}
+
+export function getGoogleGviewUrl(absoluteUrl) {
+  return `https://docs.google.com/gview?url=${encodeURIComponent(absoluteUrl)}&embedded=true`;
+}
+
+function inferPreviewKindFromUrlAndMime(fileUrl, mime) {
+  const url = (fileUrl || '').toLowerCase();
+  const type = (mime || '').toLowerCase();
+
+  if (type.startsWith('image/')) return 'image';
+  if (type === 'application/pdf' || url.includes('.pdf')) return 'pdf';
+  if (type.startsWith('video/') || VIDEO_EXT_RE.test(url)) return 'video';
+  if (
+    OFFICE_EXT_RE.test(url)
+    || type.includes('word')
+    || type.includes('spreadsheet')
+    || type.includes('presentation')
+    || type.includes('excel')
+    || type.includes('msword')
+    || type.includes('officedocument')
+  ) {
+    return 'office';
+  }
+  return 'none';
+}
+
+export function getContentPreviewKind(item) {
+  if (!item?.file_url) return 'none';
+
+  if (item.file_type === 'link/website') return 'external';
+  if (item.file_type === 'link/document') return 'external';
+  if (item.file_type === 'link/image' || isImageLesson(item)) return 'image';
+
+  return inferPreviewKindFromUrlAndMime(item.file_url, item.file_type);
+}
+
+export function getPreviewKindFromFile(file) {
+  if (!file) return 'none';
+  return inferPreviewKindFromUrlAndMime(file.name, file.type);
+}
+
+export function canPreviewContent(item) {
+  return getContentPreviewKind(item) !== 'none';
+}

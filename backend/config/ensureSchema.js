@@ -289,6 +289,27 @@ async function ensureSchema() {
     }
   }
 
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS content_attachments (
+      id INT PRIMARY KEY AUTO_INCREMENT,
+      resource_type ENUM('lesson', 'assignment', 'quiz') NOT NULL,
+      resource_id INT NOT NULL,
+      sort_order INT NOT NULL DEFAULT 0,
+      file_url TEXT NOT NULL,
+      file_type VARCHAR(128) NULL,
+      original_name VARCHAR(255) NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      INDEX idx_content_attachments_resource (resource_type, resource_id)
+    )
+  `);
+
+  try {
+    const { migrateLegacyAttachments } = require('../utils/contentAttachments');
+    await migrateLegacyAttachments();
+  } catch (migrateErr) {
+    console.warn('content attachments migration:', migrateErr.message);
+  }
+
   try {
     await pool.query('ALTER TABLE classes ADD COLUMN avatar_url TEXT NULL');
   } catch (err) {

@@ -63,4 +63,28 @@ async function saveMulterFile(req) {
   };
 }
 
-module.exports = { persistUploadedFile, saveMulterFile };
+function getUploadedFiles(req) {
+  if (req.files?.files?.length) return req.files.files;
+  if (req.files?.length) return req.files;
+  if (req.file) return [req.file];
+  return [];
+}
+
+async function saveMulterFiles(req) {
+  const files = getUploadedFiles(req);
+  const saved = [];
+  for (const file of files) {
+    if (file.buffer) {
+      saved.push(await persistUploadedFile(file));
+    } else if (file.filename) {
+      saved.push({
+        file_url: `/uploads/${file.filename}`,
+        file_type: resolveStoredFileType(file),
+        original_name: file.originalname || null,
+      });
+    }
+  }
+  return saved;
+}
+
+module.exports = { persistUploadedFile, saveMulterFile, saveMulterFiles, getUploadedFiles };

@@ -3116,6 +3116,72 @@ a {
   font-size: 0.7rem;
 }
 
+
+/* Content attachment preview */
+.content-attachment-preview {
+  width: 100%;
+}
+
+.content-preview-panel {
+  border: 1px solid #e2e8f0;
+  border-radius: 0.5rem;
+  background: #f8fafc;
+  overflow: hidden;
+  padding: 0.5rem;
+}
+
+.content-preview-image {
+  display: block;
+  max-width: 100%;
+  max-height: 420px;
+  margin: 0 auto;
+  object-fit: contain;
+  border-radius: 0.375rem;
+}
+
+.content-preview-frame {
+  display: block;
+  width: 100%;
+  border: none;
+  border-radius: 0.375rem;
+  background: #fff;
+}
+
+.content-preview-video {
+  display: block;
+  width: 100%;
+  max-height: 420px;
+  border-radius: 0.375rem;
+  background: #000;
+}
+
+.content-preview-modal .modal-body {
+  min-height: 200px;
+}
+
+.attachment-manager-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.attachment-manager-item {
+  border: 1px solid #e2e8f0;
+  border-radius: 0.5rem;
+  padding: 0.75rem;
+  background: #fff;
+}
+
+.attachment-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.attachment-list-item + .attachment-list-item {
+  margin-top: 0.25rem;
+}
+
 @media (max-width: 768px) {
   .honor-podium-main {
     grid-template-columns: 1fr;

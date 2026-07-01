@@ -1,7 +1,7 @@
-const crypto = require('crypto');
 const pool = require('../config/db');
 const { canManageClass } = require('../middleware/classAccess');
 const { logAction } = require('../utils/auditLog');
+const { duplicateAttachmentsForResource } = require('./contentAttachments');
 
 async function validateShareTargets(user, sourceClassId, targetClassIds) {
   if (!(await canManageClass(user, sourceClassId))) {
@@ -36,36 +36,6 @@ async function validateShareTargets(user, sourceClassId, targetClassIds) {
   return { ok: true, targets };
 }
 
-async function duplicateFileUrl(fileUrl, fileType) {
-  if (!fileUrl) {
-    return { file_url: null, file_type: null };
-  }
-
-  const match = fileUrl.match(/\/api\/files\/download\/([a-f0-9]+)$/i);
-  if (!match) {
-    return { file_url: fileUrl, file_type: fileType };
-  }
-
-  const [rows] = await pool.query(
-    'SELECT original_name, mime_type, data FROM file_assets WHERE token = ?',
-    [match[1]],
-  );
-  if (!rows.length) {
-    return { file_url: fileUrl, file_type: fileType };
-  }
-
-  const newToken = crypto.randomBytes(24).toString('hex');
-  await pool.query(
-    'INSERT INTO file_assets (token, original_name, mime_type, data) VALUES (?, ?, ?, ?)',
-    [newToken, rows[0].original_name, rows[0].mime_type, rows[0].data],
-  );
-
-  return {
-    file_url: `/api/files/download/${newToken}`,
-    file_type: rows[0].mime_type || fileType,
-  };
-}
-
 async function shareLesson(user, lessonId, targetClassIds) {
   const [lessons] = await pool.query('SELECT * FROM lessons WHERE id = ?', [lessonId]);
   if (!lessons.length) {
@@ -76,16 +46,17 @@ async function shareLesson(user, lessonId, targetClassIds) {
   const validation = await validateShareTargets(user, lesson.class_id, targetClassIds);
   if (!validation.ok) return validation;
 
-  const attachment = await duplicateFileUrl(lesson.file_url, lesson.file_type);
   const created = [];
 
   for (const classId of validation.targets) {
     const [result] = await pool.query(
-      'INSERT INTO lessons (class_id, title, description, file_url, file_type) VALUES (?, ?, ?, ?, ?)',
-      [classId, lesson.title, lesson.description, attachment.file_url, attachment.file_type],
+      'INSERT INTO lessons (class_id, title, description, file_url, file_type) VALUES (?, ?, ?, NULL, NULL)',
+      [classId, lesson.title, lesson.description],
     );
+    const newId = result.insertId;
+    await duplicateAttachmentsForResource('lesson', lesson.id, 'lesson', newId);
     created.push({
-      id: result.insertId,
+      id: newId,
       class_id: classId,
       title: lesson.title,
       type: 'lesson',
@@ -94,7 +65,7 @@ async function shareLesson(user, lessonId, targetClassIds) {
       actorId: user.id,
       action: 'create',
       resourceType: 'lesson',
-      resourceId: result.insertId,
+      resourceId: newId,
       resourceLabel: lesson.title,
       metadata: {
         class_id: classId,
@@ -120,27 +91,26 @@ async function shareAssignment(user, assignmentId, targetClassIds) {
   const validation = await validateShareTargets(user, assignment.class_id, targetClassIds);
   if (!validation.ok) return validation;
 
-  const attachment = await duplicateFileUrl(assignment.file_url, assignment.file_type);
   const created = [];
 
   for (const classId of validation.targets) {
     const [result] = await pool.query(
       `INSERT INTO assignments
         (class_id, title, description, file_url, file_type, deadline, visible_from, is_hidden)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, NULL, NULL, ?, ?, ?)`,
       [
         classId,
         assignment.title,
         assignment.description,
-        attachment.file_url,
-        attachment.file_type,
         assignment.deadline,
         assignment.visible_from,
         assignment.is_hidden,
       ],
     );
+    const newId = result.insertId;
+    await duplicateAttachmentsForResource('assignment', assignment.id, 'assignment', newId);
     created.push({
-      id: result.insertId,
+      id: newId,
       class_id: classId,
       title: assignment.title,
       type: 'assignment',
@@ -149,7 +119,7 @@ async function shareAssignment(user, assignmentId, targetClassIds) {
       actorId: user.id,
       action: 'create',
       resourceType: 'assignment',
-      resourceId: result.insertId,
+      resourceId: newId,
       resourceLabel: assignment.title,
       metadata: {
         class_id: classId,
@@ -211,6 +181,7 @@ async function shareQuiz(user, quizId, targetClassIds) {
     await conn.commit();
 
     for (const item of created) {
+      await duplicateAttachmentsForResource('quiz', quizId, 'quiz', item.id);
       await logAction({
         actorId: user.id,
         action: 'create',

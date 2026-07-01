@@ -5,13 +5,14 @@ const { authenticate, authorize } = require('../middleware/auth');
 const { uploadMemory } = require('../middleware/upload');
 
 const router = express.Router();
+const MAX_FILES = 30;
 
 router.use(authenticate);
 router.get('/:classId', getLessons);
 router.post('/:classId', authorize('admin', 'teacher'), (req, res, next) => {
   const contentType = req.headers['content-type'] || '';
   if (contentType.includes('multipart/form-data')) {
-    uploadMemory.single('file')(req, res, (err) => {
+    uploadMemory.array('files', MAX_FILES)(req, res, (err) => {
       if (err) return next(err);
       createLesson(req, res);
     });

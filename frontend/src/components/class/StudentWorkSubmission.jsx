@@ -3,20 +3,22 @@ import { Form, Button, InputGroup, Spinner } from 'react-bootstrap';
 import {
   STUDENT_SUBMIT_FILE_ACCEPT,
   isStudentSubmitFileAllowed,
-  getLessonResourceUrl,
 } from '../../utils/fileTypes';
-
-const API_BASE = import.meta.env.VITE_API_URL || '';
+import ContentAttachmentPreview from '../common/ContentAttachmentPreview';
+import LocalFilePreview from '../common/LocalFilePreview';
+import { API_BASE } from '../../config/apiBase';
 
 export default function StudentWorkSubmission({
   itemId,
   submitting,
   submissionUrl,
+  submissionFileType,
   submittedAt,
   onSubmitFile,
   onSubmitLink,
 }) {
   const [linkUrl, setLinkUrl] = useState('');
+  const [pendingFile, setPendingFile] = useState(null);
 
   const handleFileChange = (e) => {
     const file = e.target.files?.[0];
@@ -26,6 +28,7 @@ export default function StudentWorkSubmission({
       alert('Chỉ chấp nhận file .docx hoặc .xlsx');
       return;
     }
+    setPendingFile(file);
     onSubmitFile(itemId, file);
   };
 
@@ -40,8 +43,13 @@ export default function StudentWorkSubmission({
     setLinkUrl('');
   };
 
-  const viewUrl = submissionUrl ? getLessonResourceUrl(submissionUrl, API_BASE) : '';
-  const isLink = /^https?:\/\//i.test(submissionUrl || '');
+  const submittedItem = submissionUrl
+    ? {
+        file_url: submissionUrl,
+        file_type: submissionFileType
+          || (/^https?:\/\//i.test(submissionUrl) ? 'link/document' : undefined),
+      }
+    : null;
 
   return (
     <div className="mt-3 pt-3 border-top">
@@ -61,6 +69,14 @@ export default function StudentWorkSubmission({
             {submitting ? <Spinner size="sm" /> : 'Nộp link'}
           </Button>
         </InputGroup>
+        {linkUrl.trim() && !submitting && (
+          <ContentAttachmentPreview
+            item={{ file_url: linkUrl.trim(), file_type: 'link/document' }}
+            apiBase={API_BASE}
+            title="Xem trước link bài nộp"
+            defaultExpanded={false}
+          />
+        )}
       </Form>
       <div className="d-flex align-items-center gap-2 flex-wrap">
         <Form.Control
@@ -74,15 +90,20 @@ export default function StudentWorkSubmission({
         />
         <span className="text-muted small">hoặc chọn file .docx / .xlsx</span>
       </div>
-      {submissionUrl && (
-        <div className="mt-2 small">
-          <a href={viewUrl} target="_blank" rel="noopener noreferrer">
-            <i className={`bi bi-${isLink ? 'link-45deg' : 'file-earmark'} me-1`} />
-            {isLink ? 'Mở link bài đã nộp' : 'Xem file bài đã nộp'}
-          </a>
+      {pendingFile && submitting && (
+        <LocalFilePreview file={pendingFile} height={200} />
+      )}
+      {submittedItem && (
+        <div className="mt-2">
+          <ContentAttachmentPreview
+            item={submittedItem}
+            apiBase={API_BASE}
+            title="Bài đã nộp"
+            defaultExpanded={false}
+          />
           {submittedAt && (
-            <span className="text-muted ms-2">
-              ({new Date(submittedAt).toLocaleString('vi-VN')})
+            <span className="text-muted small d-block mt-1">
+              Nộp lúc {new Date(submittedAt).toLocaleString('vi-VN')}
             </span>
           )}
         </div>
