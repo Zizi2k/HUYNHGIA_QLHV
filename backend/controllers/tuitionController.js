@@ -3,11 +3,44 @@ const { enrichProfile, parseAmount, SUBJECTS, resolveTuitionAmounts } = require(
 const { PROFILE_SELECT } = require('../utils/tuitionProfileDb');
 const { addMonthsToDate } = require('../utils/dateHelpers');
 const { logAction } = require('../utils/auditLog');
+const { buildReceiptData } = require('../utils/tuitionReceiptHelpers');
+const { buildTuitionReceiptPdf } = require('../utils/tuitionReceiptPdf');
+
 const {
   appendStudentCodeScopeSql,
   assertStudentCodeInScope,
   resolveCodePrefixFilter,
 } = require('../utils/adminScope');
+
+async function fetchPaymentWithProfile(paymentId) {
+  const [rows] = await pool.query(
+    `SELECT tp.*, p.student_code, p.fullname, p.class_label, p.current_class, p.user_id,
+      u.fullname AS recorder_name
+     FROM tuition_payments tp
+     JOIN tuition_profiles p ON tp.profile_id = p.id
+     LEFT JOIN users u ON tp.recorded_by = u.id
+     WHERE tp.id = ?`,
+    [paymentId],
+  );
+  return rows[0] || null;
+}
+
+function canAccessPayment(user, paymentRow) {
+  if (user.role === 'admin') {
+    try {
+      assertStudentCodeInScope(user, paymentRow.student_code);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+  if (user.role !== 'student') return false;
+  if (paymentRow.user_id && paymentRow.user_id === user.id) return true;
+  const userCode = String(user.code || '').trim().toUpperCase();
+  const studentCode = String(paymentRow.student_code || '').trim().toUpperCase();
+  if (!userCode || !studentCode) return false;
+  return userCode === studentCode || studentCode.startsWith(userCode);
+}
 
 async function linkUserAndClass(conn, studentCode, classLabel) {
   let userId = null;
@@ -96,12 +129,15 @@ async function buildMonthlyReportStudents(subject, month, user, classIds = []) {
     const monthPaid = payments
       .filter((p) => p.period_month === month)
       .reduce((acc, p) => {
-        acc[p.payment_type] += Number(p.amount);
-        acc.total += Number(p.amount);
-        if (p.method === 'cash') acc.cash += Number(p.amount);
-        else acc.transfer += Number(p.amount);
+        const amt = Number(p.amount);
+        acc.total += amt;
+        if (p.payment_type === 'tuition') acc.tuition += amt;
+        else if (p.payment_type === 'book') acc.book += amt;
+        else if (p.payment_type === 'both') acc.both += amt;
+        if (p.method === 'cash') acc.cash += amt;
+        else acc.transfer += amt;
         return acc;
-      }, { tuition: 0, book: 0, total: 0, cash: 0, transfer: 0 });
+      }, { tuition: 0, book: 0, both: 0, total: 0, cash: 0, transfer: 0 });
 
     return {
       id: row.id,
@@ -172,8 +208,17 @@ const getProfiles = async (req, res) => {
 
     let result = rows.map((row) => {
       const enriched = enrichProfile(row, paymentMap[row.id] || []);
+      const payments = paymentMap[row.id] || [];
       const { _payments, monthPaid, ...rest } = enriched;
-      return rest;
+      return {
+        ...rest,
+        payments: payments.map((p) => ({
+          id: p.id,
+          payment_date: p.payment_date,
+          amount: p.amount,
+          payment_type: p.payment_type,
+        })),
+      };
     });
 
     if (status) {
@@ -383,13 +428,20 @@ const deleteProfile = async (req, res) => {
 };
 
 const createPayment = async (req, res) => {
+  const conn = await pool.getConnection();
   try {
     const { profile_id, payment_type, amount, method, payment_date, period_month, note } = req.body;
     if (!profile_id || !payment_type || !amount || !period_month) {
       return res.status(400).json({ message: 'Thiếu thông tin thanh toán' });
     }
+    if (!['tuition', 'book', 'both'].includes(payment_type)) {
+      return res.status(400).json({ message: 'Loại thu không hợp lệ' });
+    }
 
-    const [profiles] = await pool.query('SELECT id, student_code FROM tuition_profiles WHERE id = ?', [profile_id]);
+    const [profiles] = await conn.query(
+      'SELECT id, student_code, user_id, class_label FROM tuition_profiles WHERE id = ?',
+      [profile_id],
+    );
     if (profiles.length === 0) {
       return res.status(404).json({ message: 'Không tìm thấy hồ sơ học phí' });
     }
@@ -399,7 +451,12 @@ const createPayment = async (req, res) => {
       return res.status(scopeErr.status || 403).json({ message: scopeErr.message });
     }
 
-    const [result] = await pool.query(
+    const { userId } = await linkUserAndClass(conn, profiles[0].student_code, profiles[0].class_label);
+    if (userId && !profiles[0].user_id) {
+      await conn.query('UPDATE tuition_profiles SET user_id = ? WHERE id = ?', [userId, profile_id]);
+    }
+
+    const [result] = await conn.query(
       `INSERT INTO tuition_payments
        (profile_id, payment_type, amount, method, payment_date, period_month, note, recorded_by)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -407,12 +464,18 @@ const createPayment = async (req, res) => {
         profile_id, payment_type, parseAmount(amount), method || 'cash',
         payment_date || new Date().toISOString().slice(0, 10),
         period_month, note || null, req.user.id,
-      ]
+      ],
     );
 
-    res.status(201).json({ id: result.insertId, message: 'Ghi nhận thanh toán thành công' });
+    res.status(201).json({
+      id: result.insertId,
+      message: 'Ghi nhận thanh toán thành công',
+      receipt_url: `/api/tuition/payments/${result.insertId}/receipt`,
+    });
   } catch (err) {
     res.status(500).json({ message: 'Lỗi hệ thống', error: err.message });
+  } finally {
+    conn.release();
   }
 };
 
@@ -565,8 +628,68 @@ const exportMonthlyPdf = async (req, res) => {
   }
 };
 
+const getPaymentReceiptPdf = async (req, res) => {
+  try {
+    const row = await fetchPaymentWithProfile(req.params.id);
+    if (!row) {
+      return res.status(404).json({ message: 'Không tìm thấy phiếu thu' });
+    }
+    if (!canAccessPayment(req.user, row)) {
+      return res.status(403).json({ message: 'Không có quyền xem phiếu thu' });
+    }
+
+    const profile = {
+      fullname: row.fullname,
+      student_code: row.student_code,
+      class_label: row.class_label,
+      current_class: row.current_class,
+    };
+    const receipt = buildReceiptData(row, profile, { fullname: row.recorder_name });
+    const pdfBuffer = await buildTuitionReceiptPdf(receipt);
+    const filename = `phieu-thu-${row.student_code}-${row.id}.pdf`;
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="${filename}"`);
+    res.send(pdfBuffer);
+  } catch (err) {
+    res.status(500).json({ message: 'Không thể tạo phiếu thu', error: err.message });
+  }
+};
+
+const getStudentReceipts = async (req, res) => {
+  try {
+    if (req.user.role !== 'student') {
+      return res.status(403).json({ message: 'Chỉ dành cho học sinh' });
+    }
+
+    const userCode = String(req.user.code || '').trim().toUpperCase();
+    const [profiles] = await pool.query(
+      `SELECT id FROM tuition_profiles
+       WHERE user_id = ?${userCode ? ' OR UPPER(student_code) LIKE ?' : ''}`,
+      userCode ? [req.user.id, `${userCode}%`] : [req.user.id],
+    );
+    const profileIds = profiles.map((p) => p.id);
+    if (!profileIds.length) return res.json([]);
+
+    const [payments] = await pool.query(
+      `SELECT tp.id, tp.payment_type, tp.amount, tp.method, tp.payment_date,
+        tp.period_month, tp.note, tp.created_at,
+        p.fullname, p.student_code, u.fullname AS recorder_name
+       FROM tuition_payments tp
+       JOIN tuition_profiles p ON tp.profile_id = p.id
+       LEFT JOIN users u ON tp.recorded_by = u.id
+       WHERE tp.profile_id IN (?)
+       ORDER BY tp.payment_date DESC, tp.id DESC`,
+      [profileIds],
+    );
+    res.json(payments);
+  } catch (err) {
+    res.status(500).json({ message: 'Lỗi hệ thống', error: err.message });
+  }
+};
+
 module.exports = {
   getProfiles, getProfileById, createProfile, updateProfile, deleteProfile,
   createPayment, deletePayment, getPeriods, createPeriod,
   getMonthlyReport, exportMonthlyPdf,
+  getPaymentReceiptPdf, getStudentReceipts,
 };

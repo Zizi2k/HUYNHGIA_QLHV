@@ -14,6 +14,7 @@ import FeeDebtPage from './pages/FeeDebtPage';
 import StudentsPage from './pages/StudentsPage';
 import AdminStaffPage from './pages/AdminStaffPage';
 import AuditPage from './pages/AuditPage';
+import MyReceiptsPage from './pages/MyReceiptsPage';
 
 function App() {
   return (
@@ -34,6 +35,7 @@ function App() {
             <Route path="/students" element={<StudentsPage />} />
             <Route path="/admin-staff" element={<AdminStaffPage />} />
             <Route path="/audit" element={<AuditPage />} />
+            <Route path="/my-receipts" element={<MyReceiptsPage />} />
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

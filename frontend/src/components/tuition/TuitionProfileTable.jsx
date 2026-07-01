@@ -2,7 +2,9 @@ import { Badge, Button } from 'react-bootstrap';
 import DataTable, { DataTableEmpty } from '../common/DataTable';
 import { formatMoney, STATUS_LABELS, subjectLabel } from './tuitionConstants';
 
-export default function TuitionProfileTable({ profiles, onEdit, onPay, onDelete }) {
+export default function TuitionProfileTable({
+  profiles, onEdit, onPay, onDelete, onViewReceipts,
+}) {
   if (profiles.length === 0) {
     return (
       <DataTable title="Danh sách học phí" icon="bi-list-ul">
@@ -41,6 +43,7 @@ export default function TuitionProfileTable({ profiles, onEdit, onPay, onDelete 
       <tbody>
         {profiles.map((p) => {
           const st = STATUS_LABELS[p.status] || STATUS_LABELS.unpaid;
+          const hasReceipts = p.payments?.length > 0;
           return (
             <tr key={p.id}>
               <td><span className="pro-badge-code">{p.student_code}</span></td>
@@ -56,7 +59,20 @@ export default function TuitionProfileTable({ profiles, onEdit, onPay, onDelete 
               <td className="text-end">{formatMoney(p.tuition_paid)}</td>
               <td className="text-end">{formatMoney(p.book_paid)}</td>
               <td className="text-end fw-semibold text-danger">{formatMoney(p.total_debt)}</td>
-              <td><Badge bg={st.bg}>{st.label}</Badge></td>
+              <td className="text-nowrap">
+                <Badge bg={st.bg}>{st.label}</Badge>
+                {hasReceipts && (
+                  <Button
+                    variant="link"
+                    size="sm"
+                    className="p-0 ms-1 align-baseline"
+                    title="Xem phiếu thu"
+                    onClick={() => onViewReceipts(p)}
+                  >
+                    <i className="bi bi-receipt text-primary" />
+                  </Button>
+                )}
+              </td>
               <td className="text-nowrap">
                 <Button variant="outline-primary" size="sm" className="me-1" onClick={() => onEdit(p)}>
                   Sửa

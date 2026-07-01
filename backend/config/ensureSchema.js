@@ -117,6 +117,17 @@ async function ensureSchema() {
     if (err.code !== 'ER_DUP_FIELDNAME' && err.code !== 'ER_FK_DUP_NAME') throw err;
   }
 
+  try {
+    await pool.query(
+      `ALTER TABLE tuition_payments
+       MODIFY COLUMN payment_type ENUM('tuition', 'book', 'both') NOT NULL`,
+    );
+  } catch (err) {
+    if (err.code !== 'ER_BAD_FIELD_ERROR') {
+      console.warn('ensureSchema tuition_payments payment_type:', err.message);
+    }
+  }
+
   const [courseCount] = await pool.query('SELECT COUNT(*) AS c FROM training_courses');
   if (courseCount[0].c === 0) {
     await pool.query(

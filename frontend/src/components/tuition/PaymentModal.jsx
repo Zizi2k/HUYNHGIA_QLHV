@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Modal, Form, Button } from 'react-bootstrap';
 import { tuitionService } from '../../services';
 import { currentMonthValue } from './tuitionConstants';
+import { openPaymentReceipt } from '../../utils/tuitionReceipt';
 
 export default function PaymentModal({ show, onHide, profile, onSuccess }) {
   const [form, setForm] = useState({
@@ -21,12 +22,19 @@ export default function PaymentModal({ show, onHide, profile, onSuccess }) {
     setSaving(true);
     setError('');
     try {
-      await tuitionService.createPayment({
+      const res = await tuitionService.createPayment({
         profile_id: profile.id,
         ...form,
         amount: Number(form.amount),
       });
-      onSuccess?.();
+      onSuccess?.(res.data);
+      if (res.data?.id) {
+        try {
+          await openPaymentReceipt(res.data.id);
+        } catch {
+          // receipt preview optional
+        }
+      }
       onHide();
       setForm({
         payment_type: 'tuition',
@@ -60,7 +68,8 @@ export default function PaymentModal({ show, onHide, profile, onSuccess }) {
             <Form.Label>Loại thu</Form.Label>
             <Form.Select value={form.payment_type} onChange={(e) => setForm({ ...form, payment_type: e.target.value })}>
               <option value="tuition">Học phí</option>
-              <option value="book">Phí sách</option>
+              <option value="book">Sách</option>
+              <option value="both">Học phí + Sách</option>
             </Form.Select>
           </Form.Group>
           <Form.Group className="mb-3">

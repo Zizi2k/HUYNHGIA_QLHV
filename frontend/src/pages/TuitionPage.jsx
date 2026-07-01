@@ -15,6 +15,8 @@ import DiscountManager from '../components/tuition/DiscountManager';
 import PaymentModal from '../components/tuition/PaymentModal';
 import ProfileEditModal from '../components/tuition/ProfileEditModal';
 import ImportTuitionModal from '../components/tuition/ImportTuitionModal';
+import ReceiptListModal from '../components/tuition/ReceiptListModal';
+import { openPaymentReceipt } from '../utils/tuitionReceipt';
 import {
   SUBJECT_OPTIONS, STATUS_LABELS, currentMonthValue, formatMoney, subjectLabel,
 } from '../components/tuition/tuitionConstants';
@@ -43,6 +45,8 @@ export default function TuitionPage() {
   const [showPay, setShowPay] = useState(false);
   const [showImport, setShowImport] = useState(false);
   const [selectedProfile, setSelectedProfile] = useState(null);
+  const [receiptPayments, setReceiptPayments] = useState([]);
+  const [showReceipts, setShowReceipts] = useState(false);
 
   const [reportSubject, setReportSubject] = useState('english');
   const [reportMonth, setReportMonth] = useState(currentMonthValue());
@@ -150,6 +154,19 @@ export default function TuitionPage() {
     if (!window.confirm('Xóa hồ sơ học phí này?')) return;
     await tuitionService.deleteProfile(id);
     loadProfiles();
+  };
+
+  const handleViewReceipts = (profile) => {
+    setReceiptPayments(profile.payments || []);
+    setShowReceipts(true);
+  };
+
+  const handleViewReceipt = async (paymentId) => {
+    try {
+      await openPaymentReceipt(paymentId);
+    } catch (err) {
+      alert(err.message || 'Không thể mở phiếu thu');
+    }
   };
 
   const tuitionStats = useMemo(() => {
@@ -298,6 +315,7 @@ export default function TuitionPage() {
               onEdit={(p) => { setSelectedProfile(p); setShowEdit(true); }}
               onPay={(p) => { setSelectedProfile(p); setShowPay(true); }}
               onDelete={handleDeleteProfile}
+              onViewReceipts={handleViewReceipts}
             />
           )}
         </Tab.Pane>
@@ -498,6 +516,12 @@ export default function TuitionPage() {
         show={showImport}
         onHide={() => setShowImport(false)}
         onSuccess={loadProfiles}
+      />
+      <ReceiptListModal
+        show={showReceipts}
+        onHide={() => setShowReceipts(false)}
+        payments={receiptPayments}
+        onViewReceipt={handleViewReceipt}
       />
     </div>
   );

@@ -74,15 +74,25 @@ async function resolveTuitionAmounts(conn, {
 }
 
 function computeDebt(profile, payments = []) {
-  const tuitionPaid = payments
-    .filter((p) => p.payment_type === 'tuition')
-    .reduce((sum, p) => sum + Number(p.amount), 0);
-  const bookPaid = payments
-    .filter((p) => p.payment_type === 'book')
-    .reduce((sum, p) => sum + Number(p.amount), 0);
-
   const feeAfter = Number(profile.fee_after_discount) || 0;
   const bookFee = Number(profile.book_fee) || 0;
+
+  let tuitionPaid = 0;
+  let bookPaid = 0;
+
+  payments.forEach((p) => {
+    const amt = Number(p.amount) || 0;
+    if (p.payment_type === 'tuition') {
+      tuitionPaid += amt;
+    } else if (p.payment_type === 'book') {
+      bookPaid += amt;
+    } else if (p.payment_type === 'both') {
+      const tuitionRemaining = Math.max(0, feeAfter - tuitionPaid);
+      const toTuition = Math.min(amt, tuitionRemaining);
+      tuitionPaid += toTuition;
+      bookPaid += amt - toTuition;
+    }
+  });
   const tuitionDebt = Math.max(0, feeAfter - tuitionPaid);
   const bookDebt = Math.max(0, bookFee - bookPaid);
   const totalDebt = tuitionDebt + bookDebt;
@@ -116,10 +126,22 @@ function enrichProfile(profile, payments = []) {
     _payments: payments,
     monthPaid: (month) => {
       const mp = monthPayments(month);
-      return {
-        tuition: mp.filter((p) => p.payment_type === 'tuition').reduce((s, p) => s + Number(p.amount), 0),
-        book: mp.filter((p) => p.payment_type === 'book').reduce((s, p) => s + Number(p.amount), 0),
-      };
+      const feeAfter = Number(profile.fee_after_discount) || 0;
+      let tuition = 0;
+      let book = 0;
+      mp.forEach((p) => {
+        const amt = Number(p.amount) || 0;
+        if (p.payment_type === 'tuition') tuition += amt;
+        else if (p.payment_type === 'book') book += amt;
+        else if (p.payment_type === 'both') {
+          const tuitionRemaining = Math.max(0, feeAfter - tuition);
+          const toTuition = Math.min(amt, tuitionRemaining);
+          tuition += toTuition;
+          book += amt - toTuition;
+        }
+      });
+      const total = mp.reduce((s, p) => s + Number(p.amount), 0);
+      return { tuition, book, total };
     },
   };
 }

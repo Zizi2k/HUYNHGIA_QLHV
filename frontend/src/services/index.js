@@ -153,6 +153,8 @@ export const tuitionService = {
 
   createPayment: (data) => api.post('/tuition/payments', data),
   deletePayment: (id) => api.delete(`/tuition/payments/${id}`),
+  getMyReceipts: () => api.get('/tuition/student/receipts'),
+  getPaymentReceipt: (id) => api.get(`/tuition/payments/${id}/receipt`, { responseType: 'blob' }),
 
   getPeriods: (params) => api.get('/tuition/periods', { params }),
   createPeriod: (data) => api.post('/tuition/periods', data),

@@ -40,6 +40,9 @@ export default function Navbar() {
                 <Nav.Link as={Link} to="/attendance">Điểm danh</Nav.Link>
               )}
               <Nav.Link as={Link} to="/honor">Bảng vinh danh</Nav.Link>
+              {user?.role === 'student' && (
+                <Nav.Link as={Link} to="/my-receipts">Phiếu thu</Nav.Link>
+              )}
             </Nav>
             <Nav className="align-items-center">
               <Dropdown align="end">

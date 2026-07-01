@@ -13,7 +13,8 @@ export const STATUS_LABELS = {
 
 export const PAYMENT_TYPE_LABELS = {
   tuition: 'Học phí',
-  book: 'Phí sách',
+  book: 'Sách',
+  both: 'Cả 2',
 };
 
 export const METHOD_LABELS = {

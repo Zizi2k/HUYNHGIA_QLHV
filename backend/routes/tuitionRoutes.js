@@ -8,12 +8,17 @@ const {
   getProfiles, getProfileById, createProfile, updateProfile, deleteProfile,
   createPayment, deletePayment, getPeriods, createPeriod,
   getMonthlyReport, exportMonthlyPdf,
+  getPaymentReceiptPdf, getStudentReceipts,
 } = require('../controllers/tuitionController');
 const { importProfiles, downloadImportTemplate } = require('../controllers/tuitionImportController');
 
 const router = express.Router();
 
 router.use(authenticate);
+
+router.get('/student/receipts', authorize('student'), getStudentReceipts);
+router.get('/payments/:id/receipt', authorize('admin', 'student'), getPaymentReceiptPdf);
+
 router.use(authorize('admin'));
 
 router.get('/discounts', getDiscounts);
