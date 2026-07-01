@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { useParams } from 'react-router-dom';
 import {
   Tab, Card, Button, Form, Modal, Spinner, Badge, ListGroup, Alert,
@@ -9,6 +9,7 @@ import {
 import { useAuth } from '../context/AuthContext';
 import {
   LESSON_IMAGE_ACCEPT,
+  isLessonImageAllowed,
   getLessonIcon, getLessonResourceUrl, getLessonBadge, isImageLesson,
 } from '../utils/fileTypes';
 import {

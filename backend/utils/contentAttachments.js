@@ -74,13 +74,19 @@ function syncLegacyColumns(attachments) {
 async function fetchAttachmentsMap(resourceType, resourceIds) {
   if (!resourceIds.length) return new Map();
   const placeholders = resourceIds.map(() => '?').join(',');
-  const [rows] = await pool.query(
-    `SELECT id, resource_type, resource_id, sort_order, file_url, file_type, original_name, created_at
-     FROM content_attachments
-     WHERE resource_type = ? AND resource_id IN (${placeholders})
-     ORDER BY sort_order ASC, id ASC`,
-    [resourceType, ...resourceIds],
-  );
+  let rows;
+  try {
+    [rows] = await pool.query(
+      `SELECT id, resource_type, resource_id, sort_order, file_url, file_type, original_name, created_at
+       FROM content_attachments
+       WHERE resource_type = ? AND resource_id IN (${placeholders})
+       ORDER BY sort_order ASC, id ASC`,
+      [resourceType, ...resourceIds],
+    );
+  } catch (err) {
+    if (err.code === 'ER_NO_SUCH_TABLE') return new Map();
+    throw err;
+  }
   const map = new Map();
   for (const row of rows) {
     const key = row.resource_id;
