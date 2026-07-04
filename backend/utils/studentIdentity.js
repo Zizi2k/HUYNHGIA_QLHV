@@ -53,11 +53,9 @@ async function findUserIdByStudentCode(conn, studentCode) {
 function pickStudentByName(rows, fullname) {
   if (rows.length === 0) return null;
   const normalizedName = String(fullname || '').trim().toLowerCase();
-  if (normalizedName) {
-    const exact = rows.find((r) => String(r.fullname || '').trim().toLowerCase() === normalizedName);
-    if (exact) return exact;
-  }
-  return rows[0];
+  if (!normalizedName) return null;
+  const exact = rows.find((r) => String(r.fullname || '').trim().toLowerCase() === normalizedName);
+  return exact || null;
 }
 
 async function findExistingStudentByPhone(conn, phone, fullname) {
