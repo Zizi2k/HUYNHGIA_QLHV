@@ -1,7 +1,7 @@
 const express = require('express');
 const {
   getClasses, getClassById, createClass, updateClass, uploadClassAvatar, addMember, removeMember,
-  deleteClass, getAvailableStudents, createStudentMember, updateStudentMember, syncUsernames,
+  removeAllStudents, deleteClass, getAvailableStudents, createStudentMember, updateStudentMember, syncUsernames,
   getAvailableTeachers, addTeacher, removeTeacher, getNextStudentCodeForClass, getShareTargetClasses,
 } = require('../controllers/classController');
 const { importStudents, downloadTemplate } = require('../controllers/importController');
@@ -32,6 +32,7 @@ router.post('/:id/sync-usernames', authorize('admin', 'teacher'), requireClassTe
 router.post('/:id/members', authorize('admin', 'teacher'), requireClassTeacher('id'), addMember);
 router.put('/:id/members/:userId', authorize('admin', 'teacher'), requireClassTeacher('id'), updateStudentMember);
 router.delete('/:id/members/:userId', authorize('admin', 'teacher'), requireClassTeacher('id'), removeMember);
+router.delete('/:id/students', authorize('admin'), removeAllStudents);
 router.post('/:id/teachers', authorize('admin'), addTeacher);
 router.delete('/:id/teachers/:userId', authorize('admin'), removeTeacher);
 

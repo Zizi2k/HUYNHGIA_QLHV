@@ -586,6 +586,70 @@ const removeMember = async (req, res) => {
   }
 };
 
+const removeAllStudents = async (req, res) => {
+  const conn = await pool.getConnection();
+  try {
+    const classId = req.params.id;
+
+    const [classes] = await conn.query('SELECT id, name FROM classes WHERE id = ?', [classId]);
+    if (classes.length === 0) {
+      return res.status(404).json({ message: 'Không tìm thấy lớp học' });
+    }
+
+    const [students] = await conn.query(
+      `SELECT u.id, u.fullname, u.code FROM class_members cm
+       JOIN users u ON cm.user_id = u.id
+       WHERE cm.class_id = ? AND u.role = 'student'`,
+      [classId]
+    );
+
+    if (students.length === 0) {
+      return res.json({ message: 'Lớp không có học viên để xóa', removed: 0 });
+    }
+
+    for (const student of students) {
+      try {
+        assertStudentCodeInScope(req.user, student.code);
+      } catch (scopeErr) {
+        return res.status(scopeErr.status || 403).json({ message: scopeErr.message });
+      }
+    }
+
+    await conn.beginTransaction();
+    await conn.query(
+      `DELETE cm FROM class_members cm
+       INNER JOIN users u ON cm.user_id = u.id
+       WHERE cm.class_id = ? AND u.role = 'student'`,
+      [classId]
+    );
+    await regenerateClassUsernames(conn, classId);
+    await conn.commit();
+
+    await logAction({
+      actorId: req.user.id,
+      action: 'delete',
+      resourceType: 'class_member_bulk',
+      resourceId: Number(classId),
+      resourceLabel: classes[0].name,
+      metadata: {
+        class_id: Number(classId),
+        removed_count: students.length,
+        student_ids: students.map((s) => s.id),
+      },
+    });
+
+    res.json({
+      message: `Đã xóa ${students.length} học viên khỏi lớp`,
+      removed: students.length,
+    });
+  } catch (err) {
+    await conn.rollback();
+    res.status(500).json({ message: 'Lỗi hệ thống', error: err.message });
+  } finally {
+    conn.release();
+  }
+};
+
 const deleteClass = async (req, res) => {
   try {
     const [classes] = await pool.query('SELECT id, name FROM classes WHERE id = ?', [req.params.id]);
@@ -740,6 +804,6 @@ const getShareTargetClasses = async (req, res) => {
 
 module.exports = {
   getClasses, getClassById, createClass, updateClass, uploadClassAvatar, addMember, removeMember,
-  deleteClass, getAvailableStudents, createStudentMember, updateStudentMember, syncUsernames,
+  removeAllStudents, deleteClass, getAvailableStudents, createStudentMember, updateStudentMember, syncUsernames,
   getAvailableTeachers, addTeacher, removeTeacher, getNextStudentCodeForClass, getShareTargetClasses,
 };

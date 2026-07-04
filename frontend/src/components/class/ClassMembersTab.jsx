@@ -36,6 +36,7 @@ export default function ClassMembersTab({ classId, className, members, isTeacher
   const [saving, setSaving] = useState(false);
   const [loadingMeta, setLoadingMeta] = useState(false);
   const [importing, setImporting] = useState(false);
+  const [removingAll, setRemovingAll] = useState(false);
   const [error, setError] = useState('');
   const [importResult, setImportResult] = useState(null);
   const [discounts, setDiscounts] = useState([]);
@@ -202,6 +203,22 @@ export default function ClassMembersTab({ classId, className, members, isTeacher
     }
   };
 
+  const handleRemoveAllStudents = async () => {
+    if (students.length === 0) return;
+    const msg = `Xóa toàn bộ ${students.length} học viên khỏi lớp?\n\nChỉ gỡ khỏi danh sách lớp — tài khoản và học phí vẫn giữ nguyên.`;
+    if (!window.confirm(msg)) return;
+    setRemovingAll(true);
+    try {
+      const res = await classService.removeAllStudents(classId);
+      alert(res.data.message || 'Đã xóa toàn bộ học viên');
+      onUpdated();
+    } catch (err) {
+      alert(err.response?.data?.message || 'Không thể xóa danh sách học viên');
+    } finally {
+      setRemovingAll(false);
+    }
+  };
+
   const handleRemove = async (userId, name) => {
     if (!window.confirm(`Xóa "${name}" khỏi lớp?`)) return;
     try {
@@ -323,6 +340,16 @@ export default function ClassMembersTab({ classId, className, members, isTeacher
             <Button variant="outline-info" onClick={handleSyncUsernames}>
               <i className="bi bi-arrow-repeat me-1" />
               Đồng bộ tên đăng nhập
+            </Button>
+          )}
+          {isAdmin && students.length > 0 && (
+            <Button
+              variant="outline-danger"
+              onClick={handleRemoveAllStudents}
+              disabled={removingAll}
+            >
+              <i className="bi bi-trash me-1" />
+              {removingAll ? 'Đang xóa...' : 'Xóa tất cả'}
             </Button>
           )}
         </div>
