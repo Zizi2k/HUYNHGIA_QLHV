@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { Row, Col, Button, Modal, Form, Spinner, Alert, InputGroup, ButtonGroup } from 'react-bootstrap';
 import { classService } from '../services';
 import { useAuth } from '../context/AuthContext';
@@ -11,6 +11,7 @@ import { getAvatarUrl } from '../utils/avatar';
 import { LESSON_IMAGE_ACCEPT, isLessonImageAllowed } from '../utils/fileTypes';
 import LoadingOverlay from '../components/common/LoadingOverlay';
 import { useSoftLoading } from '../hooks/useSoftLoading';
+import { preserveScrollDuring } from '../utils/scrollPreserve';
 
 const emptyForm = { name: '', description: '', subject: '', avatarFile: null };
 
@@ -36,6 +37,7 @@ export default function ClassesPage() {
   const [avatarPreview, setAvatarPreview] = useState(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const hasLoadedOnceRef = useRef(false);
 
   const isAdmin = user?.role === 'admin';
   const canManage = isAdmin;
@@ -52,14 +54,26 @@ export default function ClassesPage() {
   }, [teacherSearch]);
 
   const loadClasses = useCallback(() => {
-    setLoading(true);
-    const params = {};
-    if (debouncedSearch) params.search = debouncedSearch;
-    if (showSuperFilters && debouncedTeacherSearch) params.teacher = debouncedTeacherSearch;
-    if (showSuperFilters && prefixFilter) params.prefix = prefixFilter;
-    classService.getAll(Object.keys(params).length ? params : {})
-      .then((res) => setClasses(res.data))
-      .finally(() => setLoading(false));
+    const run = async () => {
+      setLoading(true);
+      const params = {};
+      if (debouncedSearch) params.search = debouncedSearch;
+      if (showSuperFilters && debouncedTeacherSearch) params.teacher = debouncedTeacherSearch;
+      if (showSuperFilters && prefixFilter) params.prefix = prefixFilter;
+      try {
+        const res = await classService.getAll(Object.keys(params).length ? params : {});
+        setClasses(res.data);
+        hasLoadedOnceRef.current = true;
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    if (hasLoadedOnceRef.current) {
+      preserveScrollDuring(run);
+    } else {
+      run();
+    }
   }, [debouncedSearch, debouncedTeacherSearch, prefixFilter, showSuperFilters]);
 
   useEffect(() => { loadClasses(); }, [loadClasses]);
@@ -224,32 +238,32 @@ export default function ClassesPage() {
         </Row>
       </FilterPanel>
 
-      {showInitialSpinner ? (
-        <div className="text-center py-5"><Spinner animation="border" /></div>
-      ) : classes.length === 0 ? (
-        <Alert variant="light">
-          {debouncedSearch || debouncedTeacherSearch || prefixFilter
-            ? 'Không tìm thấy lớp nào khớp bộ lọc hiện tại.'
-            : user?.role === 'teacher'
-              ? 'Bạn chưa được admin phân công lớp học nào.'
-              : 'Chưa có lớp học nào.'}
-        </Alert>
-      ) : (
-        <LoadingOverlay loading={showOverlay}>
-          <Row className="g-3">
-            {classes.map((cls) => (
-              <Col md={4} key={cls.id}>
-                <ClassCard
-                  cls={cls}
-                  canManage={canManage}
-                  onEdit={openEditModal}
-                  onDelete={handleDelete}
-                />
-              </Col>
-            ))}
-          </Row>
-        </LoadingOverlay>
-      )}
+      <LoadingOverlay loading={showInitialSpinner} minHeight={320}>
+        {classes.length === 0 && !loading ? (
+          <Alert variant="light">
+            {debouncedSearch || debouncedTeacherSearch || prefixFilter
+              ? 'Không tìm thấy lớp nào khớp bộ lọc hiện tại.'
+              : user?.role === 'teacher'
+                ? 'Bạn chưa được admin phân công lớp học nào.'
+                : 'Chưa có lớp học nào.'}
+          </Alert>
+        ) : (
+          <LoadingOverlay loading={showOverlay}>
+            <Row className="g-3">
+              {classes.map((cls) => (
+                <Col md={4} key={cls.id}>
+                  <ClassCard
+                    cls={cls}
+                    canManage={canManage}
+                    onEdit={openEditModal}
+                    onDelete={handleDelete}
+                  />
+                </Col>
+              ))}
+            </Row>
+          </LoadingOverlay>
+        )}
+      </LoadingOverlay>
 
       <Modal show={showModal} onHide={closeModal}>
         <Modal.Header closeButton>

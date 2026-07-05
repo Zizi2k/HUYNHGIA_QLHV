@@ -10,6 +10,8 @@ import FilterPanel from '../components/layout/FilterPanel';
 import DataTable from '../components/common/DataTable';
 import AttendanceDetailModal from '../components/attendance/AttendanceDetailModal';
 import { isSuperAdmin } from '../utils/adminScope';
+import LoadingOverlay from '../components/common/LoadingOverlay';
+import { preserveScrollDuring } from '../utils/scrollPreserve';
 
 function teacherAccountPath(report) {
   if (report.teacher_role === 'admin') {
@@ -37,13 +39,24 @@ export default function AttendancePage() {
   const [showDetail, setShowDetail] = useState(false);
 
   const loadReports = () => {
-    setLoading(true);
-    const params = {};
-    if (classFilter) params.class_id = classFilter;
-    if (monthFilter) params.month = monthFilter;
-    attendanceService.getAll(params)
-      .then((res) => setReports(res.data))
-      .finally(() => setLoading(false));
+    const run = async () => {
+      setLoading(true);
+      const params = {};
+      if (classFilter) params.class_id = classFilter;
+      if (monthFilter) params.month = monthFilter;
+      try {
+        const res = await attendanceService.getAll(params);
+        setReports(res.data);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    if (reports.length > 0) {
+      preserveScrollDuring(run);
+    } else {
+      run();
+    }
   };
 
   useEffect(() => {
@@ -93,10 +106,6 @@ export default function AttendancePage() {
 
   const canExport = user?.role === 'admin' || user?.role === 'teacher';
   const superAdmin = isSuperAdmin(user);
-
-  if (loading && reports.length === 0) {
-    return <div className="page-container text-center py-5"><Spinner animation="border" /></div>;
-  }
 
   return (
     <div className="page-container module-page">
@@ -159,7 +168,8 @@ export default function AttendancePage() {
           Chưa có báo cáo điểm danh nào trong tháng đã chọn.
         </Alert>
       ) : (
-        <DataTable
+        <LoadingOverlay loading={loading && reports.length === 0} minHeight={280}>
+          <DataTable
           title="Danh sách buổi điểm danh"
           icon="bi-list-check"
           count={reports.length}
@@ -214,6 +224,7 @@ export default function AttendancePage() {
             ))}
           </tbody>
         </DataTable>
+        </LoadingOverlay>
       )}
 
       <AttendanceDetailModal

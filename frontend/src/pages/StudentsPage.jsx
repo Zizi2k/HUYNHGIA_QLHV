@@ -18,6 +18,7 @@ import {
 import { isScopedUser, lockedCodePrefix, scopeLabel } from '../utils/adminScope';
 import LoadingOverlay from '../components/common/LoadingOverlay';
 import { useSoftLoading } from '../hooks/useSoftLoading';
+import { preserveScrollDuring } from '../utils/scrollPreserve';
 
 const emptySummary = { total: 0, active: 0, expiring: 0, expired: 0 };
 
@@ -50,25 +51,33 @@ export default function StudentsPage() {
   };
 
   const loadOverview = () => {
-    setLoading(true);
-    const params = {};
-    if (subjectFilter) params.subject = subjectFilter;
-    if (classFilter) params.class_id = classFilter;
-    if (enrollmentFilter) params.enrollment_status = enrollmentFilter;
-    if (search.trim()) params.search = search.trim();
-    if (codePrefixFilter) params.code_prefix = codePrefixFilter;
-    else if (scopedPrefix) params.code_prefix = scopedPrefix;
+    const run = async () => {
+      setLoading(true);
+      const params = {};
+      if (subjectFilter) params.subject = subjectFilter;
+      if (classFilter) params.class_id = classFilter;
+      if (enrollmentFilter) params.enrollment_status = enrollmentFilter;
+      if (search.trim()) params.search = search.trim();
+      if (codePrefixFilter) params.code_prefix = codePrefixFilter;
+      else if (scopedPrefix) params.code_prefix = scopedPrefix;
 
-    studentService.getOverview(params)
-      .then((res) => {
+      try {
+        const res = await studentService.getOverview(params);
         setStudents(res.data.students);
         setSummary(res.data.summary || emptySummary);
-      })
-      .catch(() => {
+      } catch {
         setStudents([]);
         setSummary(emptySummary);
-      })
-      .finally(() => setLoading(false));
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    if (students.length > 0) {
+      preserveScrollDuring(run);
+    } else {
+      run();
+    }
   };
 
   useEffect(() => {
@@ -224,9 +233,7 @@ export default function StudentsPage() {
         </Row>
       </FilterPanel>
 
-      {showInitialSpinner ? (
-        <div className="text-center py-5"><Spinner animation="border" /></div>
-      ) : (
+      <LoadingOverlay loading={showInitialSpinner} minHeight={320}>
         <LoadingOverlay loading={showOverlay}>
           <EnrollmentOverviewTable
             students={students}
@@ -234,7 +241,7 @@ export default function StudentsPage() {
             onTransfer={handleTransfer}
           />
         </LoadingOverlay>
-      )}
+      </LoadingOverlay>
 
       <AddEnrollmentModal
         show={showAdd}

@@ -32,6 +32,8 @@ import ModuleTabs from '../components/layout/ModuleTabs';
 import { canActAsClassTeacher } from '../utils/roles';
 
 import { API_BASE } from '../config/apiBase';
+import LoadingOverlay from '../components/common/LoadingOverlay';
+import { preserveScrollDuring } from '../utils/scrollPreserve';
 
 export default function ClassDetailPage() {
   const { id } = useParams();
@@ -137,7 +139,7 @@ export default function ClassDetailPage() {
   const refreshData = async () => {
     setRefreshing(true);
     try {
-      await fetchClassData();
+      await preserveScrollDuring(fetchClassData);
     } catch (err) {
       console.error('Không thể cập nhật dữ liệu lớp:', err);
     } finally {
@@ -232,7 +234,13 @@ export default function ClassDetailPage() {
   const getLessonFileUrl = (fileUrl) => getLessonResourceUrl(fileUrl, API_BASE);
 
   if (loading && !classData) {
-    return <div className="page-container text-center py-5"><Spinner animation="border" /></div>;
+    return (
+      <div className="page-container module-page">
+        <LoadingOverlay loading minHeight={420}>
+          <div style={{ minHeight: 420 }} aria-hidden="true" />
+        </LoadingOverlay>
+      </div>
+    );
   }
 
   if (accessError) {

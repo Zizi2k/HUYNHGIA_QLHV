@@ -6,6 +6,7 @@ import { onlineSessionService } from '../../services';
 import { notifyDeleteResult } from '../../utils/deleteHelpers';
 import LoadingOverlay from '../common/LoadingOverlay';
 import { useSoftLoading } from '../../hooks/useSoftLoading';
+import { preserveScrollDuring } from '../../utils/scrollPreserve';
 
 const JITSI_DOMAIN = import.meta.env.VITE_JITSI_DOMAIN || 'meet.jit.si';
 
@@ -119,13 +120,27 @@ export default function ClassOnlineTab({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [joinedSession, setJoinedSession] = useState(null);
+  const hasLoadedOnceRef = useRef(false);
 
   const loadSessions = useCallback(() => {
-    setLoading(true);
-    onlineSessionService.getByClass(classId)
-      .then((res) => setSessions(res.data))
-      .catch(() => setSessions([]))
-      .finally(() => setLoading(false));
+    const run = async () => {
+      setLoading(true);
+      try {
+        const res = await onlineSessionService.getByClass(classId);
+        setSessions(res.data);
+        hasLoadedOnceRef.current = true;
+      } catch {
+        setSessions([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    if (hasLoadedOnceRef.current) {
+      preserveScrollDuring(run);
+    } else {
+      run();
+    }
   }, [classId]);
 
   useEffect(() => { loadSessions(); }, [loadSessions]);
@@ -187,7 +202,11 @@ export default function ClassOnlineTab({
   const pastSessions = sessions.filter((s) => !s.is_active);
 
   if (showInitialSpinner) {
-    return <div className="text-center py-4"><Spinner animation="border" /></div>;
+    return (
+      <LoadingOverlay loading minHeight={280}>
+        <div style={{ minHeight: 280 }} aria-hidden="true" />
+      </LoadingOverlay>
+    );
   }
 
   return (

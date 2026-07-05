@@ -7,6 +7,7 @@ import DataTable, { DataTableEmpty } from '../common/DataTable';
 import LoadingOverlay from '../common/LoadingOverlay';
 import AttendanceDetailModal from '../attendance/AttendanceDetailModal';
 import { useSoftLoading } from '../../hooks/useSoftLoading';
+import { preserveScrollDuring } from '../../utils/scrollPreserve';
 import TeacherSchedulePanel from './TeacherSchedulePanel';
 
 const STATUS_OPTIONS = [
@@ -45,6 +46,7 @@ export default function ClassAttendanceTab({
   const [detail, setDetail] = useState(null);
   const [showDetail, setShowDetail] = useState(false);
   const formRef = useRef(null);
+  const hasLoadedOnceRef = useRef(false);
 
   const stats = useMemo(() => {
     const counts = { present: 0, absent: 0, late: 0, excused: 0, dropped: 0 };
@@ -56,9 +58,23 @@ export default function ClassAttendanceTab({
   }, [students, records]);
 
   const loadHistory = () => {
-    attendanceService.getByClass(classId)
-      .then((res) => setHistory(res.data))
-      .finally(() => setLoading(false));
+    const run = async () => {
+      try {
+        const res = await attendanceService.getByClass(classId);
+        setHistory(res.data);
+        hasLoadedOnceRef.current = true;
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    if (hasLoadedOnceRef.current) {
+      setLoading(true);
+      preserveScrollDuring(run);
+    } else {
+      setLoading(true);
+      run();
+    }
   };
 
   const loadDateRecords = async (date) => {
@@ -148,7 +164,11 @@ export default function ClassAttendanceTab({
   };
 
   if (showInitialSpinner) {
-    return <div className="text-center py-4"><Spinner animation="border" /></div>;
+    return (
+      <LoadingOverlay loading minHeight={320}>
+        <div style={{ minHeight: 320 }} aria-hidden="true" />
+      </LoadingOverlay>
+    );
   }
 
   return (

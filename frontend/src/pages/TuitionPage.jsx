@@ -20,6 +20,7 @@ import ReceiptListModal from '../components/tuition/ReceiptListModal';
 import { openPaymentReceipt } from '../utils/tuitionReceipt';
 import LoadingOverlay from '../components/common/LoadingOverlay';
 import { useSoftLoading } from '../hooks/useSoftLoading';
+import { preserveScrollDuring } from '../utils/scrollPreserve';
 import {
   SUBJECT_OPTIONS, STATUS_LABELS, currentMonthValue, formatMoney, subjectLabel,
 } from '../components/tuition/tuitionConstants';
@@ -65,17 +66,28 @@ export default function TuitionPage() {
   const [creatingPeriod, setCreatingPeriod] = useState(false);
 
   const loadProfiles = () => {
-    setLoading(true);
-    const params = {};
-    if (subjectFilter) params.subject = subjectFilter;
-    if (classFilter) params.class_id = classFilter;
-    if (search.trim()) params.search = search.trim();
-    if (statusFilter) params.status = statusFilter;
-    if (codePrefixFilter) params.code_prefix = codePrefixFilter;
-    else if (scopedPrefix) params.code_prefix = scopedPrefix;
-    tuitionService.getProfiles(params)
-      .then((res) => setProfiles(res.data))
-      .finally(() => setLoading(false));
+    const run = async () => {
+      setLoading(true);
+      const params = {};
+      if (subjectFilter) params.subject = subjectFilter;
+      if (classFilter) params.class_id = classFilter;
+      if (search.trim()) params.search = search.trim();
+      if (statusFilter) params.status = statusFilter;
+      if (codePrefixFilter) params.code_prefix = codePrefixFilter;
+      else if (scopedPrefix) params.code_prefix = scopedPrefix;
+      try {
+        const res = await tuitionService.getProfiles(params);
+        setProfiles(res.data);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    if (profiles.length > 0) {
+      preserveScrollDuring(run);
+    } else {
+      run();
+    }
   };
 
   useEffect(() => {
@@ -340,9 +352,7 @@ export default function TuitionPage() {
             />
           </StatCardGrid>
 
-          {showInitialSpinner ? (
-            <div className="text-center py-5"><Spinner animation="border" /></div>
-          ) : (
+          <LoadingOverlay loading={showInitialSpinner} minHeight={320}>
             <LoadingOverlay loading={showOverlay}>
               <TuitionProfileTable
                 profiles={profiles}
@@ -352,7 +362,7 @@ export default function TuitionPage() {
                 onViewReceipts={handleViewReceipts}
               />
             </LoadingOverlay>
-          )}
+          </LoadingOverlay>
         </Tab.Pane>
 
           <Tab.Pane eventKey="discounts">

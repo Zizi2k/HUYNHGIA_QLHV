@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
 import { Table, Button, Modal, Form, Badge, Spinner } from 'react-bootstrap';
 import { tuitionService } from '../../services';
-import LoadingOverlay from '../common/LoadingOverlay';
+import LoadingOverlay from '../components/common/LoadingOverlay';
 import { useSoftLoading } from '../../hooks/useSoftLoading';
+import { preserveScrollDuring } from '../../utils/scrollPreserve';
 
 const emptyForm = {
   name: '', discount_type: 'fixed', discount_value: '', default_reason: '', is_active: true,
@@ -19,10 +20,21 @@ export default function DiscountManager() {
   const [error, setError] = useState('');
 
   const load = () => {
-    setLoading(true);
-    tuitionService.getDiscounts()
-      .then((res) => setDiscounts(res.data))
-      .finally(() => setLoading(false));
+    const run = async () => {
+      setLoading(true);
+      try {
+        const res = await tuitionService.getDiscounts();
+        setDiscounts(res.data);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    if (discounts.length > 0) {
+      preserveScrollDuring(run);
+    } else {
+      run();
+    }
   };
 
   useEffect(() => { load(); }, []);
@@ -76,12 +88,8 @@ export default function DiscountManager() {
     load();
   };
 
-  if (showInitialSpinner) {
-    return <div className="text-center py-4"><Spinner animation="border" /></div>;
-  }
-
   return (
-    <>
+    <LoadingOverlay loading={showInitialSpinner || showOverlay} minHeight={showInitialSpinner ? 240 : undefined}>
       <div className="d-flex justify-content-between align-items-center mb-3">
         <h5 className="mb-0">Mức giảm giá</h5>
         <Button variant="primary" size="sm" onClick={openCreate}>
@@ -163,6 +171,6 @@ export default function DiscountManager() {
           </Modal.Footer>
         </Form>
       </Modal>
-    </>
+    </LoadingOverlay>
   );
 }
