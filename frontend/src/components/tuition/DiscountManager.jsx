@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Table, Button, Modal, Form, Badge, Spinner } from 'react-bootstrap';
 import { tuitionService } from '../../services';
-import LoadingOverlay from '../components/common/LoadingOverlay';
+import LoadingOverlay from '../common/LoadingOverlay';
 import { useSoftLoading } from '../../hooks/useSoftLoading';
 import { preserveScrollDuring } from '../../utils/scrollPreserve';
 
