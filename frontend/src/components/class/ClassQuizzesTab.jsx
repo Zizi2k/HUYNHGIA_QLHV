@@ -258,6 +258,16 @@ export default function ClassQuizzesTab({
     }
   };
 
+  const handleToggleShowResults = async (quiz) => {
+    const open = Number(quiz.show_results) === 1 || quiz.show_results === true;
+    try {
+      await quizService.setShowResults(quiz.id, { show_results: !open });
+      onUpdated();
+    } catch (err) {
+      alert(err.response?.data?.message || 'Không thể cập nhật xem đáp án');
+    }
+  };
+
   const addQuestion = () => {
     const newIdx = form.questions.length;
     setForm({ ...form, questions: [...form.questions, { ...emptyQuestion }] });
@@ -455,6 +465,12 @@ export default function ClassQuizzesTab({
                   {isStudent && isOnlineSubmission(q) && (
                     <Badge bg="success">Đã làm trắc nghiệm — {q.quiz_score}/10</Badge>
                   )}
+                  {isTeacher && (Number(q.show_results) === 1 || q.show_results === true) && (
+                    <Badge bg="info">Đã mở xem đáp án</Badge>
+                  )}
+                  {isStudent && isOnlineSubmission(q) && (Number(q.show_results) === 1 || q.show_results === true) && (
+                    <Badge bg="info">Có thể xem đáp án</Badge>
+                  )}
                   {isStudent && isFileSubmission(q) && q.quiz_score != null && (
                     <Badge bg="success">Đã nộp — {q.quiz_score}/10</Badge>
                   )}
@@ -471,9 +487,17 @@ export default function ClassQuizzesTab({
                   </Button>
                 )}
                 {isStudent && isOnlineSubmission(q) && (
-                  <Badge bg="primary" className="d-flex align-items-center px-3">
-                    Điểm: {q.quiz_score}/10
-                  </Badge>
+                  <>
+                    <Badge bg="primary" className="d-flex align-items-center px-3">
+                      Điểm: {q.quiz_score}/10
+                    </Badge>
+                    {(Number(q.show_results) === 1 || q.show_results === true) && (
+                      <Button as={Link} to={`/quizzes/${q.id}`} variant="outline-success" size="sm">
+                        <i className="bi bi-check2-circle me-1" />
+                        Xem đáp án
+                      </Button>
+                    )}
+                  </>
                 )}
                 {isTeacher && (
                   <>
@@ -484,6 +508,17 @@ export default function ClassQuizzesTab({
                       onClick={() => handleToggleHide(q)}
                     >
                       <i className={`bi bi-${q.is_hidden ? 'eye' : 'eye-slash'}`} />
+                    </Button>
+                    <Button
+                      variant={(Number(q.show_results) === 1 || q.show_results === true) ? 'success' : 'outline-success'}
+                      size="sm"
+                      title={(Number(q.show_results) === 1 || q.show_results === true)
+                        ? 'Đang mở xem đáp án — bấm để ẩn'
+                        : 'Mở cho học sinh xem câu đúng/sai'}
+                      onClick={() => handleToggleShowResults(q)}
+                    >
+                      <i className="bi bi-check2-square me-1" />
+                      {(Number(q.show_results) === 1 || q.show_results === true) ? 'Đã mở đáp án' : 'Mở đáp án'}
                     </Button>
                     <Button
                       variant="outline-primary"

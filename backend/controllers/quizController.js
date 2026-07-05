@@ -122,6 +122,7 @@ const getQuizById = async (req, res) => {
     );
 
     let mySubmission = null;
+    const showResults = quizzes[0].show_results === 1 || quizzes[0].show_results === true;
     if (isStudent) {
       const [subs] = await pool.query(
         `SELECT qs.id, qs.score, qs.submitted_at, qs.file_url,
@@ -131,12 +132,40 @@ const getQuizById = async (req, res) => {
         [req.params.id, req.user.id]
       );
       mySubmission = subs[0] || null;
+
+      if (mySubmission && showResults && Number(mySubmission.answer_count) > 0) {
+        const [reviewRows] = await pool.query(
+          `SELECT q.id AS question_id, q.question, q.optionA, q.optionB, q.optionC, q.optionD,
+            q.answer AS correct_answer, qa.selected_answer
+           FROM questions q
+           LEFT JOIN quiz_answers qa ON qa.question_id = q.id AND qa.submission_id = ?
+           WHERE q.quiz_id = ?
+           ORDER BY q.id`,
+          [mySubmission.id, req.params.id],
+        );
+        mySubmission.review = reviewRows.map((row) => ({
+          question_id: row.question_id,
+          question: row.question,
+          optionA: row.optionA,
+          optionB: row.optionB,
+          optionC: row.optionC,
+          optionD: row.optionD,
+          selected_answer: row.selected_answer || null,
+          correct_answer: row.correct_answer,
+          is_correct: row.selected_answer != null && row.selected_answer === row.correct_answer,
+        }));
+        mySubmission.correct = reviewRows.filter(
+          (row) => row.selected_answer != null && row.selected_answer === row.correct_answer,
+        ).length;
+        mySubmission.total = reviewRows.length;
+      }
     }
 
     res.json({
       ...(await attachAttachmentsToRows([quizzes[0]], 'quiz'))[0],
       questions,
       mySubmission,
+      show_results: showResults,
     });
   } catch (err) {
     res.status(500).json({ message: 'Lỗi hệ thống', error: err.message });
@@ -379,7 +408,39 @@ const submitQuiz = async (req, res) => {
     await conn.query('UPDATE quiz_submissions SET score = ? WHERE id = ?', [score, submissionId]);
 
     await conn.commit();
-    res.json({ message: 'Nộp bài thành công', score, correct, total: questions.length });
+
+    const showResults = quizRows[0].show_results === 1 || quizRows[0].show_results === true;
+    const payload = {
+      message: 'Nộp bài thành công',
+      score,
+      correct,
+      total: questions.length,
+      show_results: showResults,
+    };
+
+    if (showResults) {
+      const [fullQuestions] = await pool.query(
+        `SELECT id, question, optionA, optionB, optionC, optionD, answer
+         FROM questions WHERE quiz_id = ? ORDER BY id`,
+        [quiz_id],
+      );
+      payload.review = fullQuestions.map((q) => {
+        const selected = answers.find((a) => Number(a.question_id) === Number(q.id))?.selected_answer || null;
+        return {
+          question_id: q.id,
+          question: q.question,
+          optionA: q.optionA,
+          optionB: q.optionB,
+          optionC: q.optionC,
+          optionD: q.optionD,
+          selected_answer: selected,
+          correct_answer: q.answer,
+          is_correct: selected != null && selected === q.answer,
+        };
+      });
+    }
+
+    res.json(payload);
   } catch (err) {
     await conn.rollback();
     res.status(500).json({ message: 'Lỗi hệ thống', error: err.message });
@@ -639,6 +700,38 @@ const setQuizVisibility = async (req, res) => {
   }
 };
 
+const setQuizShowResults = async (req, res) => {
+  try {
+    const classId = await getQuizClassId(req.params.id);
+    if (!classId) {
+      return res.status(404).json({ message: 'Không tìm thấy bài kiểm tra' });
+    }
+    if (!(await assertClassAccess(req.user, classId, res, { manage: true }))) return;
+
+    const showResults = req.body.show_results === true
+      || req.body.show_results === 1
+      || req.body.show_results === '1'
+      || req.body.show_results === 'true';
+
+    const [result] = await pool.query(
+      'UPDATE quizzes SET show_results = ? WHERE id = ?',
+      [showResults ? 1 : 0, req.params.id],
+    );
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ message: 'Không tìm thấy bài kiểm tra' });
+    }
+
+    res.json({
+      message: showResults
+        ? 'Đã mở cho học sinh xem đáp án đúng/sai'
+        : 'Đã ẩn đáp án với học sinh',
+      show_results: showResults,
+    });
+  } catch (err) {
+    res.status(500).json({ message: 'Lỗi hệ thống', error: err.message });
+  }
+};
+
 module.exports = {
   getQuizzes,
   getQuizById,
@@ -653,4 +746,5 @@ module.exports = {
   importQuizFile,
   getQuizImportTemplate,
   setQuizVisibility,
+  setQuizShowResults,
 };

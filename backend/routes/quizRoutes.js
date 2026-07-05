@@ -3,7 +3,7 @@ const {
   getQuizzes, getQuizById, createQuiz, updateQuiz, deleteQuiz,
   getQuizSubmissions, submitQuiz, submitQuizAttachment, gradeQuizSubmission,
   deleteQuizSubmission,
-  importQuizFile, getQuizImportTemplate, setQuizVisibility,
+  importQuizFile, getQuizImportTemplate, setQuizVisibility, setQuizShowResults,
 } = require('../controllers/quizController');
 const { shareQuiz, sendShareResult } = require('../utils/contentShare');
 const { authenticate, authorize } = require('../middleware/auth');
@@ -58,6 +58,7 @@ router.get('/', getQuizzes);
 router.get('/import-template', authorize('admin', 'teacher'), getQuizImportTemplate);
 router.post('/parse-docx', authorize('admin', 'teacher'), handleQuizImportUpload, importQuizFile);
 router.patch('/:id/visibility', authorize('admin', 'teacher'), setQuizVisibility);
+router.patch('/:id/show-results', authorize('admin', 'teacher'), setQuizShowResults);
 router.post('/:id/share', authorize('admin', 'teacher'), async (req, res) => {
   try {
     const result = await shareQuiz(req.user, req.params.id, req.body.target_class_ids);

@@ -91,6 +91,7 @@ export const quizService = {
     responseType: 'blob',
   }),
   setVisibility: (id, data) => api.patch(`/quizzes/${id}/visibility`, data),
+  setShowResults: (id, data) => api.patch(`/quizzes/${id}/show-results`, data),
   share: (id, targetClassIds) => api.post(`/quizzes/${id}/share`, { target_class_ids: targetClassIds }),
 };
 

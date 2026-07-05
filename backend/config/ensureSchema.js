@@ -245,6 +245,14 @@ async function ensureSchema() {
     }
   }
 
+  try {
+    await pool.query(
+      'ALTER TABLE quizzes ADD COLUMN show_results TINYINT(1) NOT NULL DEFAULT 0',
+    );
+  } catch (err) {
+    if (err.code !== 'ER_DUP_FIELDNAME') throw err;
+  }
+
   for (const col of ['file_url TEXT NULL', 'feedback TEXT NULL']) {
     try {
       await pool.query(`ALTER TABLE quiz_submissions ADD COLUMN ${col}`);
