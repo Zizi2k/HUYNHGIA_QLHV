@@ -1712,6 +1712,135 @@ a {
   margin-bottom: 0.75rem;
 }
 
+/* Attendance detail modal */
+.attendance-detail-modal .modal-content {
+  border: none;
+  border-radius: 16px;
+  box-shadow: 0 18px 48px rgba(15, 23, 42, 0.12);
+}
+
+.attendance-detail-header {
+  border-bottom: none;
+  padding: 1.25rem 1.5rem 0.5rem;
+}
+
+.attendance-detail-header .modal-title {
+  font-size: 1.35rem;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.attendance-detail-body {
+  padding: 0.5rem 1.5rem 1.5rem;
+}
+
+.attendance-detail-meta {
+  margin-bottom: 1.25rem;
+}
+
+.attendance-detail-meta-row {
+  margin-bottom: 0.4rem;
+  font-size: 0.98rem;
+  color: #1e293b;
+  line-height: 1.5;
+}
+
+.attendance-detail-meta-row strong {
+  font-weight: 600;
+}
+
+.attendance-detail-note {
+  margin-bottom: 1rem;
+  padding: 0.75rem 1rem;
+  border-radius: 10px;
+  background: #f8fafc;
+  color: #475569;
+  font-size: 0.92rem;
+}
+
+.attendance-detail-table-wrap {
+  border-top: 1px solid #e2e8f0;
+}
+
+.attendance-detail-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.attendance-detail-table thead th {
+  font-weight: 600;
+  font-size: 0.98rem;
+  color: #0f172a;
+  padding: 0.95rem 0;
+  border-bottom: 1px solid #e2e8f0;
+  text-align: left;
+}
+
+.attendance-detail-table tbody td {
+  padding: 1rem 0;
+  border-bottom: 1px solid #e2e8f0;
+  font-size: 0.98rem;
+  color: #334155;
+  vertical-align: middle;
+}
+
+.attendance-detail-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.attendance-detail-name {
+  font-weight: 500;
+  color: #0f172a;
+}
+
+.attendance-detail-code {
+  color: #64748b;
+  font-size: 0.94rem;
+}
+
+.attendance-detail-status {
+  font-weight: 500;
+}
+
+.attendance-detail-status.status-present {
+  color: #0f172a;
+}
+
+.attendance-detail-status.status-absent {
+  color: #b91c1c;
+}
+
+.attendance-detail-status.status-late {
+  color: #b45309;
+}
+
+.attendance-detail-status.status-excused {
+  color: #0369a1;
+}
+
+.attendance-detail-status.status-dropped {
+  color: #64748b;
+}
+
+.attendance-detail-empty {
+  text-align: center;
+  color: #94a3b8;
+  padding: 2rem 0 !important;
+}
+
+@media (max-width: 575.98px) {
+  .attendance-detail-header,
+  .attendance-detail-body {
+    padding-left: 1rem;
+    padding-right: 1rem;
+  }
+
+  .attendance-detail-table thead th,
+  .attendance-detail-table tbody td {
+    font-size: 0.92rem;
+  }
+}
+
 .pro-section-header {
   display: flex;
   align-items: center;

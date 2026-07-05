@@ -1,20 +1,13 @@
 import { useEffect, useState } from 'react';
 import {
-  Table, Badge, Spinner, Form, Modal, Button, Alert, Row, Col,
+  Badge, Spinner, Form, Button, Alert, Row, Col,
 } from 'react-bootstrap';
 import { attendanceService, classService } from '../services';
 import { useAuth } from '../context/AuthContext';
 import PageHeader from '../components/layout/PageHeader';
 import FilterPanel from '../components/layout/FilterPanel';
-import DataTable, { DataTableEmpty } from '../components/common/DataTable';
-
-const STATUS_LABELS = {
-  present: 'Có mặt',
-  absent: 'Vắng',
-  late: 'Đi muộn',
-  excused: 'Có phép',
-  dropped: 'Nghỉ luôn',
-};
+import DataTable from '../components/common/DataTable';
+import AttendanceDetailModal from '../components/attendance/AttendanceDetailModal';
 
 function currentMonthValue() {
   const now = new Date();
@@ -197,48 +190,11 @@ export default function AttendancePage() {
         </DataTable>
       )}
 
-      <Modal show={showDetail} onHide={() => setShowDetail(false)} size="lg">
-        <Modal.Header closeButton>
-          <Modal.Title>Chi tiết điểm danh</Modal.Title>
-        </Modal.Header>
-        <Modal.Body>
-          {detail && (
-            <>
-              <p className="mb-1">
-                <strong>Lớp:</strong> {detail.class_name}
-              </p>
-              <p className="mb-1">
-                <strong>Ngày:</strong>{' '}
-                {new Date(detail.session_date).toLocaleDateString('vi-VN')}
-              </p>
-              <p className="mb-3">
-                <strong>Giáo viên:</strong> {detail.teacher_name}
-              </p>
-              {detail.note && (
-                <Alert variant="info" className="py-2">{detail.note}</Alert>
-              )}
-              <Table responsive size="sm">
-                <thead>
-                  <tr>
-                    <th>Học viên</th>
-                    <th>Mã</th>
-                    <th>Trạng thái</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {detail.records?.map((r) => (
-                    <tr key={r.id}>
-                      <td>{r.fullname}</td>
-                      <td>{r.code}</td>
-                      <td>{STATUS_LABELS[r.status] || r.status}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </Table>
-            </>
-          )}
-        </Modal.Body>
-      </Modal>
+      <AttendanceDetailModal
+        show={showDetail}
+        onHide={() => setShowDetail(false)}
+        detail={detail}
+      />
     </div>
   );
 }

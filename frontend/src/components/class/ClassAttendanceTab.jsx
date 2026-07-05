@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Button, Form, Alert, Card, Spinner, Badge,
+  Button, Form, Alert, Card, Spinner,
 } from 'react-bootstrap';
 import { attendanceService } from '../../services';
 import DataTable, { DataTableEmpty } from '../common/DataTable';
 import LoadingOverlay from '../common/LoadingOverlay';
+import AttendanceDetailModal from '../attendance/AttendanceDetailModal';
 import { useSoftLoading } from '../../hooks/useSoftLoading';
 import TeacherSchedulePanel from './TeacherSchedulePanel';
 
@@ -41,6 +42,8 @@ export default function ClassAttendanceTab({
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
+  const [detail, setDetail] = useState(null);
+  const [showDetail, setShowDetail] = useState(false);
   const formRef = useRef(null);
 
   const stats = useMemo(() => {
@@ -101,6 +104,16 @@ export default function ClassAttendanceTab({
     requestAnimationFrame(() => {
       formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     });
+  };
+
+  const openDetail = async (sessionId) => {
+    try {
+      const res = await attendanceService.getDetail(sessionId);
+      setDetail(res.data);
+      setShowDetail(true);
+    } catch {
+      alert('Không thể tải chi tiết điểm danh');
+    }
   };
 
   const handleSubmit = async (e) => {
@@ -326,7 +339,7 @@ export default function ClassAttendanceTab({
               <th className="text-center">Có phép</th>
               <th className="text-center">Nghỉ luôn</th>
               <th>Người điểm danh</th>
-              {isTeacher && <th style={{ width: 100 }}></th>}
+              <th style={{ width: 140 }}></th>
             </tr>
           </thead>
           <tbody>
@@ -366,22 +379,37 @@ export default function ClassAttendanceTab({
                     {h.teacher_name}
                   </span>
                 </td>
-                {isTeacher && (
-                  <td>
+                <td>
+                  <div className="d-flex flex-wrap gap-1">
                     <Button
-                      variant="outline-primary"
+                      variant="outline-secondary"
                       size="sm"
-                      onClick={() => openHistoryDate(h.session_date)}
+                      onClick={() => openDetail(h.id)}
                     >
-                      Sửa
+                      Chi tiết
                     </Button>
-                  </td>
-                )}
+                    {isTeacher && (
+                      <Button
+                        variant="outline-primary"
+                        size="sm"
+                        onClick={() => openHistoryDate(h.session_date)}
+                      >
+                        Sửa
+                      </Button>
+                    )}
+                  </div>
+                </td>
               </tr>
             ))}
           </tbody>
         </DataTable>
       )}
+
+      <AttendanceDetailModal
+        show={showDetail}
+        onHide={() => setShowDetail(false)}
+        detail={detail}
+      />
     </div>
     </LoadingOverlay>
   );
