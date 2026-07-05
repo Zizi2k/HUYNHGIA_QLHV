@@ -5,8 +5,7 @@ const {
   getAssignments, createAssignment, updateAssignment, deleteAssignment,
 
   uploadSubmission, getSubmissions, gradeSubmission, setAssignmentVisibility,
-  deleteSubmission,
-
+  deleteSubmission, getAssignmentStudentAccess, setAssignmentStudentAccess,
 } = require('../controllers/assignmentController');
 
 const { shareAssignment, sendShareResult } = require('../utils/contentShare');
@@ -71,6 +70,8 @@ router.put('/submissions/:id/grade', authorize('admin', 'teacher'), gradeSubmiss
 router.delete('/submissions/:id', authorize('admin', 'teacher'), deleteSubmission);
 
 router.patch('/:id/visibility', authorize('admin', 'teacher'), setAssignmentVisibility);
+router.get('/:id/student-access', authorize('admin', 'teacher'), getAssignmentStudentAccess);
+router.put('/:id/student-access', authorize('admin', 'teacher'), setAssignmentStudentAccess);
 
 router.post('/:id/share', authorize('admin', 'teacher'), async (req, res) => {
 

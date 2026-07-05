@@ -10,6 +10,7 @@ import {
 } from '../../utils/contentVisibility';
 import StudentWorkSubmission from './StudentWorkSubmission';
 import ShareContentModal from './ShareContentModal';
+import StudentAccessModal from './StudentAccessModal';
 import ContentAttachmentPreview from '../common/ContentAttachmentPreview';
 import AttachmentManager from '../common/AttachmentManager';
 import AttachmentList from '../common/AttachmentList';
@@ -60,6 +61,7 @@ export default function ClassQuizzesTab({
   const [error, setError] = useState('');
   const [submittingId, setSubmittingId] = useState(null);
   const [shareTarget, setShareTarget] = useState(null);
+  const [accessTarget, setAccessTarget] = useState(null);
   const [gradeDrafts, setGradeDrafts] = useState({});
   const docxInputRef = useRef(null);
 
@@ -462,6 +464,9 @@ export default function ClassQuizzesTab({
                   {isTeacher && (
                     <Badge bg="secondary">{q.submission_count || 0} lượt làm</Badge>
                   )}
+                  {isTeacher && q.student_access_mode === 'selected' && (
+                    <Badge bg="info">{q.allowed_student_count || 0} HS được làm</Badge>
+                  )}
                   {isStudent && isOnlineSubmission(q) && (
                     <Badge bg="success">Đã làm trắc nghiệm — {q.quiz_score}/10</Badge>
                   )}
@@ -531,6 +536,14 @@ export default function ClassQuizzesTab({
                     </Button>
                     <Button variant="outline-info" size="sm" onClick={() => openResults(q.id)} title="Kết quả">
                       <i className="bi bi-bar-chart" />
+                    </Button>
+                    <Button
+                      variant="outline-info"
+                      size="sm"
+                      title="Phân quyền học sinh"
+                      onClick={() => setAccessTarget({ id: q.id, title: q.title })}
+                    >
+                      <i className="bi bi-people" />
                     </Button>
                     <Button variant="outline-secondary" size="sm" onClick={() => openEdit(q)} title="Sửa tiêu đề">
                       <i className="bi bi-gear" />
@@ -916,6 +929,15 @@ export default function ClassQuizzesTab({
         contentTitle={shareTarget?.title}
         sourceClassId={classId}
         onShare={handleShare}
+      />
+
+      <StudentAccessModal
+        show={!!accessTarget}
+        onHide={() => setAccessTarget(null)}
+        contentType="quiz"
+        contentId={accessTarget?.id}
+        contentTitle={accessTarget?.title}
+        onSaved={onUpdated}
       />
     </>
   );

@@ -15,6 +15,10 @@ const {
   deleteAttachmentsForResource,
 } = require('../utils/contentAttachments');
 const { studentVisibilityClause, parseVisibilityFields, isVisibleToStudent } = require('../utils/contentVisibility');
+const {
+  studentAccessClause, allowedStudentCountSubquery, isStudentAllowed,
+  syncAllowedStudents, getAllowedStudentIds, parseStudentAccessMode,
+} = require('../utils/studentAccess');
 const { resolveStudentSubmissionAttachments } = require('../utils/studentSubmission');
 const {
   attachSubmissionAttachmentsToRowsAsync,
@@ -35,9 +39,9 @@ const getAssignments = async (req, res) => {  try {
           s.file_url AS submission_url
          FROM assignments a
          LEFT JOIN submissions s ON a.id = s.assignment_id AND s.student_id = ?
-         WHERE a.class_id = ?${studentVisibilityClause('a')}
+         WHERE a.class_id = ?${studentVisibilityClause('a')}${studentAccessClause('a', 'assignment')}
          ORDER BY a.created_at DESC`,
-        [req.user.id, classId]
+        [req.user.id, classId, req.user.id]
       );
       return res.json(
         await enrichRowsWithSubmissionAttachments(
@@ -48,7 +52,8 @@ const getAssignments = async (req, res) => {  try {
     }
 
     let query = `
-      SELECT a.*, COUNT(s.id) AS submission_count
+      SELECT a.*, COUNT(s.id) AS submission_count,
+        ${allowedStudentCountSubquery('assignment', 'a')} AS allowed_student_count
       FROM assignments a
       LEFT JOIN submissions s ON a.id = s.assignment_id`;
     const params = [];
@@ -220,6 +225,9 @@ const uploadSubmission = async (req, res) => {
     if (req.user.role === 'student' && !isVisibleToStudent(assignmentRows[0])) {
       return res.status(403).json({ message: 'Bài tập chưa được mở cho học sinh' });
     }
+    if (req.user.role === 'student' && !(await isStudentAllowed(pool, 'assignment', assignmentRows[0], req.user.id))) {
+      return res.status(403).json({ message: 'Bạn không được phép làm bài tập này' });
+    }
 
     let attachments;
     try {
@@ -387,6 +395,102 @@ const setAssignmentVisibility = async (req, res) => {
   }
 };
 
+const getAssignmentStudentAccess = async (req, res) => {
+  try {
+    const classId = await getAssignmentClassId(req.params.id);
+    if (!classId) {
+      return res.status(404).json({ message: 'Không tìm thấy bài tập' });
+    }
+    if (!(await assertClassAccess(req.user, classId, res, { manage: true }))) return;
+
+    const [assignmentRows] = await pool.query(
+      'SELECT id, student_access_mode FROM assignments WHERE id = ?',
+      [req.params.id],
+    );
+    if (!assignmentRows.length) {
+      return res.status(404).json({ message: 'Không tìm thấy bài tập' });
+    }
+
+    const allowedIds = await getAllowedStudentIds(pool, 'assignment', req.params.id);
+    const allowedSet = new Set(allowedIds.map(Number));
+
+    const [students] = await pool.query(
+      `SELECT u.id, u.fullname, u.code
+       FROM class_members cm
+       JOIN users u ON cm.user_id = u.id
+       WHERE cm.class_id = ? AND u.role = 'student'
+       ORDER BY u.fullname`,
+      [classId],
+    );
+
+    res.json({
+      mode: assignmentRows[0].student_access_mode || 'all',
+      students: students.map((s) => ({
+        ...s,
+        selected: allowedSet.has(Number(s.id)),
+      })),
+    });
+  } catch (err) {
+    res.status(500).json({ message: 'Lỗi hệ thống', error: err.message });
+  }
+};
+
+const setAssignmentStudentAccess = async (req, res) => {
+  const conn = await pool.getConnection();
+  try {
+    const classId = await getAssignmentClassId(req.params.id);
+    if (!classId) {
+      return res.status(404).json({ message: 'Không tìm thấy bài tập' });
+    }
+    if (!(await assertClassAccess(req.user, classId, res, { manage: true }))) return;
+
+    const mode = parseStudentAccessMode(req.body.mode);
+    let studentIds = Array.isArray(req.body.student_ids)
+      ? req.body.student_ids.map((id) => Number(id)).filter(Boolean)
+      : [];
+
+    if (mode === 'selected') {
+      if (studentIds.length === 0) {
+        return res.status(400).json({ message: 'Vui lòng chọn ít nhất một học sinh' });
+      }
+      const placeholders = studentIds.map(() => '?').join(',');
+      const [validStudents] = await conn.query(
+        `SELECT u.id FROM class_members cm
+         JOIN users u ON cm.user_id = u.id
+         WHERE cm.class_id = ? AND u.role = 'student' AND u.id IN (${placeholders})`,
+        [classId, ...studentIds],
+      );
+      studentIds = validStudents.map((row) => row.id);
+      if (studentIds.length === 0) {
+        return res.status(400).json({ message: 'Không có học sinh hợp lệ trong lớp' });
+      }
+    } else {
+      studentIds = [];
+    }
+
+    await conn.beginTransaction();
+    await conn.query(
+      'UPDATE assignments SET student_access_mode = ? WHERE id = ?',
+      [mode, req.params.id],
+    );
+    await syncAllowedStudents(conn, 'assignment', req.params.id, studentIds);
+    await conn.commit();
+
+    res.json({
+      message: mode === 'selected'
+        ? `Đã giới hạn ${studentIds.length} học sinh được làm bài`
+        : 'Tất cả học sinh trong lớp đều được làm bài',
+      mode,
+      student_ids: studentIds,
+    });
+  } catch (err) {
+    await conn.rollback();
+    res.status(500).json({ message: 'Lỗi hệ thống', error: err.message });
+  } finally {
+    conn.release();
+  }
+};
+
 module.exports = {
   getAssignments,
   createAssignment,
@@ -397,4 +501,6 @@ module.exports = {
   gradeSubmission,
   deleteSubmission,
   setAssignmentVisibility,
+  getAssignmentStudentAccess,
+  setAssignmentStudentAccess,
 };

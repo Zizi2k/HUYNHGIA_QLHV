@@ -6,6 +6,10 @@ const { teachingStaffRoleSql } = require('../utils/teachingStaff');
 const { parseQuizDocx, generateQuizSampleDocx } = require('../utils/quizDocxParser');
 const { parseQuizXlsx, generateQuizSampleXlsx } = require('../utils/quizXlsxParser');
 const { studentVisibilityClause, parseVisibilityFields, isVisibleToStudent } = require('../utils/contentVisibility');
+const {
+  studentAccessClause, allowedStudentCountSubquery, isStudentAllowed,
+  syncAllowedStudents, getAllowedStudentIds, parseStudentAccessMode,
+} = require('../utils/studentAccess');
 const { resolveStudentSubmissionAttachments } = require('../utils/studentSubmission');
 const { getUploadedFiles } = require('../utils/fileStorage');
 const {
@@ -60,9 +64,9 @@ const getQuizzes = async (req, res) => {
           (SELECT COUNT(*) FROM quiz_answers qa WHERE qa.submission_id = qs.id) AS answer_count
          FROM quizzes q
          LEFT JOIN quiz_submissions qs ON q.id = qs.quiz_id AND qs.student_id = ?
-         WHERE q.class_id = ?${studentVisibilityClause('q')}
+         WHERE q.class_id = ?${studentVisibilityClause('q')}${studentAccessClause('q', 'quiz')}
          ORDER BY q.created_at DESC`,
-        [req.user.id, classId]
+        [req.user.id, classId, req.user.id]
       );
       return res.json(
         await enrichRowsWithSubmissionAttachments(
@@ -74,7 +78,8 @@ const getQuizzes = async (req, res) => {
 
     let query = `
       SELECT q.*, COUNT(DISTINCT qs.id) AS submission_count,
-        COUNT(DISTINCT qu.id) AS question_count
+        COUNT(DISTINCT qu.id) AS question_count,
+        ${allowedStudentCountSubquery('quiz', 'q')} AS allowed_student_count
       FROM quizzes q
       LEFT JOIN quiz_submissions qs ON q.id = qs.quiz_id
       LEFT JOIN questions qu ON q.id = qu.quiz_id`;
@@ -109,6 +114,9 @@ const getQuizById = async (req, res) => {
 
     if (req.user.role === 'student' && !isVisibleToStudent(quizzes[0])) {
       return res.status(404).json({ message: 'Không tìm thấy bài kiểm tra' });
+    }
+    if (req.user.role === 'student' && !(await isStudentAllowed(pool, 'quiz', quizzes[0], req.user.id))) {
+      return res.status(403).json({ message: 'Bạn không được phép làm bài kiểm tra này' });
     }
 
     const isStudent = req.user.role === 'student';
@@ -362,6 +370,9 @@ const submitQuiz = async (req, res) => {
     if (req.user.role === 'student' && !isVisibleToStudent(quizRows[0])) {
       return res.status(403).json({ message: 'Bài kiểm tra chưa được mở cho học sinh' });
     }
+    if (req.user.role === 'student' && !(await isStudentAllowed(pool, 'quiz', quizRows[0], req.user.id))) {
+      return res.status(403).json({ message: 'Bạn không được phép làm bài kiểm tra này' });
+    }
 
     const [existing] = await conn.query(
       `SELECT qs.id, qs.score, qs.file_url,
@@ -537,6 +548,9 @@ const submitQuizAttachment = async (req, res) => {
     }
     if (!isVisibleToStudent(quizRows[0])) {
       return res.status(403).json({ message: 'Bài kiểm tra chưa được mở cho học sinh' });
+    }
+    if (!(await isStudentAllowed(pool, 'quiz', quizRows[0], req.user.id))) {
+      return res.status(403).json({ message: 'Bạn không được phép làm bài kiểm tra này' });
     }
 
     let attachments;
@@ -732,6 +746,102 @@ const setQuizShowResults = async (req, res) => {
   }
 };
 
+const getQuizStudentAccess = async (req, res) => {
+  try {
+    const classId = await getQuizClassId(req.params.id);
+    if (!classId) {
+      return res.status(404).json({ message: 'Không tìm thấy bài kiểm tra' });
+    }
+    if (!(await assertClassAccess(req.user, classId, res, { manage: true }))) return;
+
+    const [quizRows] = await pool.query(
+      'SELECT id, student_access_mode FROM quizzes WHERE id = ?',
+      [req.params.id],
+    );
+    if (!quizRows.length) {
+      return res.status(404).json({ message: 'Không tìm thấy bài kiểm tra' });
+    }
+
+    const allowedIds = await getAllowedStudentIds(pool, 'quiz', req.params.id);
+    const allowedSet = new Set(allowedIds.map(Number));
+
+    const [students] = await pool.query(
+      `SELECT u.id, u.fullname, u.code
+       FROM class_members cm
+       JOIN users u ON cm.user_id = u.id
+       WHERE cm.class_id = ? AND u.role = 'student'
+       ORDER BY u.fullname`,
+      [classId],
+    );
+
+    res.json({
+      mode: quizRows[0].student_access_mode || 'all',
+      students: students.map((s) => ({
+        ...s,
+        selected: allowedSet.has(Number(s.id)),
+      })),
+    });
+  } catch (err) {
+    res.status(500).json({ message: 'Lỗi hệ thống', error: err.message });
+  }
+};
+
+const setQuizStudentAccess = async (req, res) => {
+  const conn = await pool.getConnection();
+  try {
+    const classId = await getQuizClassId(req.params.id);
+    if (!classId) {
+      return res.status(404).json({ message: 'Không tìm thấy bài kiểm tra' });
+    }
+    if (!(await assertClassAccess(req.user, classId, res, { manage: true }))) return;
+
+    const mode = parseStudentAccessMode(req.body.mode);
+    let studentIds = Array.isArray(req.body.student_ids)
+      ? req.body.student_ids.map((id) => Number(id)).filter(Boolean)
+      : [];
+
+    if (mode === 'selected') {
+      if (studentIds.length === 0) {
+        return res.status(400).json({ message: 'Vui lòng chọn ít nhất một học sinh' });
+      }
+      const placeholders = studentIds.map(() => '?').join(',');
+      const [validStudents] = await conn.query(
+        `SELECT u.id FROM class_members cm
+         JOIN users u ON cm.user_id = u.id
+         WHERE cm.class_id = ? AND u.role = 'student' AND u.id IN (${placeholders})`,
+        [classId, ...studentIds],
+      );
+      studentIds = validStudents.map((row) => row.id);
+      if (studentIds.length === 0) {
+        return res.status(400).json({ message: 'Không có học sinh hợp lệ trong lớp' });
+      }
+    } else {
+      studentIds = [];
+    }
+
+    await conn.beginTransaction();
+    await conn.query(
+      'UPDATE quizzes SET student_access_mode = ? WHERE id = ?',
+      [mode, req.params.id],
+    );
+    await syncAllowedStudents(conn, 'quiz', req.params.id, studentIds);
+    await conn.commit();
+
+    res.json({
+      message: mode === 'selected'
+        ? `Đã giới hạn ${studentIds.length} học sinh được làm bài`
+        : 'Tất cả học sinh trong lớp đều được làm bài',
+      mode,
+      student_ids: studentIds,
+    });
+  } catch (err) {
+    await conn.rollback();
+    res.status(500).json({ message: 'Lỗi hệ thống', error: err.message });
+  } finally {
+    conn.release();
+  }
+};
+
 module.exports = {
   getQuizzes,
   getQuizById,
@@ -747,4 +857,6 @@ module.exports = {
   getQuizImportTemplate,
   setQuizVisibility,
   setQuizShowResults,
+  getQuizStudentAccess,
+  setQuizStudentAccess,
 };

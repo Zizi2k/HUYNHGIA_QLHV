@@ -419,6 +419,36 @@ async function ensureSchema() {
     if (err.code !== 'ER_DUP_FIELDNAME') throw err;
   }
 
+  for (const table of ['assignments', 'quizzes']) {
+    try {
+      await pool.query(
+        `ALTER TABLE ${table} ADD COLUMN student_access_mode ENUM('all', 'selected') NOT NULL DEFAULT 'all'`
+      );
+    } catch (err) {
+      if (err.code !== 'ER_DUP_FIELDNAME') throw err;
+    }
+  }
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS assignment_allowed_students (
+      assignment_id INT NOT NULL,
+      student_id INT NOT NULL,
+      PRIMARY KEY (assignment_id, student_id),
+      FOREIGN KEY (assignment_id) REFERENCES assignments(id) ON DELETE CASCADE,
+      FOREIGN KEY (student_id) REFERENCES users(id) ON DELETE CASCADE
+    )
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS quiz_allowed_students (
+      quiz_id INT NOT NULL,
+      student_id INT NOT NULL,
+      PRIMARY KEY (quiz_id, student_id),
+      FOREIGN KEY (quiz_id) REFERENCES quizzes(id) ON DELETE CASCADE,
+      FOREIGN KEY (student_id) REFERENCES users(id) ON DELETE CASCADE
+    )
+  `);
+
   } catch (err) {
     console.warn('ensureSchema:', err.message);
   }

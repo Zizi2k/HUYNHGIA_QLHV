@@ -15,6 +15,7 @@ import {
 } from '../../utils/attachmentHelpers';
 import StudentWorkSubmission from './StudentWorkSubmission';
 import ShareContentModal from './ShareContentModal';
+import StudentAccessModal from './StudentAccessModal';
 import AttachmentManager from '../common/AttachmentManager';
 import AttachmentList from '../common/AttachmentList';
 import ContentAttachmentPreview from '../common/ContentAttachmentPreview';
@@ -39,6 +40,7 @@ export default function ClassAssignmentsTab({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [shareTarget, setShareTarget] = useState(null);
+  const [accessTarget, setAccessTarget] = useState(null);
 
   const openCreate = () => {
     setEditingId(null);
@@ -291,6 +293,9 @@ export default function ClassAssignmentsTab({
                     {isTeacher && (
                       <Badge bg="secondary">{a.submission_count || 0} bài nộp</Badge>
                     )}
+                    {isTeacher && a.student_access_mode === 'selected' && (
+                      <Badge bg="info">{a.allowed_student_count || 0} HS được làm</Badge>
+                    )}
                     {isStudent && a.submission_id && (
                       <Badge bg="success">Đã nộp</Badge>
                     )}
@@ -319,6 +324,14 @@ export default function ClassAssignmentsTab({
                     </Button>
                     <Button variant="outline-primary" size="sm" onClick={() => openEdit(a)}>
                       <i className="bi bi-pencil" />
+                    </Button>
+                    <Button
+                      variant="outline-info"
+                      size="sm"
+                      title="Phân quyền học sinh"
+                      onClick={() => setAccessTarget({ id: a.id, title: a.title })}
+                    >
+                      <i className="bi bi-people" />
                     </Button>
                     <Button
                       variant="outline-secondary"
@@ -508,6 +521,15 @@ export default function ClassAssignmentsTab({
         contentTitle={shareTarget?.title}
         sourceClassId={classId}
         onShare={handleShare}
+      />
+
+      <StudentAccessModal
+        show={!!accessTarget}
+        onHide={() => setAccessTarget(null)}
+        contentType="assignment"
+        contentId={accessTarget?.id}
+        contentTitle={accessTarget?.title}
+        onSaved={onUpdated}
       />
     </>
   );

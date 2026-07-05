@@ -48,8 +48,20 @@ CREATE TABLE quizzes (
   class_id INT NOT NULL,
   title VARCHAR(255) NOT NULL,
   time_limit INT DEFAULT 30,
+  visible_from DATETIME NULL,
+  is_hidden TINYINT(1) NOT NULL DEFAULT 0,
+  show_results TINYINT(1) NOT NULL DEFAULT 0,
+  student_access_mode ENUM('all', 'selected') NOT NULL DEFAULT 'all',
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (class_id) REFERENCES classes(id) ON DELETE CASCADE
+);
+
+CREATE TABLE quiz_allowed_students (
+  quiz_id INT NOT NULL,
+  student_id INT NOT NULL,
+  PRIMARY KEY (quiz_id, student_id),
+  FOREIGN KEY (quiz_id) REFERENCES quizzes(id) ON DELETE CASCADE,
+  FOREIGN KEY (student_id) REFERENCES users(id) ON DELETE CASCADE
 );
 
 CREATE TABLE questions (
@@ -91,8 +103,19 @@ CREATE TABLE assignments (
   file_url TEXT,
   file_type VARCHAR(50),
   deadline DATETIME,
+  visible_from DATETIME NULL,
+  is_hidden TINYINT(1) NOT NULL DEFAULT 0,
+  student_access_mode ENUM('all', 'selected') NOT NULL DEFAULT 'all',
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (class_id) REFERENCES classes(id) ON DELETE CASCADE
+);
+
+CREATE TABLE assignment_allowed_students (
+  assignment_id INT NOT NULL,
+  student_id INT NOT NULL,
+  PRIMARY KEY (assignment_id, student_id),
+  FOREIGN KEY (assignment_id) REFERENCES assignments(id) ON DELETE CASCADE,
+  FOREIGN KEY (student_id) REFERENCES users(id) ON DELETE CASCADE
 );
 
 CREATE TABLE submissions (

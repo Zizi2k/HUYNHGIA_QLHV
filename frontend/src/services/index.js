@@ -61,6 +61,8 @@ export const assignmentService = {
   grade: (id, data) => api.put(`/assignments/submissions/${id}/grade`, data),
   deleteSubmission: (id) => api.delete(`/assignments/submissions/${id}`),
   setVisibility: (id, data) => api.patch(`/assignments/${id}/visibility`, data),
+  getStudentAccess: (id) => api.get(`/assignments/${id}/student-access`),
+  setStudentAccess: (id, data) => api.put(`/assignments/${id}/student-access`, data),
   share: (id, targetClassIds) => api.post(`/assignments/${id}/share`, { target_class_ids: targetClassIds }),
 };
 
@@ -93,6 +95,8 @@ export const quizService = {
   }),
   setVisibility: (id, data) => api.patch(`/quizzes/${id}/visibility`, data),
   setShowResults: (id, data) => api.patch(`/quizzes/${id}/show-results`, data),
+  getStudentAccess: (id) => api.get(`/quizzes/${id}/student-access`),
+  setStudentAccess: (id, data) => api.put(`/quizzes/${id}/student-access`, data),
   share: (id, targetClassIds) => api.post(`/quizzes/${id}/share`, { target_class_ids: targetClassIds }),
 };
 
