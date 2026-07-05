@@ -1,38 +1,54 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Card, Form, Button, Spinner, Alert, Badge } from 'react-bootstrap';
 import { quizService } from '../services';
 import { useAuth } from '../context/AuthContext';
 
-function draftKey(userId, quizId) {
-  return `quiz-draft-${userId || 'anon'}-${quizId}`;
+function sessionKey(userId, quizId) {
+  return `quiz-session-${userId || 'anon'}-${quizId}`;
 }
 
-function loadDraft(userId, quizId) {
+function loadSession(userId, quizId) {
   try {
-    const raw = localStorage.getItem(draftKey(userId, quizId));
-    if (!raw) return {};
+    const raw = localStorage.getItem(sessionKey(userId, quizId));
+    if (!raw) return null;
     const parsed = JSON.parse(raw);
-    return parsed && typeof parsed === 'object' ? parsed : {};
+    if (!parsed || typeof parsed !== 'object') return null;
+    return {
+      answers: parsed.answers && typeof parsed.answers === 'object' ? parsed.answers : {},
+      startedAt: Number(parsed.startedAt) || null,
+    };
   } catch {
-    return {};
+    return null;
   }
 }
 
-function saveDraft(userId, quizId, answers) {
+function saveSession(userId, quizId, session) {
   try {
-    localStorage.setItem(draftKey(userId, quizId), JSON.stringify(answers));
+    localStorage.setItem(sessionKey(userId, quizId), JSON.stringify(session));
   } catch {
     // ignore quota errors
   }
 }
 
-function clearDraft(userId, quizId) {
+function clearSession(userId, quizId) {
   try {
-    localStorage.removeItem(draftKey(userId, quizId));
+    localStorage.removeItem(sessionKey(userId, quizId));
+    localStorage.removeItem(`quiz-draft-${userId || 'anon'}-${quizId}`);
   } catch {
     // ignore
   }
+}
+
+function formatCountdown(totalSeconds) {
+  const safe = Math.max(0, totalSeconds);
+  const h = Math.floor(safe / 3600);
+  const m = Math.floor((safe % 3600) / 60);
+  const s = safe % 60;
+  if (h > 0) {
+    return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+  }
+  return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
 }
 
 function ReviewList({ review }) {
@@ -83,15 +99,59 @@ export default function QuizPage() {
   const { user } = useAuth();
   const [quiz, setQuiz] = useState(null);
   const [answers, setAnswers] = useState({});
+  const [startedAt, setStartedAt] = useState(null);
+  const [remainingSeconds, setRemainingSeconds] = useState(null);
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [draftRestored, setDraftRestored] = useState(false);
+  const [autoSubmitted, setAutoSubmitted] = useState(false);
+  const answersRef = useRef({});
+  const submittingRef = useRef(false);
+  const resultRef = useRef(null);
+  const autoSubmitTriedRef = useRef(false);
 
   useEffect(() => {
+    answersRef.current = answers;
+  }, [answers]);
+
+  useEffect(() => {
+    resultRef.current = result;
+  }, [result]);
+
+  const submitAnswers = useCallback(async (currentAnswers, { auto = false } = {}) => {
+    if (submittingRef.current || resultRef.current) return;
+    submittingRef.current = true;
+    setSubmitting(true);
+    setError('');
+    if (auto) setAutoSubmitted(true);
+    try {
+      const answerList = Object.entries(currentAnswers || {}).map(([questionId, selected]) => ({
+        question_id: parseInt(questionId, 10),
+        selected_answer: selected,
+      }));
+      const res = await quizService.submit({ quiz_id: parseInt(id, 10), answers: answerList });
+      clearSession(user?.id, id);
+      setResult({
+        ...res.data,
+        alreadyDone: false,
+        autoSubmitted: auto,
+      });
+    } catch (err) {
+      setError(err.response?.data?.message || (auto ? 'Hết giờ nhưng không thể nộp bài tự động' : 'Không thể nộp bài'));
+      submittingRef.current = false;
+      if (auto) autoSubmitTriedRef.current = false;
+    } finally {
+      setSubmitting(false);
+    }
+  }, [id, user?.id]);
+
+  useEffect(() => {
+    let cancelled = false;
     quizService.getById(id)
-      .then((res) => {
+      .then(async (res) => {
+        if (cancelled) return;
         setQuiz(res.data);
         if (res.data.mySubmission) {
           const sub = res.data.mySubmission;
@@ -112,51 +172,93 @@ export default function QuizPage() {
               review: sub.review || null,
             });
           }
-          clearDraft(user?.id, id);
+          clearSession(user?.id, id);
+          return;
+        }
+
+        const limitMinutes = Number(res.data.time_limit) || 30;
+        const limitMs = limitMinutes * 60 * 1000;
+        const session = loadSession(user?.id, id);
+        const now = Date.now();
+        let start = session?.startedAt;
+        if (!start || Number.isNaN(start)) start = now;
+
+        const restoredAnswers = session?.answers || {};
+        setAnswers(restoredAnswers);
+        answersRef.current = restoredAnswers;
+        setStartedAt(start);
+
+        if (session?.answers && Object.keys(session.answers).length > 0) {
+          setDraftRestored(true);
+        }
+
+        const elapsed = now - start;
+        if (elapsed >= limitMs) {
+          setRemainingSeconds(0);
+          autoSubmitTriedRef.current = true;
+          await submitAnswers(restoredAnswers, { auto: true });
         } else {
-          const draft = loadDraft(user?.id, id);
-          if (Object.keys(draft).length > 0) {
-            setAnswers(draft);
-            setDraftRestored(true);
-          }
+          setRemainingSeconds(Math.ceil((limitMs - elapsed) / 1000));
+          saveSession(user?.id, id, {
+            answers: restoredAnswers,
+            startedAt: start,
+          });
         }
       })
-      .finally(() => setLoading(false));
-  }, [id, user?.id]);
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    return () => { cancelled = true; };
+  }, [id, user?.id, submitAnswers]);
+
+  useEffect(() => {
+    if (!startedAt || result || loading) return undefined;
+    const limitMinutes = Number(quiz?.time_limit) || 30;
+    const limitMs = limitMinutes * 60 * 1000;
+
+    const tick = () => {
+      const leftMs = startedAt + limitMs - Date.now();
+      const leftSec = Math.max(0, Math.ceil(leftMs / 1000));
+      setRemainingSeconds(leftSec);
+      if (leftSec <= 0 && !autoSubmitTriedRef.current) {
+        autoSubmitTriedRef.current = true;
+        submitAnswers(answersRef.current, { auto: true });
+      }
+    };
+
+    tick();
+    const timer = setInterval(tick, 1000);
+    return () => clearInterval(timer);
+  }, [startedAt, quiz?.time_limit, result, loading, submitAnswers]);
 
   const updateAnswer = useCallback((questionId, selected) => {
     setAnswers((prev) => {
       const next = { ...prev, [questionId]: selected };
-      saveDraft(user?.id, id, next);
+      answersRef.current = next;
+      saveSession(user?.id, id, {
+        answers: next,
+        startedAt: startedAt || Date.now(),
+      });
       return next;
     });
     setDraftRestored(false);
-  }, [user?.id, id]);
+  }, [user?.id, id, startedAt]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setSubmitting(true);
-    setError('');
-    try {
-      const answerList = Object.entries(answers).map(([questionId, selected]) => ({
-        question_id: parseInt(questionId, 10),
-        selected_answer: selected,
-      }));
-      const res = await quizService.submit({ quiz_id: parseInt(id, 10), answers: answerList });
-      clearDraft(user?.id, id);
-      setResult({
-        ...res.data,
-        alreadyDone: false,
-      });
-    } catch (err) {
-      setError(err.response?.data?.message || 'Không thể nộp bài');
-    } finally {
-      setSubmitting(false);
-    }
+    await submitAnswers(answersRef.current, { auto: false });
   };
 
-  if (loading) {
-    return <div className="page-container text-center py-5"><Spinner animation="border" /></div>;
+  if (loading || (submitting && !result && autoSubmitted)) {
+    return (
+      <div className="page-container text-center py-5">
+        <Spinner animation="border" />
+        {autoSubmitted && (
+          <p className="text-muted mt-3 mb-0">Hết giờ — đang nộp bài tự động...</p>
+        )}
+      </div>
+    );
   }
 
   if (result) {
@@ -170,6 +272,11 @@ export default function QuizPage() {
               ? (result.pendingGrade ? 'Bạn đã nộp bài kiểm tra' : 'Kết quả bài kiểm tra')
               : (result.alreadyDone ? 'Bạn đã làm bài này' : 'Kết quả bài kiểm tra')}
           </h3>
+          {(result.autoSubmitted || autoSubmitted) && (
+            <Alert variant="warning" className="mt-3 mb-0">
+              Hết thời gian — hệ thống đã tự động nộp bài.
+            </Alert>
+          )}
           {result.pendingGrade ? (
             <p className="text-muted my-3">Giáo viên sẽ chấm điểm và thông báo sau.</p>
           ) : (
@@ -193,20 +300,42 @@ export default function QuizPage() {
 
   const answeredCount = Object.keys(answers).length;
   const totalQuestions = quiz?.questions?.length || 0;
+  const urgent = remainingSeconds != null && remainingSeconds <= 60;
+  const warning = remainingSeconds != null && remainingSeconds <= 300 && !urgent;
 
   return (
     <div className="page-container page-container-narrow">
-      <h2 className="mb-2 text-break">{quiz?.title}</h2>
-      <p className="text-muted small mb-3">
-        Đã chọn {answeredCount}/{totalQuestions} câu
-        {draftRestored && (
-          <span className="text-success ms-2">
-            <i className="bi bi-arrow-counterclockwise me-1" />
-            Đã khôi phục bài làm dang dở
-          </span>
-        )}
-      </p>
+      <div
+        className={`quiz-timer-bar sticky-top mb-3 p-3 rounded shadow-sm d-flex flex-wrap justify-content-between align-items-center gap-2 ${
+          urgent ? 'bg-danger text-white' : warning ? 'bg-warning-subtle' : 'bg-primary-subtle'
+        }`}
+        style={{ zIndex: 1020, top: 64 }}
+      >
+        <div>
+          <div className="fw-semibold text-break">{quiz?.title}</div>
+          <div className={`small ${urgent ? 'text-white-50' : 'text-muted'}`}>
+            Đã chọn {answeredCount}/{totalQuestions} câu
+            {draftRestored && (
+              <span className={`ms-2 ${urgent ? 'text-white' : 'text-success'}`}>
+                <i className="bi bi-arrow-counterclockwise me-1" />
+                Đã khôi phục bài làm dang dở
+              </span>
+            )}
+          </div>
+        </div>
+        <div className="text-end">
+          <div className="small opacity-75">
+            <i className="bi bi-clock me-1" />
+            Thời gian còn lại
+          </div>
+          <div className="fs-3 fw-bold font-monospace lh-1">
+            {remainingSeconds == null ? '—' : formatCountdown(remainingSeconds)}
+          </div>
+        </div>
+      </div>
+
       {error && <Alert variant="danger">{error}</Alert>}
+
       <Form onSubmit={handleSubmit}>
         {quiz?.questions?.map((q, idx) => (
           <Card key={q.id} className="mb-3 border-0 shadow-sm">
@@ -222,7 +351,7 @@ export default function QuizPage() {
                   checked={answers[q.id] === opt}
                   onChange={() => updateAnswer(q.id, opt)}
                   className="mb-2 text-break"
-                  required
+                  disabled={submitting}
                 />
               ))}
             </Card.Body>
@@ -231,8 +360,8 @@ export default function QuizPage() {
         <Alert variant="info" className="d-flex align-items-start gap-2">
           <i className="bi bi-info-circle mt-1" />
           <div>
-            <div>Thời gian làm bài: {quiz?.time_limit} phút</div>
-            <div className="small">Câu trả lời được lưu tự động — thoát giữa chừng vẫn làm tiếp được.</div>
+            <div>Thời gian làm bài: {quiz?.time_limit} phút — hết giờ hệ thống tự nộp bài.</div>
+            <div className="small">Câu trả lời được lưu tự động — thoát giữa chừng vẫn làm tiếp được, đồng hồ không reset.</div>
           </div>
         </Alert>
         <Button type="submit" variant="primary" size="lg" className="w-100 w-sm-auto" disabled={submitting}>
