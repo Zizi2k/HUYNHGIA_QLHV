@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import {
   Badge, Spinner, Form, Button, Alert, Row, Col,
 } from 'react-bootstrap';
@@ -8,6 +9,14 @@ import PageHeader from '../components/layout/PageHeader';
 import FilterPanel from '../components/layout/FilterPanel';
 import DataTable from '../components/common/DataTable';
 import AttendanceDetailModal from '../components/attendance/AttendanceDetailModal';
+import { isSuperAdmin } from '../utils/adminScope';
+
+function teacherAccountPath(report) {
+  if (report.teacher_role === 'admin') {
+    return `/admin-staff?user_id=${report.created_by}`;
+  }
+  return `/users?class_id=${report.class_id}&user_id=${report.created_by}`;
+}
 
 function currentMonthValue() {
   const now = new Date();
@@ -83,6 +92,7 @@ export default function AttendancePage() {
   };
 
   const canExport = user?.role === 'admin' || user?.role === 'teacher';
+  const superAdmin = isSuperAdmin(user);
 
   if (loading && reports.length === 0) {
     return <div className="page-container text-center py-5"><Spinner animation="border" /></div>;
@@ -172,13 +182,29 @@ export default function AttendancePage() {
             {reports.map((r) => (
               <tr key={r.id}>
                 <td>{new Date(r.session_date).toLocaleDateString('vi-VN')}</td>
-                <td>{r.class_name}</td>
+                <td>
+                  {superAdmin && r.class_id ? (
+                    <Link to={`/classes/${r.class_id}`} className="dash-class-link">
+                      {r.class_name}
+                    </Link>
+                  ) : (
+                    r.class_name
+                  )}
+                </td>
                 <td><Badge bg="success">{r.present_count || 0}</Badge></td>
                 <td><Badge bg="danger">{r.absent_count || 0}</Badge></td>
                 <td><Badge bg="warning" text="dark">{r.late_count || 0}</Badge></td>
                 <td><Badge bg="info">{r.excused_count || 0}</Badge></td>
                 <td><Badge bg="secondary">{r.dropped_count || 0}</Badge></td>
-                <td className="small">{r.teacher_name}</td>
+                <td className="small">
+                  {superAdmin && r.created_by ? (
+                    <Link to={teacherAccountPath(r)} className="dash-class-link">
+                      {r.teacher_name}
+                    </Link>
+                  ) : (
+                    r.teacher_name
+                  )}
+                </td>
                 <td>
                   <Button variant="outline-primary" size="sm" onClick={() => openDetail(r.id)}>
                     Chi tiết

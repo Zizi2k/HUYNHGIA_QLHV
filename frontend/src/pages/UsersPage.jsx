@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Table, Button, Modal, Form, Spinner, Badge, Alert, Row, Col } from 'react-bootstrap';
-import { Navigate } from 'react-router-dom';
+import { Navigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { userService, classService } from '../services';
 import PageHeader from '../components/layout/PageHeader';
@@ -62,6 +62,7 @@ function UserTableRow({ user, onEdit, onDelete, extraActions, canManage = true }
 
 export default function UsersPage() {
   const { user } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [classes, setClasses] = useState([]);
   const [classSearch, setClassSearch] = useState('');
   const [selectedClassId, setSelectedClassId] = useState('');
@@ -81,6 +82,11 @@ export default function UsersPage() {
       .then((res) => setClasses(res.data))
       .finally(() => setLoadingClasses(false));
   }, []);
+
+  useEffect(() => {
+    const classId = searchParams.get('class_id');
+    if (classId) setSelectedClassId(classId);
+  }, [searchParams]);
 
   const loadUsers = (classId) => {
     if (!classId) {
@@ -106,6 +112,30 @@ export default function UsersPage() {
   useEffect(() => {
     loadUsers(selectedClassId);
   }, [selectedClassId]);
+
+  useEffect(() => {
+    const userId = searchParams.get('user_id');
+    if (!userId || loadingUsers || !selectedClassId) return;
+
+    const target = members.find((m) => String(m.id) === userId)
+      || unassignedTeachers.find((t) => String(t.id) === userId);
+    if (!target) return;
+
+    setEditingId(target.id);
+    setForm({
+      fullname: target.fullname,
+      username: target.username,
+      code: target.code,
+      role: target.role,
+      status: Boolean(target.status),
+    });
+    setError('');
+    setShowModal(true);
+
+    const next = new URLSearchParams(searchParams);
+    next.delete('user_id');
+    setSearchParams(next, { replace: true });
+  }, [loadingUsers, members, unassignedTeachers, selectedClassId, searchParams, setSearchParams]);
 
   const filteredClasses = classes.filter((cls) => {
     const q = classSearch.trim().toLowerCase();

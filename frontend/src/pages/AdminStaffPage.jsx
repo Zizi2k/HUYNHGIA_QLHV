@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import {
   Table, Button, Modal, Form, Spinner, Badge, Alert,
 } from 'react-bootstrap';
-import { Navigate } from 'react-router-dom';
+import { Navigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { userService } from '../services';
 import PageHeader from '../components/layout/PageHeader';
@@ -32,6 +32,7 @@ function scopeBadge(scope) {
 
 export default function AdminStaffPage() {
   const { user } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [admins, setAdmins] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
@@ -51,6 +52,29 @@ export default function AdminStaffPage() {
   useEffect(() => {
     if (isSuperAdmin(user)) loadAdmins();
   }, [user]);
+
+  useEffect(() => {
+    const userId = searchParams.get('user_id');
+    if (!userId || loading || admins.length === 0) return;
+
+    const target = admins.find((a) => String(a.id) === userId);
+    if (!target) return;
+
+    setEditingId(target.id);
+    setForm({
+      fullname: target.fullname,
+      username: target.username,
+      code: target.code,
+      admin_scope: target.admin_scope || 'all',
+      status: Boolean(target.status),
+    });
+    setError('');
+    setShowModal(true);
+
+    const next = new URLSearchParams(searchParams);
+    next.delete('user_id');
+    setSearchParams(next, { replace: true });
+  }, [loading, admins, searchParams, setSearchParams]);
 
   if (!isSuperAdmin(user)) {
     return <Navigate to="/" replace />;

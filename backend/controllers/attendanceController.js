@@ -63,7 +63,7 @@ const getAllReports = async (req, res) => {
   try {
     const { class_id, month } = req.query;
     let query = `
-      SELECT s.*, c.name AS class_name, u.fullname AS teacher_name,
+      SELECT s.*, c.name AS class_name, u.fullname AS teacher_name, u.role AS teacher_role,
         SUM(CASE WHEN r.status = 'present' THEN 1 ELSE 0 END) AS present_count,
         SUM(CASE WHEN r.status = 'absent' THEN 1 ELSE 0 END) AS absent_count,
         SUM(CASE WHEN r.status = 'late' THEN 1 ELSE 0 END) AS late_count,
