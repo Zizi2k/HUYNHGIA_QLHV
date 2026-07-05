@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Table, Button, Modal, Form, Spinner, Badge, Alert, Row, Col } from 'react-bootstrap';
+import { Button, ButtonGroup, Modal, Form, Spinner, Badge, Alert, Row, Col } from 'react-bootstrap';
 import { Navigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { userService, classService } from '../services';
@@ -7,6 +7,7 @@ import PageHeader from '../components/layout/PageHeader';
 import FilterPanel from '../components/layout/FilterPanel';
 import ModuleSection from '../components/layout/ModuleSection';
 import { isSuperAdmin, isScopedAdmin, lockedCodePrefix, scopeLabel } from '../utils/adminScope';
+import { teachingStaffBadge } from '../utils/roles';
 
 const allRoleOptions = [
   { value: 'admin', label: 'Quản trị viên' },
@@ -63,11 +64,14 @@ function UserTableRow({ user, onEdit, onDelete, extraActions, canManage = true }
 export default function UsersPage() {
   const { user } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
+  const [viewMode, setViewMode] = useState('class');
   const [classes, setClasses] = useState([]);
   const [classSearch, setClassSearch] = useState('');
   const [selectedClassId, setSelectedClassId] = useState('');
   const [members, setMembers] = useState([]);
   const [unassignedTeachers, setUnassignedTeachers] = useState([]);
+  const [teachers, setTeachers] = useState([]);
+  const [teacherSearch, setTeacherSearch] = useState('');
   const [loadingClasses, setLoadingClasses] = useState(true);
   const [loadingUsers, setLoadingUsers] = useState(false);
   const [assigningId, setAssigningId] = useState(null);
@@ -86,7 +90,16 @@ export default function UsersPage() {
   useEffect(() => {
     const classId = searchParams.get('class_id');
     if (classId) setSelectedClassId(classId);
+    if (searchParams.get('view') === 'teachers') setViewMode('teachers');
   }, [searchParams]);
+
+  const loadTeachers = () => {
+    setLoadingUsers(true);
+    userService.listTeachers()
+      .then((res) => setTeachers(res.data))
+      .catch(() => setTeachers([]))
+      .finally(() => setLoadingUsers(false));
+  };
 
   const loadUsers = (classId) => {
     if (!classId) {
@@ -110,15 +123,30 @@ export default function UsersPage() {
   };
 
   useEffect(() => {
-    loadUsers(selectedClassId);
-  }, [selectedClassId]);
+    if (viewMode === 'teachers') {
+      loadTeachers();
+    } else {
+      loadUsers(selectedClassId);
+    }
+  }, [viewMode, selectedClassId]);
+
+  const refreshCurrentView = () => {
+    if (viewMode === 'teachers') loadTeachers();
+    else loadUsers(selectedClassId);
+  };
 
   useEffect(() => {
     const userId = searchParams.get('user_id');
-    if (!userId || loadingUsers || !selectedClassId) return;
+    if (!userId || loadingUsers) return;
 
-    const target = members.find((m) => String(m.id) === userId)
-      || unassignedTeachers.find((t) => String(t.id) === userId);
+    let target;
+    if (viewMode === 'teachers') {
+      target = teachers.find((t) => String(t.id) === userId);
+    } else {
+      if (!selectedClassId) return;
+      target = members.find((m) => String(m.id) === userId)
+        || unassignedTeachers.find((t) => String(t.id) === userId);
+    }
     if (!target) return;
 
     setEditingId(target.id);
@@ -135,7 +163,7 @@ export default function UsersPage() {
     const next = new URLSearchParams(searchParams);
     next.delete('user_id');
     setSearchParams(next, { replace: true });
-  }, [loadingUsers, members, unassignedTeachers, selectedClassId, searchParams, setSearchParams]);
+  }, [loadingUsers, members, unassignedTeachers, teachers, selectedClassId, viewMode, searchParams, setSearchParams]);
 
   const filteredClasses = classes.filter((cls) => {
     const q = classSearch.trim().toLowerCase();
@@ -145,9 +173,26 @@ export default function UsersPage() {
       || cls.description?.toLowerCase().includes(q);
   });
 
+  const filteredTeachers = teachers.filter((t) => {
+    const q = teacherSearch.trim().toLowerCase();
+    if (!q) return true;
+    return t.fullname?.toLowerCase().includes(q)
+      || t.username?.toLowerCase().includes(q)
+      || t.code?.toLowerCase().includes(q)
+      || t.class_names?.toLowerCase().includes(q);
+  });
+
+  const switchViewMode = (mode) => {
+    setViewMode(mode);
+    const next = new URLSearchParams(searchParams);
+    if (mode === 'teachers') next.set('view', 'teachers');
+    else next.delete('view');
+    setSearchParams(next, { replace: true });
+  };
+
   const openCreateModal = () => {
     setEditingId(null);
-    setForm(emptyForm);
+    setForm(viewMode === 'teachers' ? { ...emptyForm, role: 'teacher' } : emptyForm);
     setError('');
     setShowModal(true);
   };
@@ -183,7 +228,7 @@ export default function UsersPage() {
         await userService.create(form);
       }
       closeModal();
-      loadUsers(selectedClassId);
+      refreshCurrentView();
     } catch (err) {
       setError(err.response?.data?.message || 'Có lỗi xảy ra');
     } finally {
@@ -194,7 +239,7 @@ export default function UsersPage() {
   const handleDelete = async (id) => {
     if (window.confirm('Xóa người dùng này?')) {
       await userService.delete(id);
-      loadUsers(selectedClassId);
+      refreshCurrentView();
     }
   };
 
@@ -202,7 +247,7 @@ export default function UsersPage() {
     setAssigningId(teacherId);
     try {
       await classService.addTeacher(selectedClassId, teacherId);
-      loadUsers(selectedClassId);
+      refreshCurrentView();
     } catch (err) {
       alert(err.response?.data?.message || 'Không thể thêm giáo viên vào lớp');
     } finally {
@@ -248,7 +293,27 @@ export default function UsersPage() {
         }
       />
 
-      <FilterPanel title="Chọn lớp học">
+      <div className="mb-3">
+        <ButtonGroup>
+          <Button
+            variant={viewMode === 'class' ? 'primary' : 'outline-primary'}
+            size="sm"
+            onClick={() => switchViewMode('class')}
+          >
+            <i className="bi bi-mortarboard me-1" />Theo lớp học
+          </Button>
+          <Button
+            variant={viewMode === 'teachers' ? 'primary' : 'outline-primary'}
+            size="sm"
+            onClick={() => switchViewMode('teachers')}
+          >
+            <i className="bi bi-person-badge me-1" />Giáo viên
+          </Button>
+        </ButtonGroup>
+      </div>
+
+      {viewMode === 'class' ? (
+        <FilterPanel title="Chọn lớp học">
         <Row className="g-2">
           <Col md={5} lg={4}>
             <Form.Control
@@ -275,8 +340,94 @@ export default function UsersPage() {
           </Col>
         </Row>
       </FilterPanel>
+      ) : (
+        <FilterPanel title="Tìm giáo viên">
+          <Row className="g-2">
+            <Col md={5} lg={4}>
+              <Form.Control
+                type="search"
+                placeholder="Tìm theo tên, mã, lớp..."
+                value={teacherSearch}
+                onChange={(e) => setTeacherSearch(e.target.value)}
+              />
+            </Col>
+          </Row>
+        </FilterPanel>
+      )}
 
-      {!selectedClassId ? (
+      {viewMode === 'teachers' ? (
+        loadingUsers ? (
+          <div className="text-center py-5"><Spinner animation="border" /></div>
+        ) : filteredTeachers.length === 0 ? (
+          <Alert variant="light" className="text-center py-4 mb-0">
+            <i className="bi bi-person-badge d-block fs-3 text-muted mb-2" />
+            {teacherSearch
+              ? 'Không tìm thấy giáo viên phù hợp.'
+              : 'Chưa có tài khoản giáo viên. Nhấn "Tạo tài khoản" để thêm mới.'}
+          </Alert>
+        ) : (
+          <ModuleSection
+            title="Danh sách giáo viên"
+            icon="bi-person-badge"
+            count={filteredTeachers.length}
+            flush
+          >
+            <div className="pro-table-wrap">
+              <table className="pro-table">
+                <thead>
+                  <tr>
+                    <th>Họ tên</th>
+                    <th>Tên đăng nhập</th>
+                    <th>Mã</th>
+                    <th>Loại</th>
+                    <th>Lớp đang dạy</th>
+                    <th>Trạng thái</th>
+                    <th style={{ width: 140 }}>Thao tác</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredTeachers.map((t) => {
+                    const badge = teachingStaffBadge(t);
+                    return (
+                      <tr key={t.id}>
+                        <td>{t.fullname}</td>
+                        <td>{t.username}</td>
+                        <td>{t.code}</td>
+                        <td><Badge bg={badge.bg}>{badge.label}</Badge></td>
+                        <td className="text-muted small">
+                          {t.class_names || <span className="fst-italic">Chưa phân lớp</span>}
+                        </td>
+                        <td>
+                          <Badge bg={t.status ? 'success' : 'secondary'}>
+                            {t.status ? 'Hoạt động' : 'Đã khóa'}
+                          </Badge>
+                        </td>
+                        <td>
+                          {canManageUser(t) && (
+                            <>
+                              <Button
+                                variant="outline-primary"
+                                size="sm"
+                                className="me-1"
+                                onClick={() => openEditModal(t)}
+                              >
+                                <i className="bi bi-pencil me-1" />Sửa
+                              </Button>
+                              <Button variant="outline-danger" size="sm" onClick={() => handleDelete(t.id)}>
+                                Xóa
+                              </Button>
+                            </>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </ModuleSection>
+        )
+      ) : !selectedClassId ? (
         <Alert variant="light" className="text-center py-4 mb-0">
           <i className="bi bi-funnel d-block fs-3 text-muted mb-2" />
           Vui lòng chọn lớp học để xem danh sách tài khoản trong lớp.

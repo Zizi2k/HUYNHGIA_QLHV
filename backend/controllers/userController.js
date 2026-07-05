@@ -56,6 +56,28 @@ const listAdmins = async (req, res) => {
   }
 };
 
+const listTeachers = async (req, res) => {
+  try {
+    const scope = getUserScope(req.user);
+
+    const [rows] = await pool.query(
+      `SELECT u.id, u.fullname, u.username, u.code, u.role, u.admin_scope, u.status, u.created_at,
+        GROUP_CONCAT(DISTINCT c.name ORDER BY c.name SEPARATOR ', ') AS class_names
+       FROM users u
+       LEFT JOIN class_members cm ON cm.user_id = u.id
+       LEFT JOIN classes c ON c.id = cm.class_id
+       WHERE ${teachingStaffRoleSql('u')}
+       GROUP BY u.id, u.fullname, u.username, u.code, u.role, u.admin_scope, u.status, u.created_at
+       ORDER BY u.fullname`
+    );
+
+    const scoped = filterTeachingStaffByScope(rows, scope);
+    res.json(scoped);
+  } catch (err) {
+    res.status(500).json({ message: 'Lỗi hệ thống', error: err.message });
+  }
+};
+
 const getUsers = async (req, res) => {
   try {
     const classId = req.query.class_id;
@@ -276,4 +298,4 @@ const deleteUser = async (req, res) => {
   }
 };
 
-module.exports = { listAdmins, getUsers, createUser, updateUser, deleteUser };
+module.exports = { listAdmins, listTeachers, getUsers, createUser, updateUser, deleteUser };

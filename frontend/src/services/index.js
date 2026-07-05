@@ -10,6 +10,7 @@ export const authService = {
 export const userService = {
   getAll: (classId) => api.get('/users', { params: classId ? { class_id: classId } : {} }),
   listAdmins: () => api.get('/users/admins'),
+  listTeachers: () => api.get('/users/teachers'),
   create: (data) => api.post('/users', data),
   update: (id, data) => api.put(`/users/${id}`, data),
   delete: (id) => api.delete(`/users/${id}`),
