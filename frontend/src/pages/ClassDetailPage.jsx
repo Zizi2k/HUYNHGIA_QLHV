@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useSearchParams } from 'react-router-dom';
 import {
   Tab, Card, Button, Form, Modal, Spinner, Badge, ListGroup, Alert,
 } from 'react-bootstrap';
@@ -37,6 +37,7 @@ import { preserveScrollDuring } from '../utils/scrollPreserve';
 
 export default function ClassDetailPage() {
   const { id } = useParams();
+  const [searchParams] = useSearchParams();
   const { user } = useAuth();
   const [classData, setClassData] = useState(null);
   const [lessons, setLessons] = useState([]);
@@ -148,7 +149,8 @@ export default function ClassDetailPage() {
   };
 
   useEffect(() => {
-    setActiveTab('lessons');
+    const tab = searchParams.get('tab') || (searchParams.get('user_id') ? 'members' : 'lessons');
+    setActiveTab(tab);
     loadData();
   }, [id]);
 

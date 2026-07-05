@@ -1,4 +1,5 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import { Modal, Form, Button, Alert, Spinner, InputGroup, ListGroup, Badge,
 } from 'react-bootstrap';
 import { notifyDeleteResult } from '../../utils/deleteHelpers';
@@ -23,7 +24,14 @@ function avatarColor(id) {
   return AVATAR_COLORS[id % AVATAR_COLORS.length];
 }
 
+function studentProfilePath(classId, student, { isAdmin, isTeacher }) {
+  if (isAdmin) return `/users?class_id=${classId}&user_id=${student.id}`;
+  if (isTeacher) return `/classes/${classId}?tab=members&user_id=${student.id}`;
+  return null;
+}
+
 export default function ClassMembersTab({ classId, className, members, isTeacher, isAdmin, isStudent, onUpdated }) {
+  const [searchParams, setSearchParams] = useSearchParams();
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
@@ -46,6 +54,7 @@ export default function ClassMembersTab({ classId, className, members, isTeacher
 
   const students = members?.filter((m) => m.role === 'student') || [];
   const teachers = members?.filter((m) => m.role !== 'student') || [];
+  const canLinkStudentProfile = isAdmin || isTeacher;
 
   const filteredStudents = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -106,6 +115,29 @@ export default function ClassMembersTab({ classId, className, members, isTeacher
     });
     setShowEditModal(true);
   };
+
+  useEffect(() => {
+    if (isAdmin || isStudent) return;
+    const userId = searchParams.get('user_id');
+    if (!userId) return;
+
+    const student = students.find((s) => String(s.id) === userId);
+    if (!student) return;
+
+    setError('');
+    setEditingId(student.id);
+    setForm({
+      code: student.code || '',
+      fullname: student.fullname || '',
+      phone: student.phone || '',
+      zalo: student.zalo || '',
+    });
+    setShowEditModal(true);
+
+    const next = new URLSearchParams(searchParams);
+    next.delete('user_id');
+    setSearchParams(next, { replace: true });
+  }, [students, searchParams, setSearchParams, isAdmin, isStudent]);
 
   const openImportModal = () => {
     setError('');
@@ -482,7 +514,16 @@ export default function ClassMembersTab({ classId, className, members, isTeacher
                 <td>
                   <div className="pro-student-cell">
                     <UserAvatar user={m} size={36} />
-                    <span className="pro-student-name">{m.fullname}</span>
+                    {canLinkStudentProfile ? (
+                      <Link
+                        to={studentProfilePath(classId, m, { isAdmin, isTeacher })}
+                        className="dash-class-link pro-student-name text-decoration-none"
+                      >
+                        {m.fullname}
+                      </Link>
+                    ) : (
+                      <span className="pro-student-name">{m.fullname}</span>
+                    )}
                   </div>
                 </td>
                 {!isStudent && (
