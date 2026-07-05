@@ -14,6 +14,9 @@ export const userService = {
   create: (data) => api.post('/users', data),
   update: (id, data) => api.put(`/users/${id}`, data),
   delete: (id) => api.delete(`/users/${id}`),
+  uploadAvatar: (id, formData) => api.post(`/users/${id}/avatar`, formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  }),
 };
 
 export const classService = {
@@ -68,12 +71,12 @@ export const assignmentService = {
 
 export const quizService = {
   getAll: (classId) => api.get('/quizzes', { params: { class_id: classId } }),
-  getById: (id) => api.get(`/quizzes/${id}`),
+  getById: (id) => api.get(`/quizzes/${id}`, { skipGlobalLogout: true }),
   create: (data) => api.post('/quizzes', data),
   update: (id, data) => api.put(`/quizzes/${id}`, data),
   delete: (id) => api.delete(`/quizzes/${id}`),
   getSubmissions: (quizId) => api.get(`/quizzes/${quizId}/submissions`),
-  submit: (data) => api.post('/quizzes/submit', data),
+  submit: (data) => api.post('/quizzes/submit', data, { skipGlobalLogout: true }),
   submitAttachment: (data) => {
     if (data instanceof FormData) {
       return api.post('/quizzes/submit-attachment', data);

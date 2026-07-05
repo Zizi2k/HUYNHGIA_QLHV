@@ -3,6 +3,7 @@ const { assertClassAccess } = require('../middleware/classAccess');
 const { logAction } = require('../utils/auditLog');
 const { isSuperAdmin, getUserScope, studentCodeMatchesScope } = require('../utils/adminScope');
 const { teachingStaffRoleSql, filterTeachingStaffByScope, resolveTeachingStaffScope, teachingStaffMatchesScope } = require('../utils/teachingStaff');
+const { saveMulterFile } = require('../utils/fileStorage');
 
 function userMatchesBranchScope(userRow, scope) {
   if (!scope) return true;
@@ -61,7 +62,7 @@ const listTeachers = async (req, res) => {
     const scope = getUserScope(req.user);
 
     const [rows] = await pool.query(
-      `SELECT u.id, u.fullname, u.username, u.code, u.role, u.admin_scope, u.status, u.created_at,
+      `SELECT u.id, u.fullname, u.username, u.code, u.role, u.admin_scope, u.status, u.avatar_url, u.created_at,
         GROUP_CONCAT(DISTINCT c.name ORDER BY c.name SEPARATOR ', ') AS class_names
        FROM users u
        LEFT JOIN class_members cm ON cm.user_id = u.id
@@ -92,7 +93,7 @@ const getUsers = async (req, res) => {
     const scope = getUserScope(req.user);
 
     const [members] = await pool.query(
-      `SELECT u.id, u.fullname, u.username, u.code, u.role, u.status, u.created_at
+      `SELECT u.id, u.fullname, u.username, u.code, u.role, u.status, u.avatar_url, u.created_at
        FROM users u
        INNER JOIN class_members cm ON u.id = cm.user_id AND cm.class_id = ?
        ORDER BY u.role DESC, u.fullname`,
@@ -104,7 +105,7 @@ const getUsers = async (req, res) => {
       : members;
 
     const [unassignedTeachers] = await pool.query(
-      `SELECT u.id, u.fullname, u.username, u.code, u.role, u.admin_scope, u.status, u.created_at
+      `SELECT u.id, u.fullname, u.username, u.code, u.role, u.admin_scope, u.status, u.avatar_url, u.created_at
        FROM users u
        WHERE u.status = TRUE
          AND ${teachingStaffRoleSql('u')}
@@ -298,4 +299,49 @@ const deleteUser = async (req, res) => {
   }
 };
 
-module.exports = { listAdmins, listTeachers, getUsers, createUser, updateUser, deleteUser };
+const uploadUserAvatar = async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ message: 'Vui lòng chọn ảnh đại diện' });
+    }
+
+    const [targetRows] = await pool.query(
+      'SELECT id, fullname, role, code, admin_scope FROM users WHERE id = ?',
+      [req.params.id],
+    );
+    if (targetRows.length === 0) {
+      return res.status(404).json({ message: 'Không tìm thấy người dùng' });
+    }
+    const target = targetRows[0];
+
+    if (target.role === 'admin') {
+      return res.status(403).json({ message: 'Không thể đổi ảnh tài khoản quản trị tại đây' });
+    }
+    if (target.role !== 'student' && target.role !== 'teacher') {
+      return res.status(403).json({ message: 'Chỉ hỗ trợ đổi ảnh cho học sinh và giáo viên' });
+    }
+
+    const scopeError = validateScopedUserManagement(req, { targetUser: target });
+    if (scopeError) {
+      return res.status(403).json({ message: scopeError });
+    }
+
+    const saved = await saveMulterFile(req);
+    await pool.query('UPDATE users SET avatar_url = ? WHERE id = ?', [saved.file_url, target.id]);
+
+    await logAction({
+      actorId: req.user.id,
+      action: 'update',
+      resourceType: 'user',
+      resourceId: target.id,
+      resourceLabel: target.fullname,
+      metadata: { avatar_url: saved.file_url },
+    });
+
+    res.json({ message: 'Đã cập nhật ảnh đại diện', avatar_url: saved.file_url });
+  } catch (err) {
+    res.status(500).json({ message: 'Lỗi hệ thống', error: err.message });
+  }
+};
+
+module.exports = { listAdmins, listTeachers, getUsers, createUser, updateUser, deleteUser, uploadUserAvatar };

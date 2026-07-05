@@ -9,6 +9,7 @@ import DataTable, { DataTableEmpty } from '../common/DataTable';
 import AddStudentModal, { emptyStudentFields, emptyTuitionFields } from './AddStudentModal';
 import { teachingStaffBadge } from '../../utils/roles';
 import UserAvatar from '../UserAvatar';
+import AdminAvatarPicker from '../AdminAvatarPicker';
 
 const emptyForm = { ...emptyStudentFields, ...emptyTuitionFields };
 
@@ -38,6 +39,8 @@ export default function ClassMembersTab({ classId, className, members, isTeacher
   const [showTeacherModal, setShowTeacherModal] = useState(false);
   const [form, setForm] = useState(emptyForm);
   const [editingId, setEditingId] = useState(null);
+  const [editingStudent, setEditingStudent] = useState(null);
+  const [teacherAvatarTarget, setTeacherAvatarTarget] = useState(null);
   const [importFile, setImportFile] = useState(null);
   const [availableTeachers, setAvailableTeachers] = useState([]);
   const [selectedTeacherId, setSelectedTeacherId] = useState('');
@@ -107,6 +110,7 @@ export default function ClassMembersTab({ classId, className, members, isTeacher
   const openEditModal = (student) => {
     setError('');
     setEditingId(student.id);
+    setEditingStudent(student);
     setForm({
       code: student.code || '',
       fullname: student.fullname || '',
@@ -126,6 +130,7 @@ export default function ClassMembersTab({ classId, className, members, isTeacher
 
     setError('');
     setEditingId(student.id);
+    setEditingStudent(student);
     setForm({
       code: student.code || '',
       fullname: student.fullname || '',
@@ -403,9 +408,7 @@ export default function ClassMembersTab({ classId, className, members, isTeacher
             {teachers.map((m) => (
               <ListGroup.Item key={m.id} className="d-flex justify-content-between align-items-center py-3">
                 <div className="pro-student-cell">
-                  <span className="pro-avatar" style={{ background: '#3b82f6' }}>
-                    {getInitials(m.fullname)}
-                  </span>
+                  <UserAvatar user={m} size={40} />
                   <div>
                     <div className="pro-student-name">{m.fullname}</div>
                     <div className="text-muted small">{m.username}</div>
@@ -417,14 +420,24 @@ export default function ClassMembersTab({ classId, className, members, isTeacher
                     return <Badge bg={badge.bg} className="px-3 py-2">{badge.label}</Badge>;
                   })()}
                   {isAdmin && (
-                    <Button
-                      variant="light"
-                      size="sm"
-                      title="Xóa khỏi lớp"
-                      onClick={() => handleRemoveTeacher(m.id, m.fullname)}
-                    >
-                      <i className="bi bi-trash text-danger" />
-                    </Button>
+                    <>
+                      <Button
+                        variant="light"
+                        size="sm"
+                        title="Đổi ảnh đại diện"
+                        onClick={() => setTeacherAvatarTarget(m)}
+                      >
+                        <i className="bi bi-camera" />
+                      </Button>
+                      <Button
+                        variant="light"
+                        size="sm"
+                        title="Xóa khỏi lớp"
+                        onClick={() => handleRemoveTeacher(m.id, m.fullname)}
+                      >
+                        <i className="bi bi-trash text-danger" />
+                      </Button>
+                    </>
                   )}
                 </div>
               </ListGroup.Item>
@@ -596,6 +609,13 @@ export default function ClassMembersTab({ classId, className, members, isTeacher
         <Form onSubmit={handleEdit}>
           <Modal.Body>
             {error && <Alert variant="danger" className="py-2">{error}</Alert>}
+            {isAdmin && editingStudent && (
+              <AdminAvatarPicker
+                userId={editingId}
+                user={editingStudent}
+                onUploaded={() => onUpdated?.()}
+              />
+            )}
             {renderStudentForm()}
           </Modal.Body>
           <Modal.Footer>
@@ -710,6 +730,24 @@ export default function ClassMembersTab({ classId, className, members, isTeacher
             </Button>
           </Modal.Footer>
         </Form>
+      </Modal>
+
+      <Modal show={!!teacherAvatarTarget} onHide={() => setTeacherAvatarTarget(null)} centered>
+        <Modal.Header closeButton>
+          <Modal.Title>Ảnh đại diện — {teacherAvatarTarget?.fullname}</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          {teacherAvatarTarget && (
+            <AdminAvatarPicker
+              userId={teacherAvatarTarget.id}
+              user={teacherAvatarTarget}
+              onUploaded={() => {
+                setTeacherAvatarTarget(null);
+                onUpdated?.();
+              }}
+            />
+          )}
+        </Modal.Body>
       </Modal>
     </>
   );

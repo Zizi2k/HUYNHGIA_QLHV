@@ -8,6 +8,7 @@ import FilterPanel from '../components/layout/FilterPanel';
 import ModuleSection from '../components/layout/ModuleSection';
 import { isSuperAdmin, isScopedAdmin, lockedCodePrefix, scopeLabel } from '../utils/adminScope';
 import { teachingStaffBadge } from '../utils/roles';
+import AdminAvatarPicker from '../components/AdminAvatarPicker';
 
 const allRoleOptions = [
   { value: 'admin', label: 'Quản trị viên' },
@@ -77,6 +78,7 @@ export default function UsersPage() {
   const [assigningId, setAssigningId] = useState(null);
   const [showModal, setShowModal] = useState(false);
   const [editingId, setEditingId] = useState(null);
+  const [editingUser, setEditingUser] = useState(null);
   const [form, setForm] = useState(emptyForm);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -150,6 +152,7 @@ export default function UsersPage() {
     if (!target) return;
 
     setEditingId(target.id);
+    setEditingUser(target);
     setForm({
       fullname: target.fullname,
       username: target.username,
@@ -192,6 +195,7 @@ export default function UsersPage() {
 
   const openCreateModal = () => {
     setEditingId(null);
+    setEditingUser(null);
     setForm(viewMode === 'teachers' ? { ...emptyForm, role: 'teacher' } : emptyForm);
     setError('');
     setShowModal(true);
@@ -199,6 +203,7 @@ export default function UsersPage() {
 
   const openEditModal = (user) => {
     setEditingId(user.id);
+    setEditingUser(user);
     setForm({
       fullname: user.fullname,
       username: user.username,
@@ -213,6 +218,7 @@ export default function UsersPage() {
   const closeModal = () => {
     setShowModal(false);
     setEditingId(null);
+    setEditingUser(null);
     setForm(emptyForm);
     setError('');
   };
@@ -545,6 +551,16 @@ export default function UsersPage() {
         <Form onSubmit={handleSubmit}>
           <Modal.Body>
             {error && <div className="alert alert-danger py-2">{error}</div>}
+            {editingId && editingUser && (form.role === 'student' || form.role === 'teacher') && (
+              <AdminAvatarPicker
+                userId={editingId}
+                user={{ ...editingUser, fullname: form.fullname, role: form.role }}
+                onUploaded={(avatarUrl) => {
+                  setEditingUser((prev) => ({ ...prev, avatar_url: avatarUrl }));
+                  refreshCurrentView();
+                }}
+              />
+            )}
             <Form.Group className="mb-3">
               <Form.Label>Họ tên</Form.Label>
               <Form.Control

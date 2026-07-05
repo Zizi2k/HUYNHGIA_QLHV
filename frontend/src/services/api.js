@@ -31,7 +31,7 @@ api.interceptors.response.use(
     const requestUrl = error.config?.url || '';
     const isAuthLogin = requestUrl.includes('/auth/login') || requestUrl.includes('/auth/register');
 
-    if (error.response?.status === 401 && !isAuthLogin) {
+    if (error.response?.status === 401 && !isAuthLogin && !error.config?.skipGlobalLogout) {
       localStorage.removeItem('token');
       localStorage.removeItem('user');
       window.dispatchEvent(new CustomEvent('auth:unauthorized'));

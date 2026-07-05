@@ -107,6 +107,7 @@ export default function QuizPage() {
   const [error, setError] = useState('');
   const [draftRestored, setDraftRestored] = useState(false);
   const [autoSubmitted, setAutoSubmitted] = useState(false);
+  const [sessionExpired, setSessionExpired] = useState(false);
   const answersRef = useRef({});
   const submittingRef = useRef(false);
   const resultRef = useRef(null);
@@ -139,6 +140,12 @@ export default function QuizPage() {
         autoSubmitted: auto,
       });
     } catch (err) {
+      if (err.response?.status === 401) {
+        setSessionExpired(true);
+        setError('Phiên đăng nhập hết hạn. Bài làm đã được lưu trên thiết bị — đăng nhập lại rồi mở lại bài kiểm tra để nộp.');
+        submittingRef.current = true;
+        return;
+      }
       setError(err.response?.data?.message || (auto ? 'Hết giờ nhưng không thể nộp bài tự động' : 'Không thể nộp bài'));
       submittingRef.current = false;
       if (auto) autoSubmitTriedRef.current = false;
@@ -205,6 +212,15 @@ export default function QuizPage() {
           });
         }
       })
+      .catch((err) => {
+        if (cancelled) return;
+        if (err.response?.status === 401) {
+          setSessionExpired(true);
+          setError('Phiên đăng nhập hết hạn. Đăng nhập lại để tiếp tục làm bài.');
+        } else {
+          setError(err.response?.data?.message || 'Không thể tải bài kiểm tra');
+        }
+      })
       .finally(() => {
         if (!cancelled) setLoading(false);
       });
@@ -249,6 +265,24 @@ export default function QuizPage() {
     e.preventDefault();
     await submitAnswers(answersRef.current, { auto: false });
   };
+
+  if (sessionExpired) {
+    return (
+      <div className="page-container page-container-narrow">
+        <Card className="border-0 shadow p-4 text-center">
+          <i className="bi bi-shield-lock text-warning" style={{ fontSize: '3rem' }} />
+          <h4 className="mt-3">Phiên đăng nhập hết hạn</h4>
+          <Alert variant="warning" className="text-start mt-3 mb-0">
+            {error || 'Bài làm của bạn vẫn được lưu trên thiết bị. Đăng nhập lại rồi mở lại bài kiểm tra để nộp.'}
+          </Alert>
+          <div className="d-flex gap-2 justify-content-center mt-4">
+            <Button variant="primary" onClick={() => navigate('/login')}>Đăng nhập lại</Button>
+            <Button variant="outline-secondary" onClick={() => navigate(-1)}>Quay lại</Button>
+          </div>
+        </Card>
+      </div>
+    );
+  }
 
   if (loading || (submitting && !result && autoSubmitted)) {
     return (
@@ -334,7 +368,18 @@ export default function QuizPage() {
         </div>
       </div>
 
-      {error && <Alert variant="danger">{error}</Alert>}
+      {error && !sessionExpired && (
+        <Alert variant={sessionExpired ? 'warning' : 'danger'}>
+          {error}
+          {sessionExpired && (
+            <div className="mt-2">
+              <Button size="sm" variant="primary" onClick={() => navigate('/login')}>
+                Đăng nhập lại
+              </Button>
+            </div>
+          )}
+        </Alert>
+      )}
 
       <Form onSubmit={handleSubmit}>
         {quiz?.questions?.map((q, idx) => (

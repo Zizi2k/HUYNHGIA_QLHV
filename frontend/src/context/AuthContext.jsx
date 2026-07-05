@@ -15,10 +15,12 @@ export function AuthProvider({ children }) {
     if (token) {
       authService.getMe()
         .then((res) => setUser(res.data))
-        .catch(() => {
-          localStorage.removeItem('token');
-          localStorage.removeItem('user');
-          setUser(null);
+        .catch((err) => {
+          if (err.response?.status === 401) {
+            localStorage.removeItem('token');
+            localStorage.removeItem('user');
+            setUser(null);
+          }
         })
         .finally(() => setLoading(false));
     } else {
