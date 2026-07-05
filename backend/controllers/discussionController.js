@@ -7,6 +7,20 @@ async function getDiscussionClassId(discussionId) {
   return rows[0]?.class_id;
 }
 
+async function assertAdminDiscussionAccess(req, res, discussionId) {
+  const classId = await getDiscussionClassId(discussionId);
+  if (!classId) {
+    res.status(404).json({ message: 'Không tìm thấy thảo luận' });
+    return null;
+  }
+  if (!(await assertClassAccess(req.user, classId, res))) return null;
+  if (req.user.role !== 'admin') {
+    res.status(403).json({ message: 'Chỉ quản trị viên mới được sửa hoặc xóa thảo luận' });
+    return null;
+  }
+  return classId;
+}
+
 const getDiscussions = async (req, res) => {
   try {
     if (!(await assertClassAccess(req.user, req.params.classId, res))) return;
@@ -34,14 +48,86 @@ const getDiscussions = async (req, res) => {
 
 const createDiscussion = async (req, res) => {
   try {
-    const { class_id, title, content } = req.body;
+    const { class_id, title } = req.body;
+    const content = String(req.body.content || '').trim();
     if (!(await assertClassAccess(req.user, class_id, res))) return;
 
+    let image_url = null;
+    if (req.file) {
+      const saved = await saveMulterFile(req);
+      image_url = saved?.file_url || null;
+    }
+
+    if (!title?.trim()) {
+      return res.status(400).json({ message: 'Vui lòng nhập tiêu đề' });
+    }
+    if (!content && !image_url) {
+      return res.status(400).json({ message: 'Vui lòng nhập nội dung hoặc đính kèm ảnh' });
+    }
+
     const [result] = await pool.query(
-      'INSERT INTO discussions (class_id, user_id, title, content) VALUES (?, ?, ?, ?)',
-      [class_id, req.user.id, title, content]
+      'INSERT INTO discussions (class_id, user_id, title, content, image_url) VALUES (?, ?, ?, ?, ?)',
+      [class_id, req.user.id, title.trim(), content, image_url]
     );
     res.status(201).json({ message: 'Tạo thảo luận thành công', id: result.insertId });
+  } catch (err) {
+    res.status(500).json({ message: 'Lỗi hệ thống', error: err.message });
+  }
+};
+
+const updateDiscussion = async (req, res) => {
+  try {
+    const discussionId = req.params.discussionId;
+    if (!(await assertAdminDiscussionAccess(req, res, discussionId))) return;
+
+    const [existingRows] = await pool.query(
+      'SELECT id, image_url FROM discussions WHERE id = ?',
+      [discussionId]
+    );
+    if (existingRows.length === 0) {
+      return res.status(404).json({ message: 'Không tìm thấy thảo luận' });
+    }
+
+    const title = String(req.body.title || '').trim();
+    const content = String(req.body.content || '').trim();
+    const removeImage = req.body.remove_image === '1' || req.body.remove_image === true;
+
+    let image_url = existingRows[0].image_url;
+    if (removeImage) image_url = null;
+    if (req.file) {
+      const saved = await saveMulterFile(req);
+      image_url = saved?.file_url || null;
+    }
+
+    if (!title) {
+      return res.status(400).json({ message: 'Vui lòng nhập tiêu đề' });
+    }
+    if (!content && !image_url) {
+      return res.status(400).json({ message: 'Vui lòng nhập nội dung hoặc đính kèm ảnh' });
+    }
+
+    await pool.query(
+      'UPDATE discussions SET title = ?, content = ?, image_url = ? WHERE id = ?',
+      [title, content, image_url, discussionId]
+    );
+
+    res.json({ message: 'Cập nhật thảo luận thành công' });
+  } catch (err) {
+    res.status(500).json({ message: 'Lỗi hệ thống', error: err.message });
+  }
+};
+
+const deleteDiscussion = async (req, res) => {
+  try {
+    const discussionId = req.params.discussionId;
+    if (!(await assertAdminDiscussionAccess(req, res, discussionId))) return;
+
+    const [result] = await pool.query('DELETE FROM discussions WHERE id = ?', [discussionId]);
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ message: 'Không tìm thấy thảo luận' });
+    }
+
+    res.json({ message: 'Đã xóa thảo luận' });
   } catch (err) {
     res.status(500).json({ message: 'Lỗi hệ thống', error: err.message });
   }
@@ -150,5 +236,11 @@ const toggleLike = async (req, res) => {
 };
 
 module.exports = {
-  getDiscussions, createDiscussion, getComments, addComment, toggleLike,
+  getDiscussions,
+  createDiscussion,
+  updateDiscussion,
+  deleteDiscussion,
+  getComments,
+  addComment,
+  toggleLike,
 };

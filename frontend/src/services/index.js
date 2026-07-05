@@ -102,7 +102,19 @@ export const feeDebtService = {
 
 export const discussionService = {
   getByClass: (classId) => api.get(`/discussions/class/${classId}`),
-  create: (data) => api.post('/discussions', data),
+  create: (data) => {
+    const isFormData = typeof FormData !== 'undefined' && data instanceof FormData;
+    return api.post('/discussions', data, isFormData ? {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    } : undefined);
+  },
+  update: (discussionId, data) => {
+    const isFormData = typeof FormData !== 'undefined' && data instanceof FormData;
+    return api.put(`/discussions/${discussionId}`, data, isFormData ? {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    } : undefined);
+  },
+  delete: (discussionId) => api.delete(`/discussions/${discussionId}`),
   getComments: (discussionId) => api.get(`/discussions/${discussionId}/comments`),
   addComment: (discussionId, data) => {
     const isFormData = typeof FormData !== 'undefined' && data instanceof FormData;

@@ -411,6 +411,14 @@ async function ensureSchema() {
     if (err.code !== 'ER_DUP_FIELDNAME') throw err;
   }
 
+  try {
+    await pool.query(
+      'ALTER TABLE discussions ADD COLUMN image_url VARCHAR(500) DEFAULT NULL'
+    );
+  } catch (err) {
+    if (err.code !== 'ER_DUP_FIELDNAME') throw err;
+  }
+
   } catch (err) {
     console.warn('ensureSchema:', err.message);
   }

@@ -435,6 +435,7 @@ export default function ClassDetailPage() {
               classId={id}
               discussions={discussions}
               canCreate
+              isAdmin={isAdmin}
               onUpdated={refreshData}
             />
           </Tab.Pane>
