@@ -8,6 +8,7 @@ function toPublicMember(member, viewer) {
     id: member.id,
     fullname: member.fullname,
     role: member.role,
+    avatar_url: member.avatar_url || null,
   };
 }
 

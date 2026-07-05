@@ -157,7 +157,7 @@ const getClassById = async (req, res) => {
     if (classes.length === 0) return res.status(404).json({ message: 'Không tìm thấy lớp học' });
 
     const [members] = await pool.query(
-      `SELECT u.id, u.fullname, u.username, u.code, u.role, u.phone, u.zalo
+      `SELECT u.id, u.fullname, u.username, u.code, u.role, u.phone, u.zalo, u.avatar_url
        FROM class_members cm JOIN users u ON cm.user_id = u.id
        WHERE cm.class_id = ?`,
       [classId]

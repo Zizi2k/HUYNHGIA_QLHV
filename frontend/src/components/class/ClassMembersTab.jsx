@@ -7,6 +7,7 @@ import { applyTuitionFieldChange } from '../tuition/tuitionDiscountCalc';
 import DataTable, { DataTableEmpty } from '../common/DataTable';
 import AddStudentModal, { emptyStudentFields, emptyTuitionFields } from './AddStudentModal';
 import { teachingStaffBadge } from '../../utils/roles';
+import UserAvatar from '../UserAvatar';
 
 const emptyForm = { ...emptyStudentFields, ...emptyTuitionFields };
 
@@ -480,12 +481,7 @@ export default function ClassMembersTab({ classId, className, members, isTeacher
                 <td><span className="pro-row-num">{idx + 1}</span></td>
                 <td>
                   <div className="pro-student-cell">
-                    <span
-                      className="pro-avatar"
-                      style={{ background: avatarColor(m.id) }}
-                    >
-                      {getInitials(m.fullname)}
-                    </span>
+                    <UserAvatar user={m} size={36} />
                     <span className="pro-student-name">{m.fullname}</span>
                   </div>
                 </td>
