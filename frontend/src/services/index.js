@@ -104,7 +104,12 @@ export const discussionService = {
   getByClass: (classId) => api.get(`/discussions/class/${classId}`),
   create: (data) => api.post('/discussions', data),
   getComments: (discussionId) => api.get(`/discussions/${discussionId}/comments`),
-  addComment: (discussionId, data) => api.post(`/discussions/${discussionId}/comments`, data),
+  addComment: (discussionId, data) => {
+    const isFormData = typeof FormData !== 'undefined' && data instanceof FormData;
+    return api.post(`/discussions/${discussionId}/comments`, data, isFormData ? {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    } : undefined);
+  },
   toggleLike: (discussionId) => api.post(`/discussions/${discussionId}/like`),
 };
 

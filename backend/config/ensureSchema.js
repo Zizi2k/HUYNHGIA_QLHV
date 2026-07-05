@@ -403,6 +403,14 @@ async function ensureSchema() {
     )
   `);
 
+  try {
+    await pool.query(
+      'ALTER TABLE discussion_comments ADD COLUMN image_url VARCHAR(500) DEFAULT NULL'
+    );
+  } catch (err) {
+    if (err.code !== 'ER_DUP_FIELDNAME') throw err;
+  }
+
   } catch (err) {
     console.warn('ensureSchema:', err.message);
   }

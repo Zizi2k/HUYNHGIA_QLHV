@@ -123,6 +123,7 @@ CREATE TABLE discussion_comments (
   discussion_id INT NOT NULL,
   user_id INT NOT NULL,
   content TEXT NOT NULL,
+  image_url VARCHAR(500) DEFAULT NULL,
   parent_id INT DEFAULT NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (discussion_id) REFERENCES discussions(id) ON DELETE CASCADE,

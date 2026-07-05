@@ -22,6 +22,7 @@ import ClassAttendanceTab from '../components/class/ClassAttendanceTab';
 import ClassAssignmentsTab from '../components/class/ClassAssignmentsTab';
 import ClassQuizzesTab from '../components/class/ClassQuizzesTab';
 import ClassOnlineTab from '../components/class/ClassOnlineTab';
+import ClassDiscussionsTab from '../components/class/ClassDiscussionsTab';
 import ShareContentModal from '../components/class/ShareContentModal';
 import AttachmentManager from '../components/common/AttachmentManager';
 import AttachmentList from '../components/common/AttachmentList';
@@ -44,11 +45,9 @@ export default function ClassDetailPage() {
   const [refreshing, setRefreshing] = useState(false);
   const [activeTab, setActiveTab] = useState('lessons');
   const [showLessonModal, setShowLessonModal] = useState(false);
-  const [showDiscussionModal, setShowDiscussionModal] = useState(false);
   const [lessonForm, setLessonForm] = useState({
     title: '', description: '', attachments: emptyAttachmentDraft(),
   });
-  const [discussionForm, setDiscussionForm] = useState({ title: '', content: '' });
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState('');
   const [accessError, setAccessError] = useState('');
@@ -212,14 +211,6 @@ export default function ClassDetailPage() {
         return;
       }
     }
-  };
-
-  const handleCreateDiscussion = async (e) => {
-    e.preventDefault();
-    await discussionService.create({ class_id: parseInt(id), ...discussionForm });
-    setShowDiscussionModal(false);
-    setDiscussionForm({ title: '', content: '' });
-    refreshData();
   };
 
   const handleDeleteLesson = async (lessonId) => {
@@ -430,28 +421,12 @@ export default function ClassDetailPage() {
           </Tab.Pane>
 
           <Tab.Pane eventKey="discussions">
-            <Button className="mb-3" onClick={() => setShowDiscussionModal(true)}>
-              <i className="bi bi-chat-dots me-1" />Tạo thảo luận
-            </Button>
-            {discussions.length === 0 ? (
-              <Alert variant="light">Chưa có thảo luận nào.</Alert>
-            ) : (
-              discussions.map((d) => (
-                <Card key={d.id} className="mb-3 border-0 shadow-sm">
-                  <Card.Body>
-                    <div className="d-flex justify-content-between">
-                      <h5>{d.title}</h5>
-                      <small className="text-muted">{d.fullname}</small>
-                    </div>
-                    <p>{d.content}</p>
-                    <div className="text-muted small">
-                      <i className="bi bi-heart me-1" />{d.like_count}
-                      <i className="bi bi-chat ms-3 me-1" />{d.comment_count}
-                    </div>
-                  </Card.Body>
-                </Card>
-              ))
-            )}
+            <ClassDiscussionsTab
+              classId={id}
+              discussions={discussions}
+              canCreate
+              onUpdated={refreshData}
+            />
           </Tab.Pane>
 
           <Tab.Pane eventKey="online">
@@ -525,36 +500,6 @@ export default function ClassDetailPage() {
             <Button type="submit" variant="primary" disabled={uploading}>
               {uploading ? 'Đang lưu...' : 'Đăng tài liệu'}
             </Button>
-          </Modal.Footer>
-        </Form>
-      </Modal>
-
-      <Modal show={showDiscussionModal} onHide={() => setShowDiscussionModal(false)}>
-        <Modal.Header closeButton><Modal.Title>Tạo thảo luận</Modal.Title></Modal.Header>
-        <Form onSubmit={handleCreateDiscussion}>
-          <Modal.Body>
-            <Form.Group className="mb-3">
-              <Form.Label>Tiêu đề</Form.Label>
-              <Form.Control
-                value={discussionForm.title}
-                onChange={(e) => setDiscussionForm({ ...discussionForm, title: e.target.value })}
-                required
-              />
-            </Form.Group>
-            <Form.Group>
-              <Form.Label>Nội dung</Form.Label>
-              <Form.Control
-                as="textarea"
-                rows={4}
-                value={discussionForm.content}
-                onChange={(e) => setDiscussionForm({ ...discussionForm, content: e.target.value })}
-                required
-              />
-            </Form.Group>
-          </Modal.Body>
-          <Modal.Footer>
-            <Button variant="secondary" onClick={() => setShowDiscussionModal(false)}>Hủy</Button>
-            <Button type="submit" variant="primary">Đăng bài</Button>
           </Modal.Footer>
         </Form>
       </Modal>
