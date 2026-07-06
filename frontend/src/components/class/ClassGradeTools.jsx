@@ -83,18 +83,31 @@ export default function ClassGradeTools({ classId, className }) {
 
   return (
     <>
-      <div className="d-flex flex-wrap gap-2 mb-3">
-        <Button variant="outline-warning" size="sm" onClick={openReminder}>
-          <i className="bi bi-bell me-1" />
-          Nhắc học sinh chưa làm
-        </Button>
-        <Button variant="outline-success" size="sm" onClick={handleExport} disabled={exporting}>
-          {exporting ? (
-            <><Spinner size="sm" className="me-1" />Đang xuất...</>
-          ) : (
-            <><i className="bi bi-file-earmark-excel me-1" />Xuất Excel điểm</>
-          )}
-        </Button>
+      <div className="border rounded-3 bg-white shadow-sm p-3 mb-3">
+        <div className="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
+          <div>
+            <div className="fw-semibold">
+              <i className="bi bi-bar-chart-line me-1 text-primary" />
+              Theo dõi bài tập &amp; điểm
+            </div>
+            <div className="text-muted small">
+              Nhắc học sinh chưa làm bài và xuất bảng điểm Excel của lớp
+            </div>
+          </div>
+          <div className="d-flex flex-wrap gap-2">
+            <Button variant="warning" onClick={openReminder}>
+              <i className="bi bi-bell me-1" />
+              Nhắc học sinh chưa làm
+            </Button>
+            <Button variant="success" onClick={handleExport} disabled={exporting}>
+              {exporting ? (
+                <><Spinner size="sm" className="me-1" />Đang xuất...</>
+              ) : (
+                <><i className="bi bi-file-earmark-excel me-1" />Xuất Excel điểm</>
+              )}
+            </Button>
+          </div>
+        </div>
       </div>
 
       <Modal show={showReminder} onHide={() => setShowReminder(false)} size="lg" scrollable>

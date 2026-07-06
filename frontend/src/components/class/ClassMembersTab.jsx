@@ -10,6 +10,7 @@ import AddStudentModal, { emptyStudentFields, emptyTuitionFields } from './AddSt
 import { teachingStaffBadge } from '../../utils/roles';
 import UserAvatar from '../UserAvatar';
 import AdminAvatarPicker from '../AdminAvatarPicker';
+import ClassGradeTools from './ClassGradeTools';
 
 const emptyForm = { ...emptyStudentFields, ...emptyTuitionFields };
 
@@ -360,6 +361,10 @@ export default function ClassMembersTab({ classId, className, members, isTeacher
 
   return (
     <>
+      {(isAdmin || isTeacher) && (
+        <ClassGradeTools classId={classId} className={className} />
+      )}
+
       {isTeacher && (
         <div className="d-flex flex-wrap gap-2 mb-3">
           <Button onClick={openAddModal}>
