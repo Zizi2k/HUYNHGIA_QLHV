@@ -2,7 +2,7 @@ import { useState } from 'react';
 import {
   Button, Modal, Alert, Spinner, Badge, Table, Form,
 } from 'react-bootstrap';
-import { classService } from '../services';
+import { classService } from '../../services';
 
 function downloadBlob(blob, filename) {
   const url = URL.createObjectURL(blob);
