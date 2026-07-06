@@ -44,6 +44,8 @@ export const classService = {
   importStudents: (classId, formData) => api.post(`/classes/${classId}/import-students`, formData),
   downloadImportTemplate: (classId) => api.get(`/classes/${classId}/import-template`, { responseType: 'blob' }),
   getNextStudentCode: (classId) => api.get(`/classes/${classId}/next-student-code`),
+  getPendingWork: (classId) => api.get(`/classes/${classId}/pending-work`),
+  exportGradesExcel: (classId) => api.get(`/classes/${classId}/grades-export`, { responseType: 'blob' }),
 };
 
 export const lessonService = {

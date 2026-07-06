@@ -23,6 +23,7 @@ import ClassAssignmentsTab from '../components/class/ClassAssignmentsTab';
 import ClassQuizzesTab from '../components/class/ClassQuizzesTab';
 import ClassOnlineTab from '../components/class/ClassOnlineTab';
 import ClassDiscussionsTab from '../components/class/ClassDiscussionsTab';
+import ClassGradeTools from '../components/class/ClassGradeTools';
 import ShareContentModal from '../components/class/ShareContentModal';
 import AttachmentManager from '../components/common/AttachmentManager';
 import AttachmentList from '../components/common/AttachmentList';
@@ -318,6 +319,10 @@ export default function ClassDetailPage() {
           )}
         </div>
       </div>
+
+      {canManageClass && (
+        <ClassGradeTools classId={id} className={classData.name} />
+      )}
 
       <ModuleTabs
         activeKey={activeTab}

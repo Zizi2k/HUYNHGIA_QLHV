@@ -5,6 +5,7 @@ const {
   getAvailableTeachers, addTeacher, removeTeacher, getNextStudentCodeForClass, getShareTargetClasses,
 } = require('../controllers/classController');
 const { importStudents, downloadTemplate } = require('../controllers/importController');
+const { getPendingWork, exportGradesExcel } = require('../controllers/classReportController');
 const { uploadMemory } = require('../middleware/upload');
 const excelUpload = require('../middleware/excelUpload');
 const { authenticate, authorize } = require('../middleware/auth');
@@ -27,6 +28,8 @@ router.post('/:id/import-students', authorize('admin', 'teacher'), requireClassT
   });
 });
 router.get('/:id/next-student-code', authorize('admin', 'teacher'), requireClassTeacher('id'), getNextStudentCodeForClass);
+router.get('/:id/pending-work', authorize('admin', 'teacher'), requireClassTeacher('id'), getPendingWork);
+router.get('/:id/grades-export', authorize('admin', 'teacher'), requireClassTeacher('id'), exportGradesExcel);
 router.post('/:id/students', authorize('admin', 'teacher'), requireClassTeacher('id'), createStudentMember);
 router.post('/:id/sync-usernames', authorize('admin', 'teacher'), requireClassTeacher('id'), syncUsernames);
 router.post('/:id/members', authorize('admin', 'teacher'), requireClassTeacher('id'), addMember);
