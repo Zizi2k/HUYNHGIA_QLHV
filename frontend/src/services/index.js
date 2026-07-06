@@ -45,7 +45,16 @@ export const classService = {
   downloadImportTemplate: (classId) => api.get(`/classes/${classId}/import-template`, { responseType: 'blob' }),
   getNextStudentCode: (classId) => api.get(`/classes/${classId}/next-student-code`),
   getPendingWork: (classId) => api.get(`/classes/${classId}/pending-work`),
+  sendReminders: (classId, data) => api.post(`/classes/${classId}/send-reminders`, data || {}),
   exportGradesExcel: (classId) => api.get(`/classes/${classId}/grades-export`, { responseType: 'blob' }),
+};
+
+export const notificationService = {
+  getUnread: () => api.get('/notifications/unread'),
+  getUnreadCount: () => api.get('/notifications/unread-count'),
+  getList: (params) => api.get('/notifications', { params }),
+  markRead: (id) => api.post(`/notifications/${id}/read`),
+  markAllRead: () => api.post('/notifications/read-all'),
 };
 
 export const lessonService = {

@@ -449,6 +449,28 @@ async function ensureSchema() {
     )
   `);
 
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS notifications (
+      id INT PRIMARY KEY AUTO_INCREMENT,
+      user_id INT NOT NULL,
+      type VARCHAR(50) NOT NULL DEFAULT 'pending_work',
+      title VARCHAR(255) NOT NULL,
+      body TEXT NOT NULL,
+      class_id INT NULL,
+      link_path VARCHAR(255) NULL,
+      is_read TINYINT(1) NOT NULL DEFAULT 0,
+      read_at TIMESTAMP NULL,
+      sent_by INT NULL,
+      zalo_status VARCHAR(30) NULL,
+      zalo_error TEXT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY (class_id) REFERENCES classes(id) ON DELETE SET NULL,
+      FOREIGN KEY (sent_by) REFERENCES users(id) ON DELETE SET NULL,
+      INDEX idx_notifications_user_read (user_id, is_read, created_at)
+    )
+  `);
+
   } catch (err) {
     console.warn('ensureSchema:', err.message);
   }

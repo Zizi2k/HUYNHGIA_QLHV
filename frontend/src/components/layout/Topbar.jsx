@@ -6,6 +6,7 @@ import { auditService } from '../../services';
 import { isSuperAdmin, scopeLabel, getAdminScope } from '../../utils/adminScope';
 import UserAvatar from '../UserAvatar';
 import ProfileModal from '../ProfileModal';
+import NotificationBell from '../notifications/NotificationBell';
 
 export default function Topbar({ onToggleSidebar, onToggleMobile }) {
   const { user, logout } = useAuth();
@@ -67,7 +68,7 @@ export default function Topbar({ onToggleSidebar, onToggleMobile }) {
               className="app-topbar-btn position-relative text-decoration-none"
               title="Yêu cầu xóa chờ duyệt"
             >
-              <i className="bi bi-bell" />
+              <i className="bi bi-shield-check" />
               {pendingDeletes > 0 && (
                 <Badge
                   bg="danger"
@@ -80,6 +81,7 @@ export default function Topbar({ onToggleSidebar, onToggleMobile }) {
               )}
             </Link>
           )}
+          <NotificationBell />
           <Dropdown align="end">
             <Dropdown.Toggle as="button" className="app-topbar-user">
               <UserAvatar user={user} size={36} />
