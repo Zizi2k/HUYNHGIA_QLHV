@@ -50,9 +50,9 @@ export const classService = {
 };
 
 export const notificationService = {
-  getUnread: () => api.get('/notifications/unread'),
-  getUnreadCount: () => api.get('/notifications/unread-count'),
-  getList: (params) => api.get('/notifications', { params }),
+  getUnread: () => api.get('/notifications/unread', { skipGlobalLogout: true }),
+  getUnreadCount: () => api.get('/notifications/unread-count', { skipGlobalLogout: true }),
+  getList: (params) => api.get('/notifications', { params, skipGlobalLogout: true }),
   markRead: (id) => api.post(`/notifications/${id}/read`),
   markAllRead: () => api.post('/notifications/read-all'),
 };
@@ -233,7 +233,7 @@ export const studentService = {
 export const auditService = {
   getLogs: (params) => api.get('/audit/logs', { params }),
   getDeletionRequests: (params) => api.get('/audit/deletion-requests', { params }),
-  getPendingCount: () => api.get('/audit/deletion-requests/pending-count'),
+  getPendingCount: () => api.get('/audit/deletion-requests/pending-count', { skipGlobalLogout: true }),
   approveDeletion: (id, data) => api.post(`/audit/deletion-requests/${id}/approve`, data),
   rejectDeletion: (id, data) => api.post(`/audit/deletion-requests/${id}/reject`, data),
 };

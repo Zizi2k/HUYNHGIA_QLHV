@@ -277,7 +277,7 @@ export default function ClassAssignmentsTab({
                 <div className="flex-grow-1">
                   <h5 className="mb-1">{a.title}</h5>
                   {a.description && <p className="text-muted mb-2">{a.description}</p>}
-                  <AttachmentList item={a} apiBase={API_BASE} defaultExpanded />
+                        <AttachmentList item={a} apiBase={API_BASE} defaultExpanded={false} />
                   {getItemAttachments(a).length > 1 && (
                     <Badge bg="secondary" className="mb-2">{getItemAttachments(a).length} tài liệu</Badge>
                   )}

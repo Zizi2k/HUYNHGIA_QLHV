@@ -23,7 +23,7 @@ export default function ModuleTabs({ activeKey, onSelect, tabs, children }) {
 
   return (
     <div className="module-tabs-card">
-      <Tab.Container activeKey={activeKey} onSelect={handleSelect}>
+      <Tab.Container activeKey={activeKey} onSelect={handleSelect} mountOnEnter unmountOnExit>
         <Nav variant="tabs" className="module-tabs app-nav-tabs-scroll flex-nowrap">
           {tabs.map((tab) => (
             <Nav.Item key={tab.key}>

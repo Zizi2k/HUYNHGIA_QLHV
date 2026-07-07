@@ -115,6 +115,16 @@ export function resolveAbsoluteResourceUrl(fileUrl, apiBase) {
   return relative;
 }
 
+export function isPrivateApiFileUrl(fileUrl) {
+  return /\/api\/files\/download\//i.test(fileUrl || '');
+}
+
+export function canUseGoogleGview(absoluteUrl) {
+  if (!absoluteUrl || isPrivateApiFileUrl(absoluteUrl)) return false;
+  if (/^https?:\/\/(localhost|127\.0\.0\.1)/i.test(absoluteUrl)) return false;
+  return true;
+}
+
 export function getGoogleGviewUrl(absoluteUrl) {
   return `https://docs.google.com/gview?url=${encodeURIComponent(absoluteUrl)}&embedded=true`;
 }

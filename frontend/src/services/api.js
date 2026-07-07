@@ -5,6 +5,17 @@ const api = axios.create({
   baseURL: API_URL,
 });
 
+let sessionCheckTimer = null;
+let sessionCheckInFlight = false;
+
+export function dispatchSessionCheck() {
+  if (sessionCheckInFlight) return;
+  if (sessionCheckTimer) clearTimeout(sessionCheckTimer);
+  sessionCheckTimer = setTimeout(() => {
+    window.dispatchEvent(new CustomEvent('auth:check-session'));
+  }, 400);
+}
+
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem('token');
   if (token) {
@@ -32,9 +43,7 @@ api.interceptors.response.use(
     const isAuthLogin = requestUrl.includes('/auth/login') || requestUrl.includes('/auth/register');
 
     if (error.response?.status === 401 && !isAuthLogin && !error.config?.skipGlobalLogout) {
-      localStorage.removeItem('token');
-      localStorage.removeItem('user');
-      window.dispatchEvent(new CustomEvent('auth:unauthorized'));
+      dispatchSessionCheck();
     }
     return Promise.reject(error);
   }
