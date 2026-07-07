@@ -586,6 +586,31 @@ svg {
   max-width: 720px;
 }
 
+.quiz-page {
+  --quiz-timer-height: 5.5rem;
+}
+
+.quiz-timer-bar {
+  position: sticky;
+  top: calc(var(--app-topbar-height) + 0.5rem);
+  z-index: 1020;
+  margin-bottom: 1rem;
+}
+
+.quiz-questions-stack {
+  padding-bottom: 2rem;
+}
+
+.quiz-question-card {
+  scroll-margin-top: calc(var(--app-topbar-height) + var(--quiz-timer-height) + 1rem);
+}
+
+@media (max-width: 575.98px) {
+  .quiz-page {
+    --quiz-timer-height: 7.5rem;
+  }
+}
+
 .app-content .container,
 .app-content .container-fluid {
   width: 100%;

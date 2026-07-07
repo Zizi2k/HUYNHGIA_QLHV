@@ -295,6 +295,22 @@ export default function QuizPage() {
     );
   }
 
+  const totalQuestions = quiz?.questions?.length || 0;
+  if (quiz && totalQuestions === 0 && !result) {
+    return (
+      <div className="page-container page-container-narrow">
+        <Card className="border-0 shadow p-4 text-center">
+          <i className="bi bi-file-earmark-arrow-up text-primary" style={{ fontSize: '3rem' }} />
+          <h4 className="mt-3">{quiz.title}</h4>
+          <p className="text-muted mb-0">
+            Bài kiểm tra này chỉ nhận nộp file/link. Vui lòng quay lại lớp học và nộp bài ở tab <strong>Bài kiểm tra</strong>.
+          </p>
+          <Button className="mt-4" onClick={() => navigate(-1)}>Quay lại lớp</Button>
+        </Card>
+      </div>
+    );
+  }
+
   if (result) {
     const canReview = result.show_results && result.review?.length > 0;
     return (
@@ -333,17 +349,15 @@ export default function QuizPage() {
   }
 
   const answeredCount = Object.keys(answers).length;
-  const totalQuestions = quiz?.questions?.length || 0;
   const urgent = remainingSeconds != null && remainingSeconds <= 60;
   const warning = remainingSeconds != null && remainingSeconds <= 300 && !urgent;
 
   return (
-    <div className="page-container page-container-narrow">
+    <div className="page-container page-container-narrow quiz-page">
       <div
-        className={`quiz-timer-bar sticky-top mb-3 p-3 rounded shadow-sm d-flex flex-wrap justify-content-between align-items-center gap-2 ${
+        className={`quiz-timer-bar p-3 rounded shadow-sm d-flex flex-wrap justify-content-between align-items-center gap-2 ${
           urgent ? 'bg-danger text-white' : warning ? 'bg-warning-subtle' : 'bg-primary-subtle'
         }`}
-        style={{ zIndex: 1020, top: 64 }}
       >
         <div>
           <div className="fw-semibold text-break">{quiz?.title}</div>
@@ -368,6 +382,7 @@ export default function QuizPage() {
         </div>
       </div>
 
+      <div className="quiz-questions-stack">
       {error && !sessionExpired && (
         <Alert variant={sessionExpired ? 'warning' : 'danger'}>
           {error}
@@ -383,7 +398,7 @@ export default function QuizPage() {
 
       <Form onSubmit={handleSubmit}>
         {quiz?.questions?.map((q, idx) => (
-          <Card key={q.id} className="mb-3 border-0 shadow-sm">
+          <Card key={q.id} className="mb-3 border-0 shadow-sm quiz-question-card">
             <Card.Body>
               <h6 className="text-break">Câu {idx + 1}: {q.question}</h6>
               {['A', 'B', 'C', 'D'].map((opt) => (
@@ -413,6 +428,7 @@ export default function QuizPage() {
           {submitting ? 'Đang nộp...' : 'Nộp bài'}
         </Button>
       </Form>
+      </div>
     </div>
   );
 }

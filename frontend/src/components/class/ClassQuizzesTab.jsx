@@ -17,7 +17,7 @@ import AttachmentList from '../common/AttachmentList';
 import {
   emptyAttachmentDraft, attachmentDraftFromItem,
   appendAttachmentsToFormData, buildAttachmentJsonPayload,
-  shouldUseMultipartForAttachments,
+  shouldUseMultipartForAttachments, hasAttachmentDraftContent,
 } from '../../utils/attachmentHelpers';
 import { API_BASE } from '../../config/apiBase';
 
@@ -36,7 +36,7 @@ const mapImportedQuestion = (q) => ({
 });
 
 const emptyForm = {
-  title: '', time_limit: 30, visible_from: '', is_hidden: false,
+  title: '', time_limit: 30, visible_from: '', is_hidden: false, essay_only: false,
   questions: [{ ...emptyQuestion }],
   attachments: emptyAttachmentDraft(),
 };
@@ -100,12 +100,14 @@ export default function ClassQuizzesTab({
       const expanded = {};
       questions.forEach((_, idx) => { expanded[idx] = true; });
       setExpandedQuestions(expanded);
+      const hasQuestions = (data.questions || []).length > 0;
       setForm({
         title: data.title,
         time_limit: data.time_limit || 30,
         visible_from: toDatetimeLocalValue(data.visible_from),
         is_hidden: data.is_hidden === 1 || data.is_hidden === true,
-        questions,
+        essay_only: !hasQuestions,
+        questions: hasQuestions ? questions : [],
         attachments: attachmentDraftFromItem(data),
       });
       setShowForm(true);
@@ -285,7 +287,27 @@ export default function ClassQuizzesTab({
     setExpandedQuestions((prev) => ({ ...prev, [idx]: !prev[idx] }));
   };
 
+  const handleEssayOnlyToggle = (checked) => {
+    setForm((prev) => ({
+      ...prev,
+      essay_only: checked,
+      questions: checked ? [] : (prev.questions.length ? prev.questions : [{ ...emptyQuestion }]),
+    }));
+    if (checked) {
+      setExpandedQuestions({});
+    } else {
+      setExpandedQuestions({ 0: true });
+    }
+  };
+
   const validateQuestions = () => {
+    if (form.essay_only) {
+      if (!hasAttachmentDraftContent(form.attachments || emptyAttachmentDraft())) {
+        setError('Bài nộp tự luận cần ít nhất một file hoặc link đề bài');
+        return false;
+      }
+      return true;
+    }
     for (let i = 0; i < form.questions.length; i++) {
       const q = form.questions[i];
       if (!q.question.trim()) {
@@ -365,7 +387,7 @@ export default function ClassQuizzesTab({
     setSaving(true);
     setError('');
     try {
-      const questionsPayload = form.questions.map((q) => ({
+      const questionsPayload = form.essay_only ? [] : form.questions.map((q) => ({
         ...(q.id ? { id: q.id } : {}),
         question: q.question.trim(),
         optionA: q.optionA.trim(),
@@ -458,8 +480,11 @@ export default function ClassQuizzesTab({
                     <i className="bi bi-clock me-1" />
                     {q.time_limit} phút
                   </span>
-                  {isTeacher && q.question_count != null && (
+                  {isTeacher && q.question_count != null && Number(q.question_count) > 0 && (
                     <Badge bg="light" text="dark">{q.question_count} câu hỏi</Badge>
+                  )}
+                  {isTeacher && Number(q.question_count) === 0 && (
+                    <Badge bg="info">Nộp file/link</Badge>
                   )}
                   {isTeacher && (
                     <Badge bg="secondary">{q.submission_count || 0} lượt làm</Badge>
@@ -486,10 +511,15 @@ export default function ClassQuizzesTab({
                 <AttachmentList item={q} apiBase={API_BASE} defaultExpanded={false} />
               </div>
               <div className="d-flex gap-1 flex-shrink-0 flex-wrap justify-content-end">
-                {isStudent && !q.submission_id && (
+                {isStudent && !q.submission_id && Number(q.question_count) > 0 && (
                   <Button as={Link} to={`/quizzes/${q.id}`} variant="outline-primary" size="sm">
                     Làm trắc nghiệm
                   </Button>
+                )}
+                {isStudent && Number(q.question_count) === 0 && (
+                  <Badge bg="info" className="d-flex align-items-center px-2">
+                    Nộp file/link bên dưới
+                  </Badge>
                 )}
                 {isStudent && isOnlineSubmission(q) && (
                   <>
@@ -529,7 +559,8 @@ export default function ClassQuizzesTab({
                       variant="outline-primary"
                       size="sm"
                       onClick={() => openEditQuestions(q)}
-                      disabled={loadingEdit}
+                      disabled={loadingEdit || Number(q.question_count) === 0}
+                      title={Number(q.question_count) === 0 ? 'Bài nộp file/link — dùng Sửa tiêu đề' : 'Sửa câu hỏi'}
                     >
                       <i className="bi bi-pencil-square me-1" />
                       Sửa câu hỏi
@@ -633,6 +664,18 @@ export default function ClassQuizzesTab({
                 <Form.Group className="mb-4">
                   <Form.Check
                     type="switch"
+                    id="quiz-essay-only-switch"
+                    label="Giao bài nộp file/link (tự luận — không có trắc nghiệm online)"
+                    checked={form.essay_only}
+                    onChange={(e) => handleEssayOnlyToggle(e.target.checked)}
+                  />
+                  <Form.Text className="text-muted">
+                    Bật chế độ này khi chỉ cần học sinh nộp bài qua file/link. Vui lòng đính kèm đề bài bên dưới.
+                  </Form.Text>
+                </Form.Group>
+                <Form.Group className="mb-4">
+                  <Form.Check
+                    type="switch"
                     id="quiz-hidden-switch"
                     label="Ẩn bài kiểm tra với học sinh"
                     checked={form.is_hidden}
@@ -653,6 +696,7 @@ export default function ClassQuizzesTab({
               </Alert>
             )}
 
+            {!editQuestionsOnly && !form.essay_only && (
             <div className="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
               <Form.Label className="mb-0 fw-semibold">Câu hỏi trắc nghiệm</Form.Label>
               <div className="d-flex flex-wrap gap-2">
@@ -703,7 +747,9 @@ export default function ClassQuizzesTab({
                 </Button>
               </div>
             </div>
+            )}
 
+            {!editQuestionsOnly && !form.essay_only && (
             <Alert variant="light" className="py-2 small mb-3">
               <strong>Cách dùng:</strong> tải <strong>Mẫu Word</strong> hoặc <strong>Mẫu Excel</strong> → soạn câu hỏi →{' '}
               <strong>Import Word/Excel</strong>.
@@ -713,16 +759,24 @@ export default function ClassQuizzesTab({
                 <li>Sau import: kiểm tra/chọn <strong>Đáp án đúng</strong> thủ công nếu cần</li>
               </ul>
             </Alert>
+            )}
 
-            {importInfo && <Alert variant="success" className="py-2 small">{importInfo}</Alert>}
-            {importWarning && <Alert variant="warning" className="py-2 small">{importWarning}</Alert>}
-            {pendingReviewCount > 0 && (
+            {!editQuestionsOnly && form.essay_only && (
+              <Alert variant="info" className="py-2 small mb-3">
+                Học sinh sẽ nộp bài bằng file hoặc link ngay trên tab Bài kiểm tra — không cần vào trang trắc nghiệm.
+                Nhớ tắt <strong>Ẩn bài kiểm tra</strong> để học sinh thấy bài.
+              </Alert>
+            )}
+
+            {!form.essay_only && importInfo && <Alert variant="success" className="py-2 small">{importInfo}</Alert>}
+            {!form.essay_only && importWarning && <Alert variant="warning" className="py-2 small">{importWarning}</Alert>}
+            {!form.essay_only && pendingReviewCount > 0 && (
               <Alert variant="warning" className="py-2 small">
                 Còn <strong>{pendingReviewCount}</strong> câu cần chọn đáp án đúng thủ công.
               </Alert>
             )}
 
-            {form.questions.map((q, idx) => (
+            {!form.essay_only && form.questions.map((q, idx) => (
               <Card key={q.id || `new-${idx}`} className="mb-3 border">
                 <Card.Header
                   className="d-flex justify-content-between align-items-center py-2 bg-light"
@@ -805,7 +859,9 @@ export default function ClassQuizzesTab({
         <Modal.Footer className="border-top bg-white">
           <Button variant="secondary" onClick={() => setShowForm(false)}>Hủy</Button>
           <Button type="submit" form="quiz-form" variant="primary" disabled={saving || loadingEdit}>
-            {saving ? <><Spinner size="sm" className="me-2" />Đang lưu...</> : 'Lưu câu hỏi'}
+            {saving ? <><Spinner size="sm" className="me-2" />Đang lưu...</> : (
+              editQuestionsOnly ? 'Lưu câu hỏi' : (form.essay_only ? 'Giao bài tự luận' : 'Lưu bài kiểm tra')
+            )}
           </Button>
         </Modal.Footer>
       </Modal>

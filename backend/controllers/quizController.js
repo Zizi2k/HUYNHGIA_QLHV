@@ -36,7 +36,59 @@ function parseQuizBody(body) {
       questions = [];
     }
   }
+  if (!Array.isArray(questions)) questions = [];
   return { ...body, questions };
+}
+
+function parseRemovedAttachmentIds(body) {
+  const raw = body.remove_attachment_ids;
+  if (!raw) return [];
+  if (Array.isArray(raw)) return raw.map(Number).filter(Boolean);
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed.map(Number).filter(Boolean) : [];
+  } catch {
+    return [];
+  }
+}
+
+async function hasQuizAttachmentContent(conn, quizId, body, uploadedFiles) {
+  const incoming = await resolveNewAttachments(body, uploadedFiles);
+  if (incoming.length > 0) return true;
+  if (body.remove_attachment === true || body.remove_attachment === 'true' || body.remove_attachment === '1') {
+    return false;
+  }
+
+  const [rows] = await conn.query(
+    'SELECT id FROM content_attachments WHERE resource_type = ? AND resource_id = ?',
+    ['quiz', quizId],
+  );
+  if (!rows.length) return false;
+
+  const removed = new Set(parseRemovedAttachmentIds(body));
+  return rows.some((row) => !removed.has(Number(row.id)));
+}
+
+async function validateQuizContent(conn, { questions, body, uploadedFiles, quizId, res, isCreate }) {
+  if (questions?.length) return true;
+
+  if (isCreate) {
+    const incoming = await resolveNewAttachments(body, uploadedFiles);
+    if (incoming.length > 0) return true;
+    res.status(400).json({
+      message: 'Vui lòng thêm câu hỏi trắc nghiệm hoặc đính kèm đề bài (file/link) cho bài nộp tự luận',
+    });
+    return false;
+  }
+
+  const hasAttachments = await hasQuizAttachmentContent(conn, quizId, body, uploadedFiles);
+  if (!hasAttachments) {
+    res.status(400).json({
+      message: 'Bài kiểm tra cần có câu hỏi trắc nghiệm hoặc ít nhất một file/link đề bài',
+    });
+    return false;
+  }
+  return true;
 }
 
 async function getStudentQuizSubmission(conn, quizId, studentId) {
@@ -59,6 +111,7 @@ const getQuizzes = async (req, res) => {
     if (req.user.role === 'student' && classId) {
       const [rows] = await pool.query(
         `SELECT q.*,
+          (SELECT COUNT(*) FROM questions qu WHERE qu.quiz_id = q.id) AS question_count,
           qs.id AS submission_id, qs.score AS quiz_score, qs.submitted_at AS quiz_submitted_at,
           qs.file_url AS submission_url,
           (SELECT COUNT(*) FROM quiz_answers qa WHERE qa.submission_id = qs.id) AS answer_count
@@ -185,14 +238,18 @@ const createQuiz = async (req, res) => {
   try {
     const body = parseQuizBody(req.body);
     const { class_id, title, time_limit, questions } = body;
-    if (!questions?.length) {
-      return res.status(400).json({ message: 'Vui lòng thêm ít nhất 1 câu hỏi' });
-    }
     if (!(await assertClassAccess(req.user, class_id, res, { manage: true }))) return;
 
     const attachments = await resolveNewAttachments(body, getUploadedFiles(req));
     const visibility = parseVisibilityFields(body);
     await conn.beginTransaction();
+
+    if (!(await validateQuizContent(conn, {
+      questions, body, uploadedFiles: getUploadedFiles(req), res, isCreate: true,
+    }))) {
+      await conn.rollback();
+      return;
+    }
 
     const [result] = await conn.query(
       'INSERT INTO quizzes (class_id, title, time_limit, visible_from, is_hidden) VALUES (?, ?, ?, ?, ?)',
@@ -241,12 +298,20 @@ const updateQuiz = async (req, res) => {
     if (!(await assertClassAccess(req.user, classId, res, { manage: true }))) return;
 
     const { title, time_limit, questions } = body;
-    if (!questions?.length) {
-      return res.status(400).json({ message: 'Vui lòng thêm ít nhất 1 câu hỏi' });
-    }
-
     const visibility = parseVisibilityFields(body);
     await conn.beginTransaction();
+
+    if (!(await validateQuizContent(conn, {
+      questions,
+      body,
+      uploadedFiles: getUploadedFiles(req),
+      quizId: req.params.id,
+      res,
+      isCreate: false,
+    }))) {
+      await conn.rollback();
+      return;
+    }
 
     const [updated] = await conn.query(
       'UPDATE quizzes SET title=?, time_limit=?, visible_from=?, is_hidden=? WHERE id=?',
@@ -260,29 +325,33 @@ const updateQuiz = async (req, res) => {
     await mergeAttachmentsOnUpdate(conn, 'quiz', req.params.id, body, getUploadedFiles(req));
 
     const keptIds = questions.filter((q) => q.id).map((q) => q.id);
-    if (keptIds.length > 0) {
-      await conn.query(
-        `DELETE FROM questions WHERE quiz_id = ? AND id NOT IN (${keptIds.map(() => '?').join(',')})`,
-        [req.params.id, ...keptIds]
-      );
-    } else {
-      await conn.query('DELETE FROM questions WHERE quiz_id = ?', [req.params.id]);
-    }
-
-    for (const q of questions) {
-      if (q.id) {
+    if (questions.length > 0) {
+      if (keptIds.length > 0) {
         await conn.query(
-          `UPDATE questions SET question=?, optionA=?, optionB=?, optionC=?, optionD=?, answer=?
-           WHERE id=? AND quiz_id=?`,
-          [q.question, q.optionA, q.optionB, q.optionC, q.optionD, q.answer, q.id, req.params.id]
+          `DELETE FROM questions WHERE quiz_id = ? AND id NOT IN (${keptIds.map(() => '?').join(',')})`,
+          [req.params.id, ...keptIds]
         );
       } else {
-        await conn.query(
-          `INSERT INTO questions (quiz_id, question, optionA, optionB, optionC, optionD, answer)
-           VALUES (?, ?, ?, ?, ?, ?, ?)`,
-          [req.params.id, q.question, q.optionA, q.optionB, q.optionC, q.optionD, q.answer]
-        );
+        await conn.query('DELETE FROM questions WHERE quiz_id = ?', [req.params.id]);
       }
+
+      for (const q of questions) {
+        if (q.id) {
+          await conn.query(
+            `UPDATE questions SET question=?, optionA=?, optionB=?, optionC=?, optionD=?, answer=?
+             WHERE id=? AND quiz_id=?`,
+            [q.question, q.optionA, q.optionB, q.optionC, q.optionD, q.answer, q.id, req.params.id]
+          );
+        } else {
+          await conn.query(
+            `INSERT INTO questions (quiz_id, question, optionA, optionB, optionC, optionD, answer)
+             VALUES (?, ?, ?, ?, ?, ?, ?)`,
+            [req.params.id, q.question, q.optionA, q.optionB, q.optionC, q.optionD, q.answer]
+          );
+        }
+      }
+    } else {
+      await conn.query('DELETE FROM questions WHERE quiz_id = ?', [req.params.id]);
     }
 
     await conn.commit();
