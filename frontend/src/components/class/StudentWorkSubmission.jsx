@@ -141,8 +141,13 @@ export default function StudentWorkSubmission({
               className="flex-grow-1"
               style={{ maxWidth: 320 }}
             />
-            <span className="text-muted small">PDF, Word, Excel, PowerPoint</span>
+            <span className="text-muted small">
+              Hỗ trợ: <strong>PDF</strong>, <strong>PPT/PPTX</strong>, Word, Excel
+            </span>
           </div>
+          <Form.Text className="text-muted d-block mb-2">
+            Có thể chọn nhiều file: .pdf, .ppt, .pptx, .docx, .xlsx
+          </Form.Text>
 
           {pendingFiles.length > 0 && (
             <div className="mb-2">
