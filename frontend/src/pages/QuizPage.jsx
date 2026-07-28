@@ -121,6 +121,10 @@ export default function QuizPage() {
     resultRef.current = result;
   }, [result]);
 
+  useEffect(() => {
+    window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+  }, [id]);
+
   const submitAnswers = useCallback(async (currentAnswers, { auto = false } = {}) => {
     if (submittingRef.current || resultRef.current) return;
     submittingRef.current = true;
@@ -356,10 +360,10 @@ export default function QuizPage() {
     <div className="page-container page-container-narrow quiz-page">
       <div
         className={`quiz-timer-bar p-3 rounded shadow-sm d-flex flex-wrap justify-content-between align-items-center gap-2 ${
-          urgent ? 'bg-danger text-white' : warning ? 'bg-warning-subtle' : 'bg-primary-subtle'
+          urgent ? 'bg-danger text-white' : warning ? 'bg-warning-subtle' : ''
         }`}
       >
-        <div>
+        <div className="min-w-0 flex-grow-1">
           <div className="fw-semibold text-break">{quiz?.title}</div>
           <div className={`small ${urgent ? 'text-white-50' : 'text-muted'}`}>
             Đã chọn {answeredCount}/{totalQuestions} câu
@@ -371,7 +375,7 @@ export default function QuizPage() {
             )}
           </div>
         </div>
-        <div className="text-end">
+        <div className="text-end flex-shrink-0">
           <div className="small opacity-75">
             <i className="bi bi-clock me-1" />
             Thời gian còn lại
@@ -383,51 +387,51 @@ export default function QuizPage() {
       </div>
 
       <div className="quiz-questions-stack">
-      {error && !sessionExpired && (
-        <Alert variant={sessionExpired ? 'warning' : 'danger'}>
-          {error}
-          {sessionExpired && (
-            <div className="mt-2">
-              <Button size="sm" variant="primary" onClick={() => navigate('/login')}>
-                Đăng nhập lại
-              </Button>
-            </div>
-          )}
-        </Alert>
-      )}
+        {error && !sessionExpired && (
+          <Alert variant={sessionExpired ? 'warning' : 'danger'}>
+            {error}
+            {sessionExpired && (
+              <div className="mt-2">
+                <Button size="sm" variant="primary" onClick={() => navigate('/login')}>
+                  Đăng nhập lại
+                </Button>
+              </div>
+            )}
+          </Alert>
+        )}
 
-      <Form onSubmit={handleSubmit}>
-        {quiz?.questions?.map((q, idx) => (
-          <Card key={q.id} className="mb-3 border-0 shadow-sm quiz-question-card">
-            <Card.Body>
-              <h6 className="text-break">Câu {idx + 1}: {q.question}</h6>
-              {['A', 'B', 'C', 'D'].map((opt) => (
-                <Form.Check
-                  key={opt}
-                  type="radio"
-                  name={`q-${q.id}`}
-                  label={q[`option${opt}`]}
-                  value={opt}
-                  checked={answers[q.id] === opt}
-                  onChange={() => updateAnswer(q.id, opt)}
-                  className="mb-2 text-break"
-                  disabled={submitting}
-                />
-              ))}
-            </Card.Body>
-          </Card>
-        ))}
-        <Alert variant="info" className="d-flex align-items-start gap-2">
-          <i className="bi bi-info-circle mt-1" />
-          <div>
-            <div>Thời gian làm bài: {quiz?.time_limit} phút — hết giờ hệ thống tự nộp bài.</div>
-            <div className="small">Câu trả lời được lưu tự động — thoát giữa chừng vẫn làm tiếp được, đồng hồ không reset.</div>
-          </div>
-        </Alert>
-        <Button type="submit" variant="primary" size="lg" className="w-100 w-sm-auto" disabled={submitting}>
-          {submitting ? 'Đang nộp...' : 'Nộp bài'}
-        </Button>
-      </Form>
+        <Form onSubmit={handleSubmit}>
+          {quiz?.questions?.map((q, idx) => (
+            <Card key={q.id} className="mb-3 border-0 shadow-sm quiz-question-card">
+              <Card.Body>
+                <h6 className="text-break mb-3">Câu {idx + 1}: {q.question}</h6>
+                {['A', 'B', 'C', 'D'].map((opt) => (
+                  <Form.Check
+                    key={opt}
+                    type="radio"
+                    name={`q-${q.id}`}
+                    label={q[`option${opt}`]}
+                    value={opt}
+                    checked={answers[q.id] === opt}
+                    onChange={() => updateAnswer(q.id, opt)}
+                    className="mb-2 text-break"
+                    disabled={submitting}
+                  />
+                ))}
+              </Card.Body>
+            </Card>
+          ))}
+          <Alert variant="info" className="d-flex align-items-start gap-2">
+            <i className="bi bi-info-circle mt-1" />
+            <div>
+              <div>Thời gian làm bài: {quiz?.time_limit} phút — hết giờ hệ thống tự nộp bài.</div>
+              <div className="small">Câu trả lời được lưu tự động — thoát giữa chừng vẫn làm tiếp được, đồng hồ không reset.</div>
+            </div>
+          </Alert>
+          <Button type="submit" variant="primary" size="lg" className="w-100 w-sm-auto" disabled={submitting}>
+            {submitting ? 'Đang nộp...' : 'Nộp bài'}
+          </Button>
+        </Form>
       </div>
     </div>
   );
