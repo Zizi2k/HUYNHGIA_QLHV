@@ -1,10 +1,16 @@
 export const STUDENT_SUBMIT_FILE_ACCEPT =
-  '.docx,.xlsx,.xls,' +
+  '.pdf,.docx,.xlsx,.xls,.ppt,.pptx,.pps,.ppsx,' +
+  'application/pdf,' +
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document,' +
   'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,' +
-  'application/vnd.ms-excel';
+  'application/vnd.ms-excel,' +
+  'application/vnd.ms-powerpoint,' +
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation,' +
+  'application/vnd.openxmlformats-officedocument.presentationml.slideshow';
 
-export const STUDENT_SUBMIT_EXTENSIONS = ['.docx', '.xlsx', '.xls'];
+export const STUDENT_SUBMIT_EXTENSIONS = [
+  '.pdf', '.docx', '.xlsx', '.xls', '.ppt', '.pptx', '.pps', '.ppsx',
+];
 
 export function isStudentSubmitFileAllowed(file) {
   if (!file) return false;

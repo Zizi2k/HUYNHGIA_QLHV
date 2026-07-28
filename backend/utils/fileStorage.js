@@ -15,6 +15,8 @@ function resolveStoredFileType(file) {
     '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     '.ppt': 'application/vnd.ms-powerpoint',
     '.pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    '.pps': 'application/vnd.ms-powerpoint',
+    '.ppsx': 'application/vnd.openxmlformats-officedocument.presentationml.slideshow',
     '.jpg': 'image/jpeg',
     '.jpeg': 'image/jpeg',
     '.png': 'image/png',

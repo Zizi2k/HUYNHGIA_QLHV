@@ -33,7 +33,7 @@ export default function StudentWorkSubmission({
 
     const invalid = selected.find((file) => !isStudentSubmitFileAllowed(file));
     if (invalid) {
-      alert('Chỉ chấp nhận file .docx hoặc .xlsx');
+      alert('Chỉ chấp nhận file PDF, Word, Excel hoặc PowerPoint (.pdf, .docx, .xlsx, .ppt, .pptx)');
       return;
     }
     setPendingFiles((prev) => [...prev, ...selected]);
@@ -141,7 +141,7 @@ export default function StudentWorkSubmission({
               className="flex-grow-1"
               style={{ maxWidth: 320 }}
             />
-            <span className="text-muted small">chọn nhiều file .docx / .xlsx</span>
+            <span className="text-muted small">PDF, Word, Excel, PowerPoint</span>
           </div>
 
           {pendingFiles.length > 0 && (

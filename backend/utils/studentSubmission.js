@@ -2,7 +2,9 @@ const path = require('path');
 const { saveMulterFiles, getUploadedFiles } = require('./fileStorage');
 const { parseLinksFromBody } = require('./contentAttachments');
 
-const ALLOWED_EXTENSIONS = ['.docx', '.xlsx', '.xls'];
+const ALLOWED_EXTENSIONS = [
+  '.pdf', '.docx', '.xlsx', '.xls', '.ppt', '.pptx', '.pps', '.ppsx',
+];
 const MAX_SUBMISSION_FILES = 30;
 
 function isValidSubmissionUrl(url) {
@@ -17,7 +19,7 @@ function isValidSubmissionUrl(url) {
 function validateStudentFileExtension(file) {
   const ext = path.extname(file.originalname || '').toLowerCase();
   if (!ALLOWED_EXTENSIONS.includes(ext)) {
-    const err = new Error('Chỉ chấp nhận file .docx hoặc .xlsx');
+    const err = new Error('Chỉ chấp nhận file PDF, Word, Excel hoặc PowerPoint (.pdf, .docx, .xlsx, .ppt, .pptx)');
     err.status = 400;
     throw err;
   }
@@ -65,7 +67,7 @@ async function resolveStudentSubmissionAttachments(req) {
 
   const all = [...attachments, ...links];
   if (!all.length) {
-    const err = new Error('Vui lòng chọn file (.docx, .xlsx) hoặc dán link');
+    const err = new Error('Vui lòng chọn file (PDF, Word, Excel, PowerPoint) hoặc dán link');
     err.status = 400;
     throw err;
   }

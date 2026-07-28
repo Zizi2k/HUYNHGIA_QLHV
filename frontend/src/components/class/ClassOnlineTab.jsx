@@ -36,37 +36,84 @@ function loadJitsiScript(domain) {
   });
 }
 
-function JitsiRoom({ session, displayName, isHost, onLeave }) {
+function disposeJitsiApi(api) {
+  if (!api) return;
+  try {
+    api.removeAllListeners?.();
+  } catch {
+    // ignore
+  }
+  try {
+    api.dispose();
+  } catch {
+    // ignore
+  }
+}
+
+function JitsiRoom({
+  session, displayName, userId, isHost, onLeave,
+}) {
   const containerRef = useRef(null);
   const apiRef = useRef(null);
+  const onLeaveRef = useRef(onLeave);
+  const leftRef = useRef(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    onLeaveRef.current = onLeave;
+  }, [onLeave]);
+
+  useEffect(() => {
     let disposed = false;
+    leftRef.current = false;
+
+    const notifyLeft = () => {
+      if (leftRef.current || disposed) return;
+      leftRef.current = true;
+      const api = apiRef.current;
+      apiRef.current = null;
+      disposeJitsiApi(api);
+      onLeaveRef.current?.();
+    };
 
     const start = async () => {
       try {
         await loadJitsiScript(JITSI_DOMAIN);
         if (disposed || !containerRef.current) return;
 
+        // Unique identity each join so host can re-enter after leaving
+        // (avoids Jitsi treating the old ghost session as still online).
+        const joinToken = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+        const safeName = (displayName || 'Học viên').trim() || 'Học viên';
         const api = new window.JitsiMeetExternalAPI(JITSI_DOMAIN, {
           roomName: session.room_code,
           parentNode: containerRef.current,
           width: '100%',
           height: '100%',
-          userInfo: { displayName },
+          userInfo: {
+            displayName: safeName,
+            email: `lhg-${userId || 'guest'}-${joinToken}@noreply.lhg.local`,
+          },
           configOverwrite: {
             prejoinPageEnabled: false,
             startWithAudioMuted: !isHost,
-            startWithVideoMuted: false,
+            startWithVideoMuted: !isHost,
             disableDeepLinking: true,
             enableWelcomePage: false,
             enableClosePage: false,
+            enableLobbyChat: false,
+            requireDisplayName: false,
+            enableInsecureRoomNameWarning: false,
+            analytics: { disabled: true },
+            // Host can rejoin without waiting for "moderator" lockouts
+            p2p: { enabled: true },
           },
           interfaceConfigOverwrite: {
             SHOW_JITSI_WATERMARK: false,
             SHOW_WATERMARK_FOR_GUESTS: false,
+            MOBILE_APP_PROMO: false,
+            DISABLE_JOIN_LEAVE_NOTIFICATIONS: true,
             TOOLBAR_BUTTONS: [
               'microphone', 'camera', 'desktop', 'fullscreen',
               'fodeviceselection', 'hangup', 'chat', 'raisehand', 'tileview',
@@ -75,12 +122,14 @@ function JitsiRoom({ session, displayName, isHost, onLeave }) {
         });
 
         apiRef.current = api;
-        api.addListener('readyToClose', () => onLeave());
-        api.addListener('videoConferenceLeft', () => onLeave());
+        // Hangup / close — only readyToClose to avoid double-leave races
+        api.addListener('readyToClose', notifyLeft);
         setLoading(false);
       } catch (err) {
-        setError(err.message || 'Không thể kết nối phòng học');
-        setLoading(false);
+        if (!disposed) {
+          setError(err.message || 'Không thể kết nối phòng học');
+          setLoading(false);
+        }
       }
     };
 
@@ -88,12 +137,12 @@ function JitsiRoom({ session, displayName, isHost, onLeave }) {
 
     return () => {
       disposed = true;
-      if (apiRef.current) {
-        apiRef.current.dispose();
-        apiRef.current = null;
-      }
+      const api = apiRef.current;
+      apiRef.current = null;
+      disposeJitsiApi(api);
     };
-  }, [session.room_code, displayName, isHost, onLeave]);
+    // Intentionally omit onLeave — use ref to avoid remount loop
+  }, [session.room_code, displayName, userId, isHost]);
 
   return (
     <div className="jitsi-wrapper border rounded overflow-hidden bg-dark position-relative">
@@ -120,7 +169,10 @@ export default function ClassOnlineTab({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [joinedSession, setJoinedSession] = useState(null);
+  const [joinNonce, setJoinNonce] = useState(0);
+  const [rejoining, setRejoining] = useState(false);
   const hasLoadedOnceRef = useRef(false);
+  const leaveTimerRef = useRef(null);
 
   const loadSessions = useCallback(() => {
     const run = async () => {
@@ -145,6 +197,27 @@ export default function ClassOnlineTab({
 
   useEffect(() => { loadSessions(); }, [loadSessions]);
 
+  useEffect(() => () => {
+    if (leaveTimerRef.current) clearTimeout(leaveTimerRef.current);
+  }, []);
+
+  const leaveRoom = useCallback(() => {
+    setJoinedSession(null);
+    setRejoining(true);
+    // Allow Jitsi iframe / WebRTC to fully release before next join
+    if (leaveTimerRef.current) clearTimeout(leaveTimerRef.current);
+    leaveTimerRef.current = setTimeout(() => {
+      setJoinNonce((n) => n + 1);
+      setRejoining(false);
+    }, 800);
+  }, []);
+
+  const joinRoom = useCallback((session) => {
+    if (rejoining) return;
+    setJoinNonce((n) => n + 1);
+    setJoinedSession(session);
+  }, [rejoining]);
+
   const handleCreate = async (e) => {
     e.preventDefault();
     if (!title.trim()) {
@@ -162,7 +235,7 @@ export default function ClassOnlineTab({
       setShowCreate(false);
       setTitle('');
       loadSessions();
-      setJoinedSession({
+      joinRoom({
         id: res.data.id,
         room_code: res.data.room_code,
         title: sessionTitle,
@@ -179,7 +252,7 @@ export default function ClassOnlineTab({
     if (!window.confirm('Kết thúc phòng học online? Học viên sẽ không tham gia được nữa.')) return;
     try {
       await onlineSessionService.end(sessionId);
-      if (joinedSession?.id === sessionId) setJoinedSession(null);
+      if (joinedSession?.id === sessionId) leaveRoom();
       loadSessions();
     } catch (err) {
       alert(err.response?.data?.message || 'Không thể kết thúc phòng học');
@@ -191,7 +264,7 @@ export default function ClassOnlineTab({
     try {
       const res = await onlineSessionService.delete(sessionId);
       if (notifyDeleteResult(res)) return;
-      if (joinedSession?.id === sessionId) setJoinedSession(null);
+      if (joinedSession?.id === sessionId) leaveRoom();
       loadSessions();
     } catch (err) {
       alert(err.response?.data?.message || 'Không thể xóa');
@@ -216,6 +289,7 @@ export default function ClassOnlineTab({
         <i className="bi bi-camera-video me-1" />
         Phòng học online hỗ trợ <strong>video</strong>, <strong>micro</strong> và{' '}
         <strong>chia sẻ màn hình</strong>. Trình duyệt sẽ hỏi quyền camera/micro khi tham gia.
+        Bạn có thể rời phòng rồi tham gia lại bằng cùng tài khoản LHG.
       </Alert>
 
       {canManageClass && (
@@ -223,6 +297,13 @@ export default function ClassOnlineTab({
           <i className="bi bi-plus-circle me-1" />
           Tạo phòng học online
         </Button>
+      )}
+
+      {rejoining && !joinedSession && (
+        <Alert variant="secondary" className="py-2 small">
+          <Spinner size="sm" className="me-2" />
+          Đang giải phóng phòng cũ — vui lòng đợi giây lát rồi bấm Tham gia lại...
+        </Alert>
       )}
 
       {joinedSession && (
@@ -235,17 +316,19 @@ export default function ClassOnlineTab({
             <Button
               variant="outline-light"
               size="sm"
-              onClick={() => setJoinedSession(null)}
+              onClick={leaveRoom}
             >
               Rời phòng
             </Button>
           </Card.Header>
           <Card.Body className="p-0">
             <JitsiRoom
+              key={`jitsi-${joinedSession.id}-${joinNonce}`}
               session={joinedSession}
               displayName={user?.fullname || 'Học viên'}
+              userId={user?.id}
               isHost={canManageClass}
-              onLeave={() => setJoinedSession(null)}
+              onLeave={leaveRoom}
             />
           </Card.Body>
         </Card>
@@ -272,9 +355,13 @@ export default function ClassOnlineTab({
               </div>
               <div className="d-flex gap-2">
                 {joinedSession?.id !== s.id && (
-                  <Button variant="primary" onClick={() => setJoinedSession(s)}>
+                  <Button
+                    variant="primary"
+                    disabled={rejoining}
+                    onClick={() => joinRoom(s)}
+                  >
                     <i className="bi bi-camera-video me-1" />
-                    Tham gia
+                    {rejoining ? 'Đang chờ...' : 'Tham gia'}
                   </Button>
                 )}
                 {canManageClass && (
