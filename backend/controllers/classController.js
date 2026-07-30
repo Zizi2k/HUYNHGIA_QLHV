@@ -156,6 +156,9 @@ const getClassById = async (req, res) => {
     const [classes] = await pool.query('SELECT * FROM classes WHERE id = ?', [classId]);
     if (classes.length === 0) return res.status(404).json({ message: 'Không tìm thấy lớp học' });
 
+    const classRow = classes[0];
+    const subject = resolveClassSubject(classRow);
+
     const [members] = await pool.query(
       `SELECT u.id, u.fullname, u.username, u.code, u.role, u.phone, u.zalo, u.avatar_url
        FROM class_members cm JOIN users u ON cm.user_id = u.id
@@ -163,7 +166,55 @@ const getClassById = async (req, res) => {
       [classId]
     );
 
-    res.json({ ...classes[0], members: mapPublicMembers(filterMembersByScope(req.user, members), req.user) });
+    const studentIds = members.filter((m) => m.role === 'student').map((m) => m.id);
+    const feeMap = new Map();
+    if (studentIds.length) {
+      const params = [...studentIds, classId];
+      let subjectClause = '';
+      if (subject) {
+        subjectClause = ' OR subject = ?';
+        params.push(subject);
+      }
+      params.push(classId);
+      const [profiles] = await pool.query(
+        `SELECT id, user_id, class_id, subject, needs_fee_renewal, fee_renewal_note,
+                fee_renewal_flagged_at, end_date
+         FROM tuition_profiles
+         WHERE user_id IN (${studentIds.map(() => '?').join(',')})
+           AND (class_id = ?${subjectClause})
+         ORDER BY (class_id = ?) DESC, id DESC`,
+        params,
+      );
+      profiles.forEach((p) => {
+        if (!feeMap.has(p.user_id)) {
+          feeMap.set(p.user_id, {
+            tuition_profile_id: p.id,
+            needs_fee_renewal: Number(p.needs_fee_renewal) === 1,
+            fee_renewal_note: p.fee_renewal_note || '',
+            fee_renewal_flagged_at: p.fee_renewal_flagged_at || null,
+            tuition_end_date: p.end_date || null,
+          });
+        }
+      });
+    }
+
+    const enriched = members.map((m) => {
+      if (m.role !== 'student') return m;
+      const fee = feeMap.get(m.id);
+      return {
+        ...m,
+        tuition_profile_id: fee?.tuition_profile_id || null,
+        needs_fee_renewal: fee?.needs_fee_renewal || false,
+        fee_renewal_note: fee?.fee_renewal_note || '',
+        fee_renewal_flagged_at: fee?.fee_renewal_flagged_at || null,
+        tuition_end_date: fee?.tuition_end_date || null,
+      };
+    });
+
+    res.json({
+      ...classRow,
+      members: mapPublicMembers(filterMembersByScope(req.user, enriched), req.user),
+    });
   } catch (err) {
     res.status(500).json({ message: 'Lỗi hệ thống', error: err.message });
   }
@@ -802,8 +853,108 @@ const getShareTargetClasses = async (req, res) => {
   }
 };
 
+/**
+ * Mark student as paid-enough / ready for new fee cycle.
+ * Keeps the student in class_members — only flags tuition_profiles.
+ */
+const setMemberFeeRenewal = async (req, res) => {
+  try {
+    const classId = Number(req.params.id);
+    const userId = Number(req.params.userId);
+    if (!(await assertClassAccess(req.user, classId, res, { manage: true }))) return;
+
+    const [memberRows] = await pool.query(
+      `SELECT u.id, u.fullname, u.role
+       FROM class_members cm
+       JOIN users u ON u.id = cm.user_id
+       WHERE cm.class_id = ? AND cm.user_id = ?`,
+      [classId, userId],
+    );
+    if (!memberRows.length) {
+      return res.status(404).json({ message: 'Học viên không thuộc lớp này' });
+    }
+    if (memberRows[0].role !== 'student') {
+      return res.status(400).json({ message: 'Chỉ áp dụng cho học viên' });
+    }
+
+    const classRow = await getClassRow(pool, classId);
+    const subject = resolveClassSubject(classRow);
+    const needsRenewal = req.body?.needs_fee_renewal === true
+      || req.body?.needs_fee_renewal === 1
+      || req.body?.needs_fee_renewal === '1'
+      || req.body?.needs_fee_renewal === 'true';
+    const note = (req.body?.note || '').trim() || null;
+
+    const [profiles] = await pool.query(
+      subject
+        ? `SELECT id FROM tuition_profiles
+           WHERE user_id = ? AND (class_id = ? OR subject = ?)
+           ORDER BY (class_id = ?) DESC, id DESC
+           LIMIT 1`
+        : `SELECT id FROM tuition_profiles
+           WHERE user_id = ? AND class_id = ?
+           ORDER BY id DESC
+           LIMIT 1`,
+      subject ? [userId, classId, subject, classId] : [userId, classId],
+    );
+
+    if (!profiles.length) {
+      return res.status(404).json({
+        message: 'Chưa có hồ sơ học phí cho học viên này. Admin cần tạo hồ sơ học phí trước.',
+      });
+    }
+
+    const profileId = profiles[0].id;
+    if (needsRenewal) {
+      await pool.query(
+        `UPDATE tuition_profiles SET
+          needs_fee_renewal = 1,
+          fee_renewal_note = ?,
+          fee_renewal_flagged_at = NOW(),
+          fee_renewal_flagged_by = ?
+         WHERE id = ?`,
+        [note, req.user.id, profileId],
+      );
+    } else {
+      await pool.query(
+        `UPDATE tuition_profiles SET
+          needs_fee_renewal = 0,
+          fee_renewal_note = NULL,
+          fee_renewal_flagged_at = NULL,
+          fee_renewal_flagged_by = NULL
+         WHERE id = ?`,
+        [profileId],
+      );
+    }
+
+    await logAction({
+      actorId: req.user.id,
+      action: needsRenewal ? 'update' : 'update',
+      resourceType: 'tuition_profile',
+      resourceId: profileId,
+      resourceLabel: memberRows[0].fullname,
+      metadata: {
+        class_id: classId,
+        needs_fee_renewal: needsRenewal,
+        note,
+      },
+    });
+
+    res.json({
+      message: needsRenewal
+        ? 'Đã báo: học viên đóng đủ tháng — cần thu phí khóa mới (vẫn giữ trong lớp)'
+        : 'Đã bỏ đánh dấu thu khóa mới',
+      needs_fee_renewal: needsRenewal,
+      tuition_profile_id: profileId,
+    });
+  } catch (err) {
+    res.status(500).json({ message: 'Lỗi hệ thống', error: err.message });
+  }
+};
+
 module.exports = {
   getClasses, getClassById, createClass, updateClass, uploadClassAvatar, addMember, removeMember,
   removeAllStudents, deleteClass, getAvailableStudents, createStudentMember, updateStudentMember, syncUsernames,
   getAvailableTeachers, addTeacher, removeTeacher, getNextStudentCodeForClass, getShareTargetClasses,
+  setMemberFeeRenewal,
 };

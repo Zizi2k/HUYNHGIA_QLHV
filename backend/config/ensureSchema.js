@@ -471,6 +471,35 @@ async function ensureSchema() {
     )
   `);
 
+  try {
+    await pool.query(
+      'ALTER TABLE tuition_profiles ADD COLUMN needs_fee_renewal TINYINT(1) NOT NULL DEFAULT 0',
+    );
+  } catch (err) {
+    if (err.code !== 'ER_DUP_FIELDNAME') throw err;
+  }
+  try {
+    await pool.query(
+      'ALTER TABLE tuition_profiles ADD COLUMN fee_renewal_note TEXT NULL',
+    );
+  } catch (err) {
+    if (err.code !== 'ER_DUP_FIELDNAME') throw err;
+  }
+  try {
+    await pool.query(
+      'ALTER TABLE tuition_profiles ADD COLUMN fee_renewal_flagged_at DATETIME NULL',
+    );
+  } catch (err) {
+    if (err.code !== 'ER_DUP_FIELDNAME') throw err;
+  }
+  try {
+    await pool.query(
+      'ALTER TABLE tuition_profiles ADD COLUMN fee_renewal_flagged_by INT NULL',
+    );
+  } catch (err) {
+    if (err.code !== 'ER_DUP_FIELDNAME') throw err;
+  }
+
   } catch (err) {
     console.warn('ensureSchema:', err.message);
   }

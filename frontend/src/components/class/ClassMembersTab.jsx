@@ -46,7 +46,9 @@ export default function ClassMembersTab({ classId, className, members, isTeacher
   const [availableTeachers, setAvailableTeachers] = useState([]);
   const [selectedTeacherId, setSelectedTeacherId] = useState('');
   const [search, setSearch] = useState('');
+  const [feeFilter, setFeeFilter] = useState('all'); // all | renewal
   const [saving, setSaving] = useState(false);
+  const [feeSavingId, setFeeSavingId] = useState(null);
   const [loadingMeta, setLoadingMeta] = useState(false);
   const [importing, setImporting] = useState(false);
   const [removingAll, setRemovingAll] = useState(false);
@@ -61,17 +63,26 @@ export default function ClassMembersTab({ classId, className, members, isTeacher
   const canLinkStudentProfile = isAdmin || isTeacher;
 
   const filteredStudents = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    if (!q) return students;
-    if (isStudent) {
-      return students.filter((s) => s.fullname?.toLowerCase().includes(q));
+    let list = students;
+    if (feeFilter === 'renewal') {
+      list = list.filter((s) => s.needs_fee_renewal);
     }
-    return students.filter((s) =>
+    const q = search.trim().toLowerCase();
+    if (!q) return list;
+    if (isStudent) {
+      return list.filter((s) => s.fullname?.toLowerCase().includes(q));
+    }
+    return list.filter((s) =>
       s.fullname?.toLowerCase().includes(q)
       || s.code?.toLowerCase().includes(q)
       || s.phone?.includes(q)
       || s.zalo?.toLowerCase().includes(q));
-  }, [students, search, isStudent]);
+  }, [students, search, isStudent, feeFilter]);
+
+  const renewalCount = useMemo(
+    () => students.filter((s) => s.needs_fee_renewal).length,
+    [students],
+  );
 
   const openAddModal = async () => {
     setError('');
@@ -265,6 +276,26 @@ export default function ClassMembersTab({ classId, className, members, isTeacher
       if (!notifyDeleteResult(res)) onUpdated();
     } catch (err) {
       alert(err.response?.data?.message || 'Không thể xóa học viên');
+    }
+  };
+
+  const handleFeeRenewal = async (student, needsRenewal) => {
+    const confirmMsg = needsRenewal
+      ? `Báo "${student.fullname}" đã đóng đủ tháng?\n\nGiảng viên sẽ biết cần thu phí khóa mới. Học viên vẫn giữ trong lớp.`
+      : `Bỏ đánh dấu thu khóa mới cho "${student.fullname}"?`;
+    if (!window.confirm(confirmMsg)) return;
+    setFeeSavingId(student.id);
+    try {
+      const res = await classService.setFeeRenewal(classId, student.id, {
+        needs_fee_renewal: needsRenewal,
+        note: needsRenewal ? 'Đã đóng đủ tháng — thu phí khóa mới' : '',
+      });
+      alert(res.data.message);
+      onUpdated();
+    } catch (err) {
+      alert(err.response?.data?.message || 'Không thể lưu trạng thái học phí');
+    } finally {
+      setFeeSavingId(null);
     }
   };
 
@@ -465,20 +496,46 @@ export default function ClassMembersTab({ classId, className, members, isTeacher
         <h6 className="pro-section-title">
           Danh sách học viên
           <span className="pro-count-badge ms-2">{students.length}</span>
+          {isTeacher && renewalCount > 0 && (
+            <Badge bg="warning" text="dark" className="ms-2">
+              {renewalCount} cần thu khóa mới
+            </Badge>
+          )}
         </h6>
         {students.length > 0 && (
-          <InputGroup size="sm" style={{ maxWidth: 280 }}>
-            <InputGroup.Text className="bg-white">
-              <i className="bi bi-search text-muted" />
-            </InputGroup.Text>
-            <Form.Control
-              placeholder={isStudent ? 'Tìm theo tên...' : 'Tìm theo tên, mã, SĐT...'}
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
-          </InputGroup>
+          <div className="d-flex flex-wrap gap-2 align-items-center">
+            {isTeacher && (
+              <Form.Select
+                size="sm"
+                value={feeFilter}
+                onChange={(e) => setFeeFilter(e.target.value)}
+                style={{ maxWidth: 200 }}
+              >
+                <option value="all">Tất cả học viên</option>
+                <option value="renewal">Cần thu khóa mới ({renewalCount})</option>
+              </Form.Select>
+            )}
+            <InputGroup size="sm" style={{ maxWidth: 280 }}>
+              <InputGroup.Text className="bg-white">
+                <i className="bi bi-search text-muted" />
+              </InputGroup.Text>
+              <Form.Control
+                placeholder={isStudent ? 'Tìm theo tên...' : 'Tìm theo tên, mã, SĐT...'}
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+            </InputGroup>
+          </div>
         )}
       </div>
+
+      {isTeacher && (
+        <Alert variant="light" className="py-2 small mb-3">
+          <i className="bi bi-cash-coin me-1 text-success" />
+          Dùng nút <strong>Báo đủ tháng</strong> khi học viên đã đóng tiền và học đủ tháng.
+          Hệ thống đánh dấu để thu phí khóa mới — <strong>học viên vẫn giữ trong lớp</strong>.
+        </Alert>
+      )}
 
       {students.length === 0 ? (
         <DataTable>
@@ -520,28 +577,38 @@ export default function ClassMembersTab({ classId, className, members, isTeacher
                   <th>Tên đăng nhập</th>
                   <th>Số điện thoại</th>
                   <th>Zalo</th>
+                  {isTeacher && <th style={{ width: 150 }}>Học phí</th>}
                 </>
               )}
-              {isTeacher && <th style={{ width: 100 }} className="text-center">Thao tác</th>}
+              {isTeacher && <th style={{ width: 160 }} className="text-center">Thao tác</th>}
             </tr>
           </thead>
           <tbody>
             {filteredStudents.map((m, idx) => (
-              <tr key={m.id}>
+              <tr key={m.id} className={m.needs_fee_renewal ? 'table-warning' : undefined}>
                 <td><span className="pro-row-num">{idx + 1}</span></td>
                 <td>
                   <div className="pro-student-cell">
                     <UserAvatar user={m} size={36} />
-                    {canLinkStudentProfile ? (
-                      <Link
-                        to={studentProfilePath(classId, m, { isAdmin, isTeacher })}
-                        className="dash-class-link pro-student-name text-decoration-none"
-                      >
-                        {m.fullname}
-                      </Link>
-                    ) : (
-                      <span className="pro-student-name">{m.fullname}</span>
-                    )}
+                    <div>
+                      {canLinkStudentProfile ? (
+                        <Link
+                          to={studentProfilePath(classId, m, { isAdmin, isTeacher })}
+                          className="dash-class-link pro-student-name text-decoration-none"
+                        >
+                          {m.fullname}
+                        </Link>
+                      ) : (
+                        <span className="pro-student-name">{m.fullname}</span>
+                      )}
+                      {m.needs_fee_renewal && (
+                        <div>
+                          <Badge bg="warning" text="dark" className="mt-1">
+                            Thu khóa mới
+                          </Badge>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </td>
                 {!isStudent && (
@@ -562,11 +629,52 @@ export default function ClassMembersTab({ classId, className, members, isTeacher
                         <span className="text-muted">—</span>
                       )}
                     </td>
+                    {isTeacher && (
+                      <td>
+                        {m.needs_fee_renewal ? (
+                          <div>
+                            <Badge bg="success" className="mb-1">Đã báo đủ tháng</Badge>
+                            {m.fee_renewal_flagged_at && (
+                              <div className="text-muted" style={{ fontSize: '0.7rem' }}>
+                                {new Date(m.fee_renewal_flagged_at).toLocaleDateString('vi-VN')}
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="text-muted small">—</span>
+                        )}
+                      </td>
+                    )}
                   </>
                 )}
                 {isTeacher && (
                   <td className="text-center">
-                    <div className="pro-action-group">
+                    <div className="pro-action-group flex-wrap justify-content-center">
+                      {m.needs_fee_renewal ? (
+                        <Button
+                          variant="outline-secondary"
+                          size="sm"
+                          disabled={feeSavingId === m.id}
+                          onClick={() => handleFeeRenewal(m, false)}
+                          title="Bỏ đánh dấu thu khóa mới"
+                        >
+                          {feeSavingId === m.id ? <Spinner size="sm" /> : <i className="bi bi-x-circle" />}
+                        </Button>
+                      ) : (
+                        <Button
+                          variant="outline-success"
+                          size="sm"
+                          disabled={feeSavingId === m.id}
+                          onClick={() => handleFeeRenewal(m, true)}
+                          title="Báo đủ tháng — thu khóa mới"
+                        >
+                          {feeSavingId === m.id ? (
+                            <Spinner size="sm" />
+                          ) : (
+                            <><i className="bi bi-cash-coin me-1" />Báo đủ tháng</>
+                          )}
+                        </Button>
+                      )}
                       <Button
                         variant="light"
                         size="sm"

@@ -449,7 +449,11 @@ const updateEnrollment = async (req, res) => {
         base_fee=?, fee_before_discount=?, fee_after_discount=?, book_fee=?,
         discount_id=?, discount_reason=?,
         start_date=COALESCE(?, start_date),
-        end_date=?
+        end_date=?,
+        needs_fee_renewal=0,
+        fee_renewal_note=NULL,
+        fee_renewal_flagged_at=NULL,
+        fee_renewal_flagged_by=NULL
        WHERE id=?`,
       [
         fullname?.trim() || null,

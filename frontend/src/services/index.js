@@ -34,6 +34,7 @@ export const classService = {
   addMember: (classId, userId) => api.post(`/classes/${classId}/members`, { user_id: userId }),
   createStudent: (classId, data) => api.post(`/classes/${classId}/students`, data),
   updateStudent: (classId, userId, data) => api.put(`/classes/${classId}/members/${userId}`, data),
+  setFeeRenewal: (classId, userId, data) => api.patch(`/classes/${classId}/members/${userId}/fee-renewal`, data),
   syncUsernames: (classId) => api.post(`/classes/${classId}/sync-usernames`),
   removeMember: (classId, userId) => api.delete(`/classes/${classId}/members/${userId}`),
   removeAllStudents: (classId) => api.delete(`/classes/${classId}/students`),

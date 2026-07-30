@@ -3,6 +3,7 @@ const {
   getClasses, getClassById, createClass, updateClass, uploadClassAvatar, addMember, removeMember,
   removeAllStudents, deleteClass, getAvailableStudents, createStudentMember, updateStudentMember, syncUsernames,
   getAvailableTeachers, addTeacher, removeTeacher, getNextStudentCodeForClass, getShareTargetClasses,
+  setMemberFeeRenewal,
 } = require('../controllers/classController');
 const { importStudents, downloadTemplate } = require('../controllers/importController');
 const { getPendingWork, sendReminders, exportGradesExcel } = require('../controllers/classReportController');
@@ -35,6 +36,7 @@ router.post('/:id/students', authorize('admin', 'teacher'), requireClassTeacher(
 router.post('/:id/sync-usernames', authorize('admin', 'teacher'), requireClassTeacher('id'), syncUsernames);
 router.post('/:id/members', authorize('admin', 'teacher'), requireClassTeacher('id'), addMember);
 router.put('/:id/members/:userId', authorize('admin', 'teacher'), requireClassTeacher('id'), updateStudentMember);
+router.patch('/:id/members/:userId/fee-renewal', authorize('admin', 'teacher'), requireClassTeacher('id'), setMemberFeeRenewal);
 router.delete('/:id/members/:userId', authorize('admin', 'teacher'), requireClassTeacher('id'), removeMember);
 router.delete('/:id/students', authorize('admin'), removeAllStudents);
 router.post('/:id/teachers', authorize('admin'), addTeacher);
