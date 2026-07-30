@@ -165,6 +165,28 @@ export default function ClassQuizzesTab({
     }
   };
 
+  const handleResetAllSubmissions = async (quiz) => {
+    const count = quiz.submission_count || 0;
+    const msg = count > 0
+      ? `Cho tất cả học viên làm lại bài "${quiz.title}"?\n\nSẽ xóa ${count} bài nộp/điểm hiện có. Thao tác không hoàn tác được.`
+      : `Cho tất cả học viên làm lại bài "${quiz.title}"?\n\nHiện chưa có bài nộp nào.`;
+    if (!window.confirm(msg)) return;
+    setSaving(true);
+    setError('');
+    try {
+      const res = await quizService.resetSubmissions(quiz.id);
+      alert(res.data.message);
+      if (resultsQuizId === quiz.id) {
+        setResults([]);
+      }
+      onUpdated();
+    } catch (err) {
+      alert(err.response?.data?.message || 'Không thể reset bài làm');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const handleGradeQuiz = async (submissionId) => {
     const draft = gradeDrafts[submissionId] || {};
     if (!draft.score) {
@@ -567,6 +589,16 @@ export default function ClassQuizzesTab({
                     </Button>
                     <Button variant="outline-info" size="sm" onClick={() => openResults(q.id)} title="Kết quả">
                       <i className="bi bi-bar-chart" />
+                    </Button>
+                    <Button
+                      variant="outline-warning"
+                      size="sm"
+                      disabled={saving || !(q.submission_count > 0)}
+                      title="Xóa tất cả bài nộp — cho học viên làm lại"
+                      onClick={() => handleResetAllSubmissions(q)}
+                    >
+                      <i className="bi bi-arrow-counterclockwise me-1" />
+                      Cho làm lại
                     </Button>
                     <Button
                       variant="outline-info"
@@ -976,6 +1008,23 @@ export default function ClassQuizzesTab({
             Bài trắc nghiệm online được chấm tự động. Bài nộp file/link cần giáo viên chấm thủ công.
           </Alert>
         </Modal.Body>
+        <Modal.Footer className="border-top bg-white">
+          {resultsQuizId && (
+            <Button
+              variant="warning"
+              disabled={saving || results.length === 0}
+              className="me-auto"
+              onClick={() => {
+                const quiz = quizzes.find((q) => q.id === resultsQuizId);
+                if (quiz) handleResetAllSubmissions(quiz);
+              }}
+            >
+              <i className="bi bi-arrow-counterclockwise me-1" />
+              Cho tất cả làm lại
+            </Button>
+          )}
+          <Button variant="secondary" onClick={() => setShowResults(false)}>Đóng</Button>
+        </Modal.Footer>
       </Modal>
 
       <ShareContentModal

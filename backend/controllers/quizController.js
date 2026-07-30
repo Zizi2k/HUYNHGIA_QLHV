@@ -742,6 +742,67 @@ const deleteQuizSubmission = async (req, res) => {
   }
 };
 
+/** Delete all submissions for a quiz so every student can retake it. */
+const resetQuizSubmissions = async (req, res) => {
+  const conn = await pool.getConnection();
+  try {
+    const quizId = req.params.id;
+    const classId = await getQuizClassId(quizId);
+    if (!classId) {
+      return res.status(404).json({ message: 'Không tìm thấy bài kiểm tra' });
+    }
+    if (!(await assertClassAccess(req.user, classId, res, { manage: true }))) return;
+
+    const [quizRows] = await conn.query('SELECT id, title FROM quizzes WHERE id = ?', [quizId]);
+    if (!quizRows.length) {
+      return res.status(404).json({ message: 'Không tìm thấy bài kiểm tra' });
+    }
+
+    await conn.beginTransaction();
+
+    const [subs] = await conn.query(
+      'SELECT id FROM quiz_submissions WHERE quiz_id = ?',
+      [quizId],
+    );
+    const ids = subs.map((s) => s.id);
+    if (ids.length) {
+      await conn.query(
+        `DELETE FROM submission_attachments
+         WHERE submission_type = 'quiz' AND submission_id IN (${ids.map(() => '?').join(',')})`,
+        ids,
+      );
+      await conn.query('DELETE FROM quiz_submissions WHERE quiz_id = ?', [quizId]);
+    }
+
+    await conn.commit();
+
+    await logAction({
+      actorId: req.user.id,
+      action: 'update',
+      resourceType: 'quiz',
+      resourceId: Number(quizId),
+      resourceLabel: quizRows[0].title,
+      metadata: {
+        class_id: classId,
+        reset_submissions: true,
+        deleted_count: ids.length,
+      },
+    });
+
+    res.json({
+      message: ids.length
+        ? `Đã reset ${ids.length} bài nộp — tất cả học viên có thể làm lại`
+        : 'Chưa có bài nộp nào để reset',
+      deleted_count: ids.length,
+    });
+  } catch (err) {
+    await conn.rollback();
+    res.status(500).json({ message: 'Lỗi hệ thống', error: err.message });
+  } finally {
+    conn.release();
+  }
+};
+
 const setQuizVisibility = async (req, res) => {
   try {
     const classId = await getQuizClassId(req.params.id);
@@ -922,6 +983,7 @@ module.exports = {
   submitQuizAttachment,
   gradeQuizSubmission,
   deleteQuizSubmission,
+  resetQuizSubmissions,
   importQuizFile,
   getQuizImportTemplate,
   setQuizVisibility,

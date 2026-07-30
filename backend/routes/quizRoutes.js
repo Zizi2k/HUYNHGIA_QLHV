@@ -2,7 +2,7 @@ const express = require('express');
 const {
   getQuizzes, getQuizById, createQuiz, updateQuiz, deleteQuiz,
   getQuizSubmissions, submitQuiz, submitQuizAttachment, gradeQuizSubmission,
-  deleteQuizSubmission,
+  deleteQuizSubmission, resetQuizSubmissions,
   importQuizFile, getQuizImportTemplate,   setQuizVisibility, setQuizShowResults,
   getQuizStudentAccess, setQuizStudentAccess,
 } = require('../controllers/quizController');
@@ -74,6 +74,7 @@ router.post('/submit', authorize('student'), submitQuiz);
 router.post('/submit-attachment', authorize('student'), withOptionalQuizUpload(submitQuizAttachment));
 router.put('/submissions/:id/grade', authorize('admin', 'teacher'), gradeQuizSubmission);
 router.delete('/submissions/:id', authorize('admin', 'teacher'), deleteQuizSubmission);
+router.post('/:id/reset-submissions', authorize('admin', 'teacher'), resetQuizSubmissions);
 router.get('/:id/submissions', authorize('admin', 'teacher'), getQuizSubmissions);
 router.get('/:id', getQuizById);
 

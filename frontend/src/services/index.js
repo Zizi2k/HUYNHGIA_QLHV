@@ -97,6 +97,7 @@ export const quizService = {
   },
   gradeSubmission: (id, data) => api.put(`/quizzes/submissions/${id}/grade`, data),
   deleteSubmission: (id) => api.delete(`/quizzes/submissions/${id}`),
+  resetSubmissions: (id) => api.post(`/quizzes/${id}/reset-submissions`),
   parseImportFile: (file) => {
     const formData = new FormData();
     formData.append('file', file);
