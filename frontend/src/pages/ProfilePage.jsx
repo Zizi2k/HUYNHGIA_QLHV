@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { Alert, Dropdown, Spinner } from 'react-bootstrap';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { Alert, Spinner } from 'react-bootstrap';
-import { userService } from '../services';
+import { authService, userService } from '../services';
 import { useAuth } from '../context/AuthContext';
 import { getAvatarUrl, getInitials } from '../utils/avatar';
 import ProfileModal from '../components/ProfileModal';
@@ -19,14 +19,27 @@ function formatJoined(dateStr) {
   }
 }
 
+function zaloHref(zalo) {
+  const digits = String(zalo || '').replace(/\D/g, '');
+  return digits ? `https://zalo.me/${digits}` : null;
+}
+
 export default function ProfilePage() {
   const { userId } = useParams();
-  const { user: me } = useAuth();
+  const { user: me, updateUser } = useAuth();
   const navigate = useNavigate();
+  const avatarInputRef = useRef(null);
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [showEdit, setShowEdit] = useState(false);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
+
+  const reloadProfile = async () => {
+    const res = await userService.getProfile(userId);
+    setProfile(res.data);
+    return res.data;
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -54,6 +67,32 @@ export default function ProfilePage() {
   const joined = formatJoined(profile?.created_at);
   const highlights = profile?.highlights || [];
   const isSelf = profile?.is_self || Number(me?.id) === Number(userId);
+  const canEdit = isSelf;
+  const zaloLink = zaloHref(profile?.zalo);
+
+  const handleAvatarFile = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file || !canEdit) return;
+    setUploadingAvatar(true);
+    setError('');
+    try {
+      const formData = new FormData();
+      formData.append('fullname', profile.fullname || me?.fullname || '');
+      formData.append('username', profile.username || me?.username || '');
+      formData.append('code', profile.code || me?.code || '');
+      formData.append('phone', profile.phone || '');
+      formData.append('zalo', profile.zalo || '');
+      formData.append('avatar', file);
+      const res = await authService.updateProfile(formData);
+      updateUser(res.data.user);
+      await reloadProfile();
+    } catch (err) {
+      setError(err.response?.data?.message || 'Không thể cập nhật ảnh đại diện');
+    } finally {
+      setUploadingAvatar(false);
+    }
+  };
 
   return (
     <LoadingOverlay loading={loading && !profile} minHeight={420}>
@@ -72,50 +111,83 @@ export default function ProfilePage() {
         {profile && (
           <>
             <header className="profile-hero">
+              {canEdit && (
+                <div className="profile-hero-menu">
+                  <Dropdown align="end">
+                    <Dropdown.Toggle
+                      as="button"
+                      type="button"
+                      className="profile-menu-btn"
+                      aria-label="Tuỳ chọn trang cá nhân"
+                    >
+                      <i className="bi bi-three-dots" />
+                    </Dropdown.Toggle>
+                    <Dropdown.Menu className="app-dropdown-menu profile-menu-dropdown">
+                      <Dropdown.Item onClick={() => avatarInputRef.current?.click()}>
+                        <i className="bi bi-camera me-2" />
+                        Đổi ảnh đại diện
+                      </Dropdown.Item>
+                      <Dropdown.Item onClick={() => setShowEdit(true)}>
+                        <i className="bi bi-pencil-square me-2" />
+                        Sửa thông tin cá nhân
+                      </Dropdown.Item>
+                    </Dropdown.Menu>
+                  </Dropdown>
+                </div>
+              )}
+
               <div className="profile-hero-grid">
-                <div className="profile-hero-identity">
+                <div className="profile-hero-spacer" aria-hidden="true" />
+
+                <div className="profile-hero-center">
+                  <div className={`profile-hero-avatar-wrap${canEdit ? ' is-editable' : ''}`}>
+                    <div className="profile-hero-avatar-ring" aria-hidden="true" />
+                    <div className="profile-hero-avatar">
+                      {avatarSrc ? (
+                        <img src={avatarSrc} alt={profile.fullname} />
+                      ) : (
+                        <span className="profile-hero-initials">{initials}</span>
+                      )}
+                    </div>
+                    {canEdit && (
+                      <button
+                        type="button"
+                        className="profile-avatar-edit"
+                        onClick={() => avatarInputRef.current?.click()}
+                        disabled={uploadingAvatar}
+                        title="Đổi ảnh đại diện"
+                      >
+                        {uploadingAvatar
+                          ? <Spinner animation="border" size="sm" />
+                          : <i className="bi bi-camera-fill" />}
+                      </button>
+                    )}
+                  </div>
+
                   <p className="profile-hero-role">{profile.role_label}</p>
                   <h1 className="profile-hero-name">{profile.fullname}</h1>
-                  {isSelf ? (
-                    <button
-                      type="button"
-                      className="profile-hero-cta"
-                      onClick={() => setShowEdit(true)}
-                    >
-                      Chỉnh sửa
-                      <i className="bi bi-arrow-right" />
-                    </button>
-                  ) : profile.zalo ? (
+
+                  {!isSelf && zaloLink && (
                     <a
                       className="profile-hero-cta"
-                      href={`https://zalo.me/${String(profile.zalo).replace(/\D/g, '')}`}
+                      href={zaloLink}
                       target="_blank"
                       rel="noreferrer"
                     >
                       Liên hệ Zalo
                       <i className="bi bi-arrow-right" />
                     </a>
-                  ) : (
+                  )}
+                  {!isSelf && !zaloLink && (
                     <button
                       type="button"
-                      className="profile-hero-cta"
+                      className="profile-hero-cta profile-hero-cta--ghost"
                       onClick={() => navigate(-1)}
                     >
                       Quay lại
                       <i className="bi bi-arrow-right" />
                     </button>
                   )}
-                </div>
-
-                <div className="profile-hero-avatar-wrap">
-                  <div className="profile-hero-avatar-ring" aria-hidden="true" />
-                  <div className="profile-hero-avatar">
-                    {avatarSrc ? (
-                      <img src={avatarSrc} alt={profile.fullname} />
-                    ) : (
-                      <span className="profile-hero-initials">{initials}</span>
-                    )}
-                  </div>
                 </div>
 
                 <ul className="profile-hero-tags">
@@ -126,6 +198,16 @@ export default function ProfilePage() {
                   ))}
                 </ul>
               </div>
+
+              {canEdit && (
+                <input
+                  ref={avatarInputRef}
+                  type="file"
+                  accept="image/jpeg,image/png,image/gif,image/webp"
+                  className="d-none"
+                  onChange={handleAvatarFile}
+                />
+              )}
             </header>
 
             <section className="profile-about">
@@ -236,12 +318,16 @@ export default function ProfilePage() {
         )}
       </div>
 
-      {isSelf && (
+      {canEdit && (
         <ProfileModal
           show={showEdit}
-          onHide={() => {
-            setShowEdit(false);
-            userService.getProfile(userId).then((res) => setProfile(res.data)).catch(() => {});
+          onHide={() => setShowEdit(false)}
+          onSaved={async () => {
+            try {
+              await reloadProfile();
+            } catch {
+              /* keep current view */
+            }
           }}
         />
       )}

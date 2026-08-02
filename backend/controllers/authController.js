@@ -92,7 +92,7 @@ const register = async (req, res) => {
 const getMe = async (req, res) => {
   try {
     const [rows] = await pool.query(
-      'SELECT id, fullname, username, code, role, admin_scope, status, avatar_url FROM users WHERE id = ?',
+      'SELECT id, fullname, username, code, role, admin_scope, status, avatar_url, phone, zalo FROM users WHERE id = ?',
       [req.user.id]
     );
     if (rows.length === 0) return res.status(404).json({ message: 'Không tìm thấy người dùng' });
@@ -113,6 +113,7 @@ const getMe = async (req, res) => {
     res.status(500).json({ message: 'Lỗi hệ thống', error: err.message });
   }
 };
+
 const updateProfile = async (req, res) => {
   try {
     const { fullname, username, code } = req.body;
@@ -128,26 +129,32 @@ const updateProfile = async (req, res) => {
       return res.status(409).json({ message: 'Tên đăng nhập đã tồn tại' });
     }
 
-    let avatarUrl = null;
+    const [currentRows] = await pool.query(
+      'SELECT phone, zalo, avatar_url FROM users WHERE id = ?',
+      [req.user.id]
+    );
+    const current = currentRows[0] || {};
+
+    let avatarUrl = current.avatar_url || null;
     if (req.file) {
       const saved = await saveMulterFile(req);
       avatarUrl = saved.file_url;
     }
 
-    if (avatarUrl) {
-      await pool.query(
-        'UPDATE users SET fullname=?, username=?, code=?, avatar_url=? WHERE id=?',
-        [fullname, username, code, avatarUrl, req.user.id]
-      );
-    } else {
-      await pool.query(
-        'UPDATE users SET fullname=?, username=?, code=? WHERE id=?',
-        [fullname, username, code, req.user.id]
-      );
-    }
+    const nextPhone = Object.prototype.hasOwnProperty.call(req.body, 'phone')
+      ? (String(req.body.phone || '').trim() || null)
+      : (current.phone || null);
+    const nextZalo = Object.prototype.hasOwnProperty.call(req.body, 'zalo')
+      ? (String(req.body.zalo || '').trim() || null)
+      : (current.zalo || null);
+
+    await pool.query(
+      'UPDATE users SET fullname=?, username=?, code=?, phone=?, zalo=?, avatar_url=? WHERE id=?',
+      [fullname, username, code, nextPhone, nextZalo, avatarUrl, req.user.id]
+    );
 
     const [rows] = await pool.query(
-      'SELECT id, fullname, username, code, role, admin_scope, status, avatar_url FROM users WHERE id = ?',
+      'SELECT id, fullname, username, code, role, admin_scope, status, avatar_url, phone, zalo FROM users WHERE id = ?',
       [req.user.id]
     );
 

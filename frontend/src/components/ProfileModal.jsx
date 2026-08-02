@@ -6,9 +6,15 @@ import UserAvatar from './UserAvatar';
 
 const roleLabels = { admin: 'Quản trị viên', teacher: 'Giáo viên', student: 'Học sinh' };
 
-export default function ProfileModal({ show, onHide }) {
+export default function ProfileModal({ show, onHide, onSaved }) {
   const { user, updateUser } = useAuth();
-  const [form, setForm] = useState({ fullname: '', username: '', code: '' });
+  const [form, setForm] = useState({
+    fullname: '',
+    username: '',
+    code: '',
+    phone: '',
+    zalo: '',
+  });
   const [avatarFile, setAvatarFile] = useState(null);
   const [preview, setPreview] = useState(null);
   const [saving, setSaving] = useState(false);
@@ -20,6 +26,8 @@ export default function ProfileModal({ show, onHide }) {
         fullname: user.fullname || '',
         username: user.username || '',
         code: user.code || '',
+        phone: user.phone || '',
+        zalo: user.zalo || '',
       });
       setAvatarFile(null);
       setPreview(null);
@@ -43,10 +51,13 @@ export default function ProfileModal({ show, onHide }) {
       formData.append('fullname', form.fullname);
       formData.append('username', form.username);
       formData.append('code', form.code);
+      formData.append('phone', form.phone || '');
+      formData.append('zalo', form.zalo || '');
       if (avatarFile) formData.append('avatar', avatarFile);
 
       const res = await authService.updateProfile(formData);
       updateUser(res.data.user);
+      onSaved?.(res.data.user);
       onHide();
     } catch (err) {
       setError(err.response?.data?.message || 'Có lỗi xảy ra');
@@ -72,7 +83,7 @@ export default function ProfileModal({ show, onHide }) {
             <div className="position-relative d-inline-block">
               <UserAvatar user={displayUser} size={96} />
               <label
-                htmlFor="avatar-upload"
+                htmlFor="profile-modal-avatar-upload"
                 className="position-absolute bottom-0 end-0 btn btn-primary btn-sm rounded-circle p-2"
                 style={{ width: 32, height: 32, lineHeight: 1 }}
                 title="Đổi ảnh đại diện"
@@ -80,7 +91,7 @@ export default function ProfileModal({ show, onHide }) {
                 <i className="bi bi-camera-fill" style={{ fontSize: '0.75rem' }} />
               </label>
               <input
-                id="avatar-upload"
+                id="profile-modal-avatar-upload"
                 type="file"
                 accept="image/jpeg,image/png,image/gif,image/webp"
                 className="d-none"
@@ -118,6 +129,22 @@ export default function ProfileModal({ show, onHide }) {
                 Các mã theo môn: {user.student_codes.map((item) => item.code).join(', ')}
               </Form.Text>
             )}
+          </Form.Group>
+          <Form.Group className="mb-3">
+            <Form.Label>Số điện thoại</Form.Label>
+            <Form.Control
+              value={form.phone}
+              onChange={(e) => setForm({ ...form, phone: e.target.value })}
+              placeholder="VD: 0901234567"
+            />
+          </Form.Group>
+          <Form.Group className="mb-3">
+            <Form.Label>Zalo</Form.Label>
+            <Form.Control
+              value={form.zalo}
+              onChange={(e) => setForm({ ...form, zalo: e.target.value })}
+              placeholder="Số Zalo hoặc tên Zalo"
+            />
           </Form.Group>
           <Form.Group>
             <Form.Label>Vai trò</Form.Label>
