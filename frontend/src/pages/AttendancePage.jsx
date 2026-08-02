@@ -12,13 +12,7 @@ import AttendanceDetailModal from '../components/attendance/AttendanceDetailModa
 import { isSuperAdmin } from '../utils/adminScope';
 import LoadingOverlay from '../components/common/LoadingOverlay';
 import { preserveScrollDuring } from '../utils/scrollPreserve';
-
-function teacherAccountPath(report) {
-  if (report.teacher_role === 'admin') {
-    return `/admin-staff?user_id=${report.created_by}`;
-  }
-  return `/users?class_id=${report.class_id}&user_id=${report.created_by}`;
-}
+import { profilePath } from '../utils/profilePath';
 
 function currentMonthValue() {
   const now = new Date();
@@ -229,8 +223,8 @@ export default function AttendancePage() {
                         <i className="bi bi-person" />
                       </span>
                       <span className="att-history-teacher-name">
-                        {superAdmin && r.created_by ? (
-                          <Link to={teacherAccountPath(r)} className="dash-class-link">
+                        {r.created_by ? (
+                          <Link to={profilePath(r.created_by)} className="profile-name-link">
                             {r.teacher_name}
                           </Link>
                         ) : (

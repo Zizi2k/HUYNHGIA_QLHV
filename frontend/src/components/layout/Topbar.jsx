@@ -91,6 +91,10 @@ export default function Topbar({ onToggleSidebar, onToggleMobile }) {
               <i className="bi bi-chevron-down app-topbar-chevron d-none d-sm-inline" />
             </Dropdown.Toggle>
             <Dropdown.Menu className="app-dropdown-menu">
+              <Dropdown.Item as={Link} to={`/profile/${user?.id}`}>
+                <i className="bi bi-person-badge me-2" />
+                Trang cá nhân
+              </Dropdown.Item>
               <Dropdown.Item onClick={() => setShowProfile(true)}>
                 <i className="bi bi-person-gear me-2" />
                 Sửa thông tin cá nhân

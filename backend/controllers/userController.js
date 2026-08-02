@@ -4,6 +4,52 @@ const { logAction } = require('../utils/auditLog');
 const { isSuperAdmin, getUserScope, studentCodeMatchesScope } = require('../utils/adminScope');
 const { teachingStaffRoleSql, filterTeachingStaffByScope, resolveTeachingStaffScope, teachingStaffMatchesScope } = require('../utils/teachingStaff');
 const { saveMulterFile } = require('../utils/fileStorage');
+const { canViewMemberPII } = require('../utils/userProjection');
+
+const ROLE_PROFILE_META = {
+  admin: {
+    label: 'Quản trị viên',
+    quote: 'Đồng hành cùng lớp học để mọi em đều tiến bộ.',
+    highlights: ['Quản trị', 'Hệ thống', 'Hỗ trợ', 'Điều phối'],
+  },
+  teacher: {
+    label: 'Giáo viên',
+    quote: 'Mỗi buổi học là một cầu nối kiến thức và sự tự tin.',
+    highlights: ['Giảng dạy', 'Đồng hành', 'Phát triển', 'Truyền cảm hứng'],
+  },
+  student: {
+    label: 'Học viên',
+    quote: 'Kiên trì mỗi ngày sẽ mở ra kết quả rõ ràng.',
+    highlights: ['Học tập', 'Chăm chỉ', 'Tiến bộ', 'Tự tin'],
+  },
+};
+
+async function canViewUserProfile(viewer, targetId) {
+  if (!viewer?.id || !targetId) return false;
+  if (Number(viewer.id) === Number(targetId)) return true;
+  if (viewer.role === 'admin') return true;
+
+  const [shared] = await pool.query(
+    `SELECT 1
+     FROM class_members a
+     INNER JOIN class_members b ON a.class_id = b.class_id
+     WHERE a.user_id = ? AND b.user_id = ?
+     LIMIT 1`,
+    [viewer.id, targetId],
+  );
+  if (shared.length > 0) return true;
+
+  if (viewer.role === 'teacher') {
+    const [rows] = await pool.query(
+      'SELECT role FROM users WHERE id = ? LIMIT 1',
+      [targetId],
+    );
+    const role = rows[0]?.role;
+    if (role === 'teacher' || role === 'admin') return true;
+  }
+
+  return false;
+}
 
 function userMatchesBranchScope(userRow, scope) {
   if (!scope) return true;
@@ -344,4 +390,76 @@ const uploadUserAvatar = async (req, res) => {
   }
 };
 
-module.exports = { listAdmins, listTeachers, getUsers, createUser, updateUser, deleteUser, uploadUserAvatar };
+const getUserProfile = async (req, res) => {
+  try {
+    const targetId = parseInt(req.params.id, 10);
+    if (!Number.isFinite(targetId)) {
+      return res.status(400).json({ message: 'ID không hợp lệ' });
+    }
+
+    const allowed = await canViewUserProfile(req.user, targetId);
+    if (!allowed) {
+      return res.status(403).json({ message: 'Bạn không có quyền xem trang cá nhân này' });
+    }
+
+    const [rows] = await pool.query(
+      `SELECT id, fullname, username, code, role, status, avatar_url, phone, zalo, created_at
+       FROM users
+       WHERE id = ?
+       LIMIT 1`,
+      [targetId],
+    );
+    if (rows.length === 0) {
+      return res.status(404).json({ message: 'Không tìm thấy người dùng' });
+    }
+
+    const userRow = rows[0];
+    const [classes] = await pool.query(
+      `SELECT c.id, c.name
+       FROM classes c
+       INNER JOIN class_members cm ON cm.class_id = c.id
+       WHERE cm.user_id = ?
+       ORDER BY c.name`,
+      [targetId],
+    );
+
+    const meta = ROLE_PROFILE_META[userRow.role] || ROLE_PROFILE_META.student;
+    const showPii = canViewMemberPII(req.user) || Number(req.user.id) === Number(targetId);
+
+    const profile = {
+      id: userRow.id,
+      fullname: userRow.fullname,
+      role: userRow.role,
+      role_label: meta.label,
+      status: Boolean(userRow.status),
+      avatar_url: userRow.avatar_url || null,
+      created_at: userRow.created_at,
+      quote: meta.quote,
+      highlights: meta.highlights,
+      classes: classes.map((c) => ({ id: c.id, name: c.name })),
+      is_self: Number(req.user.id) === Number(targetId),
+    };
+
+    if (showPii) {
+      profile.username = userRow.username;
+      profile.code = userRow.code;
+      profile.phone = userRow.phone || null;
+      profile.zalo = userRow.zalo || null;
+    }
+
+    res.json(profile);
+  } catch (err) {
+    res.status(500).json({ message: 'Lỗi hệ thống', error: err.message });
+  }
+};
+
+module.exports = {
+  listAdmins,
+  listTeachers,
+  getUsers,
+  getUserProfile,
+  createUser,
+  updateUser,
+  deleteUser,
+  uploadUserAvatar,
+};

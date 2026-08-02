@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { Spinner, Alert, Form, Row, Col } from 'react-bootstrap';
 import { dashboardService, classService } from '../services';
 import PageHeader from '../components/layout/PageHeader';
 import FilterPanel from '../components/layout/FilterPanel';
 import HonorStudentFrame from '../components/honor/HonorStudentFrame';
 import UserAvatar from '../components/UserAvatar';
+import { profilePath } from '../utils/profilePath';
 
 export default function HonorPage() {
   const [classes, setClasses] = useState([]);
@@ -133,13 +135,15 @@ export default function HonorPage() {
                     return (
                       <li key={student.id} className="honor-rank-list-item">
                         <span className="honor-rank-list-rank">{rank}</span>
-                        <UserAvatar user={student} size={44} />
-                        <div className="honor-rank-list-info">
-                          <span className="honor-rank-list-name">{student.fullname}</span>
-                          {student.code && (
-                            <span className="honor-rank-list-code">{student.code}</span>
-                          )}
-                        </div>
+                        <Link to={profilePath(student.id)} className="honor-rank-list-profile">
+                          <UserAvatar user={student} size={44} />
+                          <div className="honor-rank-list-info">
+                            <span className="honor-rank-list-name">{student.fullname}</span>
+                            {student.code && (
+                              <span className="honor-rank-list-code">{student.code}</span>
+                            )}
+                          </div>
+                        </Link>
                         <div className="honor-rank-list-score">
                           <strong>{student.avg_score}</strong>
                           <small>{student.graded_count} bài</small>

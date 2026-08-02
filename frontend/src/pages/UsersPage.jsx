@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Button, ButtonGroup, Modal, Form, Spinner, Badge, Alert, Row, Col } from 'react-bootstrap';
-import { Navigate, useSearchParams } from 'react-router-dom';
+import { Link, Navigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { userService, classService } from '../services';
 import PageHeader from '../components/layout/PageHeader';
@@ -9,6 +9,7 @@ import ModuleSection from '../components/layout/ModuleSection';
 import { isSuperAdmin, isScopedAdmin, lockedCodePrefix, scopeLabel } from '../utils/adminScope';
 import { teachingStaffBadge } from '../utils/roles';
 import AdminAvatarPicker from '../components/AdminAvatarPicker';
+import { profilePath } from '../utils/profilePath';
 
 const allRoleOptions = [
   { value: 'admin', label: 'Quản trị viên' },
@@ -27,7 +28,11 @@ function UserTableRow({ user, onEdit, onDelete, extraActions, canManage = true }
   const roleOptions = allRoleOptions;
   return (
     <tr>
-      <td>{user.fullname}</td>
+      <td>
+        <Link to={profilePath(user.id)} className="profile-name-link">
+          {user.fullname}
+        </Link>
+      </td>
       <td>{user.username}</td>
       <td>{user.code}</td>
       <td>
@@ -396,7 +401,11 @@ export default function UsersPage() {
                     const badge = teachingStaffBadge(t);
                     return (
                       <tr key={t.id}>
-                        <td>{t.fullname}</td>
+                        <td>
+                          <Link to={profilePath(t.id)} className="profile-name-link">
+                            {t.fullname}
+                          </Link>
+                        </td>
                         <td>{t.username}</td>
                         <td>{t.code}</td>
                         <td><Badge bg={badge.bg}>{badge.label}</Badge></td>

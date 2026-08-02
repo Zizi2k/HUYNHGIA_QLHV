@@ -2,12 +2,13 @@ import { useEffect, useState } from 'react';
 import {
   Table, Button, Modal, Form, Spinner, Badge, Alert,
 } from 'react-bootstrap';
-import { Navigate, useSearchParams } from 'react-router-dom';
+import { Link, Navigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { userService } from '../services';
 import PageHeader from '../components/layout/PageHeader';
 import DataTable, { DataTableEmpty } from '../components/common/DataTable';
 import { isSuperAdmin } from '../utils/adminScope';
+import { profilePath } from '../utils/profilePath';
 
 const scopeOptions = [
   { value: 'all', label: 'Admin tối cao (HG + EG)' },
@@ -184,7 +185,11 @@ export default function AdminStaffPage() {
             <DataTableEmpty message="Chưa có admin phụ." />
           ) : admins.map((a) => (
             <tr key={a.id}>
-              <td className="fw-semibold">{a.fullname}</td>
+              <td className="fw-semibold">
+                <Link to={profilePath(a.id)} className="profile-name-link">
+                  {a.fullname}
+                </Link>
+              </td>
               <td>{a.username}</td>
               <td><code>{a.code}</code></td>
               <td>{scopeBadge(a.admin_scope)}</td>

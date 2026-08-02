@@ -16,6 +16,7 @@ import StudentsPage from './pages/StudentsPage';
 import AdminStaffPage from './pages/AdminStaffPage';
 import AuditPage from './pages/AuditPage';
 import MyReceiptsPage from './pages/MyReceiptsPage';
+import ProfilePage from './pages/ProfilePage';
 
 function App() {
   return (
@@ -30,6 +31,7 @@ function App() {
             <Route path="/classes/:id" element={<ClassDetailPage />} />
             <Route path="/quizzes/:id" element={<QuizPage />} />
             <Route path="/users" element={<UsersPage />} />
+            <Route path="/profile/:userId" element={<ProfilePage />} />
             <Route path="/honor" element={<HonorPage />} />
             <Route path="/attendance" element={<AttendancePage />} />
             <Route path="/tuition" element={<TuitionPage />} />

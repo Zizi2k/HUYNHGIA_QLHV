@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { useSearchParams } from 'react-router-dom';
 import { Modal, Form, Button, Alert, Spinner, InputGroup, ListGroup, Badge,
 } from 'react-bootstrap';
 import { notifyDeleteResult } from '../../utils/deleteHelpers';
@@ -11,26 +11,9 @@ import { teachingStaffBadge } from '../../utils/roles';
 import UserAvatar from '../UserAvatar';
 import AdminAvatarPicker from '../AdminAvatarPicker';
 import ClassGradeTools from './ClassGradeTools';
+import ProfileNameLink from '../profile/ProfileNameLink';
 
 const emptyForm = { ...emptyStudentFields, ...emptyTuitionFields };
-
-const AVATAR_COLORS = ['#3b82f6', '#8b5cf6', '#06b6d4', '#10b981', '#f59e0b', '#ef4444'];
-
-function getInitials(name) {
-  const parts = String(name || '').trim().split(/\s+/);
-  if (parts.length >= 2) return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
-  return (parts[0]?.[0] || '?').toUpperCase();
-}
-
-function avatarColor(id) {
-  return AVATAR_COLORS[id % AVATAR_COLORS.length];
-}
-
-function studentProfilePath(classId, student, { isAdmin, isTeacher }) {
-  if (isAdmin) return `/users?class_id=${classId}&user_id=${student.id}`;
-  if (isTeacher) return `/classes/${classId}?tab=members&user_id=${student.id}`;
-  return null;
-}
 
 export default function ClassMembersTab({ classId, className, members, isTeacher, isAdmin, isStudent, onUpdated }) {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -60,7 +43,7 @@ export default function ClassMembersTab({ classId, className, members, isTeacher
 
   const students = members?.filter((m) => m.role === 'student') || [];
   const teachers = members?.filter((m) => m.role !== 'student') || [];
-  const canLinkStudentProfile = isAdmin || isTeacher;
+  const canLinkStudentProfile = true;
 
   const filteredStudents = useMemo(() => {
     let list = students;
@@ -456,9 +439,13 @@ export default function ClassMembersTab({ classId, className, members, isTeacher
             {teachers.map((m) => (
               <ListGroup.Item key={m.id} className="d-flex justify-content-between align-items-center py-3">
                 <div className="pro-student-cell">
-                  <UserAvatar user={m} size={40} />
+                  <ProfileNameLink userId={m.id} className="profile-name-link d-inline-flex">
+                    <UserAvatar user={m} size={40} />
+                  </ProfileNameLink>
                   <div>
-                    <div className="pro-student-name">{m.fullname}</div>
+                    <ProfileNameLink userId={m.id} className="profile-name-link pro-student-name">
+                      {m.fullname}
+                    </ProfileNameLink>
                     <div className="text-muted small">{m.username}</div>
                   </div>
                 </div>
@@ -601,15 +588,17 @@ export default function ClassMembersTab({ classId, className, members, isTeacher
                 <td><span className="pro-row-num">{idx + 1}</span></td>
                 <td>
                   <div className="pro-student-cell">
-                    <UserAvatar user={m} size={36} />
+                    <ProfileNameLink userId={m.id} className="profile-name-link d-inline-flex">
+                      <UserAvatar user={m} size={36} />
+                    </ProfileNameLink>
                     <div>
                       {canLinkStudentProfile ? (
-                        <Link
-                          to={studentProfilePath(classId, m, { isAdmin, isTeacher })}
-                          className="dash-class-link pro-student-name text-decoration-none"
+                        <ProfileNameLink
+                          userId={m.id}
+                          className="profile-name-link pro-student-name"
                         >
                           {m.fullname}
-                        </Link>
+                        </ProfileNameLink>
                       ) : (
                         <span className="pro-student-name">{m.fullname}</span>
                       )}

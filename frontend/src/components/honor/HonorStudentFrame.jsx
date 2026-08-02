@@ -1,4 +1,6 @@
+import { Link } from 'react-router-dom';
 import { getAvatarUrl, getInitials } from '../../utils/avatar';
+import { profilePath } from '../../utils/profilePath';
 
 const RANK_LABELS = { 1: 'TOP 1', 2: 'TOP 2', 3: 'TOP 3' };
 
@@ -19,6 +21,7 @@ export default function HonorStudentFrame({ student, rank, size = 'md' }) {
   const avatarSrc = getAvatarUrl(student.avatar_url);
   const initials = getInitials(student.fullname);
   const rankLabel = RANK_LABELS[rank] || `#${rank}`;
+  const to = profilePath(student.id);
 
   return (
     <article className={`honor-frame honor-frame--${size}${rank === 1 ? ' honor-frame--champion' : ''}`}>
@@ -27,19 +30,21 @@ export default function HonorStudentFrame({ student, rank, size = 'md' }) {
           <i className="bi bi-award-fill" />
         </div>
       )}
-      <div className="honor-frame-ring">
-        {avatarSrc ? (
-          <img src={avatarSrc} alt={student.fullname} className="honor-frame-avatar" />
-        ) : (
-          <div className="honor-frame-avatar honor-frame-avatar--fallback">
-            {initials}
-          </div>
-        )}
-      </div>
-      <div className="honor-frame-ribbon">
-        <span className="honor-frame-name">{student.fullname}</span>
-        {rank <= 3 && <small className="honor-frame-rank">{rankLabel}</small>}
-      </div>
+      <Link to={to} className="honor-frame-profile-link">
+        <div className="honor-frame-ring">
+          {avatarSrc ? (
+            <img src={avatarSrc} alt={student.fullname} className="honor-frame-avatar" />
+          ) : (
+            <div className="honor-frame-avatar honor-frame-avatar--fallback">
+              {initials}
+            </div>
+          )}
+        </div>
+        <div className="honor-frame-ribbon">
+          <span className="honor-frame-name">{student.fullname}</span>
+          {rank <= 3 && <small className="honor-frame-rank">{rankLabel}</small>}
+        </div>
+      </Link>
       <div className="honor-frame-score">
         <strong>{student.avg_score}</strong>
         <span> điểm</span>
