@@ -17,6 +17,82 @@ function resolveViewerBranch(user) {
   return null;
 }
 
+async function inferTeacherBranches(teacherId) {
+  const [rows] = await pool.query(
+    `SELECT
+       SUM(CASE WHEN UPPER(u.code) LIKE 'HG%' THEN 1 ELSE 0 END) AS hg_count,
+       SUM(CASE WHEN UPPER(u.code) LIKE 'EG%' THEN 1 ELSE 0 END) AS eg_count
+     FROM class_members cm_t
+     INNER JOIN class_members cm_s ON cm_s.class_id = cm_t.class_id
+     INNER JOIN users u ON u.id = cm_s.user_id AND u.role = 'student'
+     WHERE cm_t.user_id = ?`,
+    [teacherId],
+  );
+  const hg = Number(rows[0]?.hg_count || 0);
+  const eg = Number(rows[0]?.eg_count || 0);
+  const branches = [];
+  if (hg > 0) branches.push('HG');
+  if (eg > 0) branches.push('EG');
+  return branches;
+}
+
+async function resolveStudentBranchFromDb(userId, codeFromToken) {
+  let code = codeFromToken;
+  if (!code) {
+    const [rows] = await pool.query('SELECT code FROM users WHERE id = ? LIMIT 1', [userId]);
+    code = rows[0]?.code;
+  }
+  const c = String(code || '').trim().toUpperCase();
+  if (c.startsWith('EG')) return 'EG';
+  if (c.startsWith('HG')) return 'HG';
+
+  // Mã đăng nhập có thể không mang HG/EG — lấy từ mã học viên theo môn
+  try {
+    const { findStudentCodesForUser } = require('../utils/studentIdentity');
+    const codes = await findStudentCodesForUser(pool, userId);
+    for (const row of codes || []) {
+      const sc = String(row.student_code || '').trim().toUpperCase();
+      if (sc.startsWith('EG')) return 'EG';
+      if (sc.startsWith('HG')) return 'HG';
+    }
+  } catch {
+    /* ignore */
+  }
+  return null;
+}
+
+/**
+ * mode: all | branch | branches | unknown
+ * scope: 'HG'|'EG' khi mode=branch
+ * scopes: ['HG','EG'] khi mode=branches
+ */
+async function effectiveListScope(req) {
+  if (isSuperAdmin(req.user)) {
+    const q = String(req.query.scope || 'all').toUpperCase();
+    if (q === 'HG' || q === 'EG') return { mode: 'branch', scope: q };
+    return { mode: 'all' };
+  }
+
+  const syncBranch = resolveViewerBranch(req.user);
+  if (syncBranch) return { mode: 'branch', scope: syncBranch };
+
+  if (req.user.role === 'teacher') {
+    const branches = await inferTeacherBranches(req.user.id);
+    if (branches.length === 1) return { mode: 'branch', scope: branches[0] };
+    if (branches.length > 1) return { mode: 'branches', scopes: branches };
+    // GV chưa có HV trong lớp / chưa gắn scope: vẫn cho xem toàn bộ để không bị trống oan
+    return { mode: 'all' };
+  }
+
+  if (req.user.role === 'student') {
+    const branch = await resolveStudentBranchFromDb(req.user.id, req.user.code);
+    if (branch) return { mode: 'branch', scope: branch };
+  }
+
+  // Admin phụ luôn có getUserScope; còn lại không xác định
+  return { mode: 'unknown' };
+}
+
 function parseActiveFlag(value, fallback = true) {
   if (value === undefined || value === null || value === '') return fallback;
   if (typeof value === 'boolean') return value;
@@ -46,21 +122,35 @@ function assertWriteBranch(req, branchScope, { allowAll = false } = {}) {
   return null;
 }
 
-function effectiveListScope(req) {
-  if (isSuperAdmin(req.user)) {
-    const q = String(req.query.scope || 'all').toUpperCase();
-    if (q === 'HG' || q === 'EG') return { mode: 'branch', scope: q };
-    return { mode: 'all' };
+function applyBranchFilter(sql, params, listScope, { includeAllScope = false } = {}) {
+  if (listScope.mode === 'branch') {
+    if (includeAllScope) {
+      sql += ' AND (branch_scope = ? OR branch_scope = \'all\')';
+    } else {
+      sql += ' AND branch_scope = ?';
+    }
+    params.push(listScope.scope);
+  } else if (listScope.mode === 'branches') {
+    if (includeAllScope) {
+      sql += ` AND (branch_scope IN (${listScope.scopes.map(() => '?').join(',')}) OR branch_scope = 'all')`;
+      params.push(...listScope.scopes);
+    } else {
+      sql += ` AND branch_scope IN (${listScope.scopes.map(() => '?').join(',')})`;
+      params.push(...listScope.scopes);
+    }
+  } else if (listScope.mode === 'unknown') {
+    if (includeAllScope) {
+      sql += ' AND branch_scope = \'all\'';
+    } else {
+      return { sql: null, params };
+    }
   }
-  const viewerBranch = resolveViewerBranch(req.user);
-  if (viewerBranch) return { mode: 'branch', scope: viewerBranch };
-  // Không xác định được nhánh: chỉ banner "all", không hiện khóa học nhánh
-  return { mode: 'unknown' };
+  return { sql, params };
 }
 
 const listBanners = async (req, res) => {
   try {
-    const listScope = effectiveListScope(req);
+    const listScope = await effectiveListScope(req);
     const includeInactive = req.user.role === 'admin' && req.query.include_inactive === '1';
 
     let sql = 'SELECT * FROM promo_banners WHERE 1=1';
@@ -68,15 +158,11 @@ const listBanners = async (req, res) => {
     if (!includeInactive) {
       sql += ' AND is_active = 1';
     }
-    if (listScope.mode === 'branch') {
-      sql += ' AND (branch_scope = ? OR branch_scope = \'all\')';
-      params.push(listScope.scope);
-    } else if (listScope.mode === 'unknown') {
-      sql += ' AND branch_scope = \'all\'';
-    }
+    const filtered = applyBranchFilter(sql, params, listScope, { includeAllScope: true });
+    sql = filtered.sql;
     sql += ' ORDER BY sort_order ASC, id DESC';
 
-    const [rows] = await pool.query(sql, params);
+    const [rows] = await pool.query(sql, filtered.params);
     res.json(rows);
   } catch (err) {
     res.status(500).json({ message: 'Lỗi hệ thống', error: err.message });
@@ -85,7 +171,7 @@ const listBanners = async (req, res) => {
 
 const listCourses = async (req, res) => {
   try {
-    const listScope = effectiveListScope(req);
+    const listScope = await effectiveListScope(req);
     const includeInactive = req.user.role === 'admin' && req.query.include_inactive === '1';
 
     if (listScope.mode === 'unknown') {
@@ -97,13 +183,14 @@ const listCourses = async (req, res) => {
     if (!includeInactive) {
       sql += ' AND is_active = 1';
     }
-    if (listScope.mode === 'branch') {
-      sql += ' AND branch_scope = ?';
-      params.push(listScope.scope);
+    const filtered = applyBranchFilter(sql, params, listScope, { includeAllScope: false });
+    if (!filtered.sql) {
+      return res.json([]);
     }
+    sql = filtered.sql;
     sql += ' ORDER BY sort_order ASC, id DESC';
 
-    const [rows] = await pool.query(sql, params);
+    const [rows] = await pool.query(sql, filtered.params);
     res.json(rows);
   } catch (err) {
     res.status(500).json({ message: 'Lỗi hệ thống', error: err.message });
