@@ -4534,6 +4534,17 @@ a {
   margin-top: 0.35rem;
   border-radius: 8px !important;
   font-weight: 700 !important;
+  border: none;
+  padding: 0.45rem 0.75rem;
+  background: var(--promo-accent, #f08a3c);
+  color: #fff;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.promo-register-btn:hover {
+  background: var(--promo-accent-deep, #e07020);
+  color: #fff;
 }
 
 .promo-course-foot {
