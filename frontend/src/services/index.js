@@ -261,4 +261,8 @@ export const promoService = {
     headers: { 'Content-Type': 'multipart/form-data' },
   }),
   deleteCourse: (id) => api.delete(`/promo/courses/${id}`),
+  registerCourse: (id, data) => api.post(`/promo/courses/${id}/register`, data),
+  getRegistrations: (params) => api.get('/promo/registrations', { params }),
+  updateRegistration: (id, data) => api.patch(`/promo/registrations/${id}`, data),
+  getStudents: () => api.get('/promo/students'),
 };

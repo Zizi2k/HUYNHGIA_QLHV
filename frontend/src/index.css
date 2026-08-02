@@ -4497,3 +4497,62 @@ a {
     min-height: 140px;
   }
 }
+
+.promo-price-block {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.35rem 0.65rem;
+  margin: 0.55rem 0 0.35rem;
+}
+
+.promo-price-original {
+  font-size: 0.85rem;
+  color: #94a3b8;
+  text-decoration: line-through;
+}
+
+.promo-price-sale {
+  font-size: 1.1rem;
+  font-weight: 800;
+  color: #c2410c;
+}
+
+.promo-price-discount {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.15rem 0.45rem;
+  border-radius: 6px;
+  background: #fff7ed;
+  color: #c2410c;
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.promo-register-btn {
+  width: 100%;
+  margin-top: 0.35rem;
+  border-radius: 8px !important;
+  font-weight: 700 !important;
+}
+
+.promo-course-foot {
+  flex-wrap: wrap;
+}
+
+.promo-course-foot .promo-register-btn {
+  margin-top: 0.5rem;
+}
+
+.promo-price-preview {
+  padding: 0.75rem 1rem;
+  background: #fff7ed;
+  border: 1px solid #fed7aa;
+  border-radius: 10px;
+}
+
+.promo-regs-table td,
+.promo-regs-table th {
+  vertical-align: middle;
+  font-size: 0.875rem;
+}

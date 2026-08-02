@@ -8,6 +8,10 @@ const {
   createCourse,
   updateCourse,
   deleteCourse,
+  registerCourse,
+  listRegistrations,
+  updateRegistrationStatus,
+  listTeacherStudents,
 } = require('../controllers/promoController');
 const { authenticate, authorize } = require('../middleware/auth');
 const { uploadMemory } = require('../middleware/upload');
@@ -18,6 +22,11 @@ router.use(authenticate);
 
 router.get('/banners', listBanners);
 router.get('/courses', listCourses);
+router.get('/registrations', listRegistrations);
+router.get('/students', authorize('admin', 'teacher'), listTeacherStudents);
+
+router.post('/courses/:id/register', authorize('admin', 'teacher', 'student'), registerCourse);
+router.patch('/registrations/:id', authorize('admin'), updateRegistrationStatus);
 
 router.post('/banners', authorize('admin'), uploadMemory.single('image'), createBanner);
 router.put('/banners/:id', authorize('admin'), uploadMemory.single('image'), updateBanner);
