@@ -11,9 +11,12 @@ const {
 const router = express.Router();
 
 router.use(authenticate);
+
+// Teachers need course list when adding students with tuition in a class
+router.get('/courses', authorize('admin', 'teacher'), getCourses);
+
 router.use(authorize('admin'));
 
-router.get('/courses', getCourses);
 router.post('/courses', createCourse);
 router.put('/courses/:id', updateCourse);
 router.delete('/courses/:id', deleteCourse);

@@ -22,9 +22,11 @@ router.use(authenticate);
 router.get('/student/receipts', authorize('student'), getStudentReceipts);
 router.get('/payments/:id/receipt', authorize('admin', 'student'), getPaymentReceiptPdf);
 
+// Teachers need discounts when adding students with tuition in a class
+router.get('/discounts', authorize('admin', 'teacher'), getDiscounts);
+
 router.use(authorize('admin'));
 
-router.get('/discounts', getDiscounts);
 router.post('/discounts', createDiscount);
 router.put('/discounts/:id', updateDiscount);
 router.delete('/discounts/:id', deleteDiscount);

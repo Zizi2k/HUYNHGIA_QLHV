@@ -335,92 +335,95 @@ export default function ClassAttendanceTab({
       </div>
 
       {history.length === 0 ? (
-        <DataTable>
+        <DataTable className="attendance-history-table">
           <tbody>
-            <tr>
-              <td className="p-0">
-                <DataTableEmpty
-                  icon="bi-calendar-x"
-                  message="Chưa có buổi điểm danh nào"
-                  hint="Lưu điểm danh đầu tiên để xem lịch sử tại đây"
-                />
-              </td>
-            </tr>
+            <DataTableEmpty
+              icon="bi-calendar-x"
+              message="Chưa có buổi điểm danh nào"
+              hint="Lưu điểm danh đầu tiên để xem lịch sử tại đây"
+            />
           </tbody>
         </DataTable>
       ) : (
-        <DataTable>
+        <DataTable className="attendance-history-table">
           <thead>
             <tr>
               <th>Ngày</th>
-              <th className="text-center">Có mặt</th>
-              <th className="text-center">Vắng</th>
-              <th className="text-center">Muộn</th>
-              <th className="text-center">Có phép</th>
-              <th className="text-center">Nghỉ luôn</th>
+              <th className="text-center att-stat-col">Có mặt</th>
+              <th className="text-center att-stat-col">Vắng</th>
+              <th className="text-center att-stat-col">Muộn</th>
+              <th className="text-center att-stat-col">Có phép</th>
+              <th className="text-center att-stat-col">Nghỉ luôn</th>
               <th>Người điểm danh</th>
-              <th style={{ width: 140 }}></th>
+              <th className="text-end att-actions-col">Thao tác</th>
             </tr>
           </thead>
           <tbody>
-            {history.map((h) => (
-              <tr key={h.id}>
-                <td>
-                  <span className="fw-semibold text-dark">
-                    {new Date(h.session_date).toLocaleDateString('vi-VN', {
-                      weekday: 'short',
-                      day: '2-digit',
-                      month: '2-digit',
-                      year: 'numeric',
-                    })}
-                  </span>
-                  {h.note && (
-                    <div className="text-muted small">{h.note}</div>
-                  )}
-                </td>
-                <td className="text-center">
-                  <span className="pro-history-badge success">{h.present_count || 0}</span>
-                </td>
-                <td className="text-center">
-                  <span className="pro-history-badge danger">{h.absent_count || 0}</span>
-                </td>
-                <td className="text-center">
-                  <span className="pro-history-badge warning">{h.late_count || 0}</span>
-                </td>
-                <td className="text-center">
-                  <span className="pro-history-badge info">{h.excused_count || 0}</span>
-                </td>
-                <td className="text-center">
-                  <span className="pro-history-badge secondary">{h.dropped_count || 0}</span>
-                </td>
-                <td>
-                  <span className="text-muted small">
-                    <i className="bi bi-person-badge me-1" />
-                    {h.teacher_name}
-                  </span>
-                </td>
-                <td>
-                  <div className="d-flex flex-wrap gap-1">
-                    <Button
-                      variant="outline-secondary"
-                      size="sm"
-                      onClick={() => openDetail(h.id)}
-                    >
-                      Chi tiết
-                    </Button>
-                    {isTeacher && (
-                      <Button
-                        variant="outline-primary"
-                        size="sm"
-                        onClick={() => openHistoryDate(h.session_date)}
+            {history.map((h) => {
+              const counts = [
+                { key: 'present', value: h.present_count || 0, tone: 'success' },
+                { key: 'absent', value: h.absent_count || 0, tone: 'danger' },
+                { key: 'late', value: h.late_count || 0, tone: 'warning' },
+                { key: 'excused', value: h.excused_count || 0, tone: 'info' },
+                { key: 'dropped', value: h.dropped_count || 0, tone: 'secondary' },
+              ];
+              return (
+                <tr key={h.id}>
+                  <td>
+                    <div className="att-history-date">
+                      <span className="att-history-date-main">
+                        {new Date(h.session_date).toLocaleDateString('vi-VN', {
+                          weekday: 'short',
+                          day: '2-digit',
+                          month: '2-digit',
+                          year: 'numeric',
+                        })}
+                      </span>
+                      {h.note && (
+                        <span className="att-history-date-note">{h.note}</span>
+                      )}
+                    </div>
+                  </td>
+                  {counts.map((c) => (
+                    <td key={c.key} className="text-center att-stat-col">
+                      <span
+                        className={`pro-history-badge ${c.tone}${c.value === 0 ? ' is-zero' : ''}`}
                       >
-                        Sửa
+                        {c.value}
+                      </span>
+                    </td>
+                  ))}
+                  <td>
+                    <div className="att-history-teacher">
+                      <span className="att-history-teacher-icon" aria-hidden="true">
+                        <i className="bi bi-person" />
+                      </span>
+                      <span className="att-history-teacher-name">{h.teacher_name || '—'}</span>
+                    </div>
+                  </td>
+                  <td className="text-end att-actions-col">
+                    <div className="pro-action-group att-history-actions">
+                      <Button
+                        variant="outline-secondary"
+                        size="sm"
+                        onClick={() => openDetail(h.id)}
+                      >
+                        Chi tiết
                       </Button>
-                    )}
-                  </div>
-                </td>
-              </tr>
-            ))}
+                      {isTeacher && (
+                        <Button
+                          variant="outline-primary"
+                          size="sm"
+                          onClick={() => openHistoryDate(h.session_date)}
+                        >
+                          Sửa
+                        </Button>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </DataTable>
       )}

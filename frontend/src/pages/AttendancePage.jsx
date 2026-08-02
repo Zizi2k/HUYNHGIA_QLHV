@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
-  Badge, Spinner, Form, Button, Alert, Row, Col,
+  Spinner, Form, Button, Alert, Row, Col,
 } from 'react-bootstrap';
 import { attendanceService, classService } from '../services';
 import { useAuth } from '../context/AuthContext';
@@ -170,6 +170,7 @@ export default function AttendancePage() {
       ) : (
         <LoadingOverlay loading={loading && reports.length === 0} minHeight={280}>
           <DataTable
+          className="attendance-history-table"
           title="Danh sách buổi điểm danh"
           icon="bi-list-check"
           count={reports.length}
@@ -179,49 +180,79 @@ export default function AttendancePage() {
             <tr>
               <th>Ngày học</th>
               <th>Lớp</th>
-              <th>Có mặt</th>
-              <th>Vắng</th>
-              <th>Muộn</th>
-              <th>Có phép</th>
-              <th>Nghỉ luôn</th>
+              <th className="text-center att-stat-col">Có mặt</th>
+              <th className="text-center att-stat-col">Vắng</th>
+              <th className="text-center att-stat-col">Muộn</th>
+              <th className="text-center att-stat-col">Có phép</th>
+              <th className="text-center att-stat-col">Nghỉ luôn</th>
               <th>Giáo viên</th>
-              <th></th>
+              <th className="text-end att-actions-col">Thao tác</th>
             </tr>
           </thead>
           <tbody>
-            {reports.map((r) => (
-              <tr key={r.id}>
-                <td>{new Date(r.session_date).toLocaleDateString('vi-VN')}</td>
-                <td>
-                  {superAdmin && r.class_id ? (
-                    <Link to={`/classes/${r.class_id}`} className="dash-class-link">
-                      {r.class_name}
-                    </Link>
-                  ) : (
-                    r.class_name
-                  )}
-                </td>
-                <td><Badge bg="success">{r.present_count || 0}</Badge></td>
-                <td><Badge bg="danger">{r.absent_count || 0}</Badge></td>
-                <td><Badge bg="warning" text="dark">{r.late_count || 0}</Badge></td>
-                <td><Badge bg="info">{r.excused_count || 0}</Badge></td>
-                <td><Badge bg="secondary">{r.dropped_count || 0}</Badge></td>
-                <td className="small">
-                  {superAdmin && r.created_by ? (
-                    <Link to={teacherAccountPath(r)} className="dash-class-link">
-                      {r.teacher_name}
-                    </Link>
-                  ) : (
-                    r.teacher_name
-                  )}
-                </td>
-                <td>
-                  <Button variant="outline-primary" size="sm" onClick={() => openDetail(r.id)}>
-                    Chi tiết
-                  </Button>
-                </td>
-              </tr>
-            ))}
+            {reports.map((r) => {
+              const counts = [
+                { key: 'present', value: r.present_count || 0, tone: 'success' },
+                { key: 'absent', value: r.absent_count || 0, tone: 'danger' },
+                { key: 'late', value: r.late_count || 0, tone: 'warning' },
+                { key: 'excused', value: r.excused_count || 0, tone: 'info' },
+                { key: 'dropped', value: r.dropped_count || 0, tone: 'secondary' },
+              ];
+              return (
+                <tr key={r.id}>
+                  <td>
+                    <span className="att-history-date-main">
+                      {new Date(r.session_date).toLocaleDateString('vi-VN')}
+                    </span>
+                  </td>
+                  <td>
+                    {superAdmin && r.class_id ? (
+                      <Link to={`/classes/${r.class_id}`} className="dash-class-link">
+                        {r.class_name}
+                      </Link>
+                    ) : (
+                      r.class_name
+                    )}
+                  </td>
+                  {counts.map((c) => (
+                    <td key={c.key} className="text-center att-stat-col">
+                      <span
+                        className={`pro-history-badge ${c.tone}${c.value === 0 ? ' is-zero' : ''}`}
+                      >
+                        {c.value}
+                      </span>
+                    </td>
+                  ))}
+                  <td>
+                    <div className="att-history-teacher">
+                      <span className="att-history-teacher-icon" aria-hidden="true">
+                        <i className="bi bi-person" />
+                      </span>
+                      <span className="att-history-teacher-name">
+                        {superAdmin && r.created_by ? (
+                          <Link to={teacherAccountPath(r)} className="dash-class-link">
+                            {r.teacher_name}
+                          </Link>
+                        ) : (
+                          r.teacher_name || '—'
+                        )}
+                      </span>
+                    </div>
+                  </td>
+                  <td className="text-end att-actions-col">
+                    <div className="pro-action-group att-history-actions">
+                      <Button
+                        variant="outline-primary"
+                        size="sm"
+                        onClick={() => openDetail(r.id)}
+                      >
+                        Chi tiết
+                      </Button>
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </DataTable>
         </LoadingOverlay>

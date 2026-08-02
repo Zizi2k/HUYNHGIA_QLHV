@@ -84,26 +84,38 @@ export default function ClassMembersTab({ classId, className, members, isTeacher
     [students],
   );
 
+  // Giáo viên và admin đều nhập học phí khi thêm học viên trong lớp
+  const canManageTuition = Boolean(isAdmin || isTeacher);
+
   const openAddModal = async () => {
     setError('');
     setLoadingMeta(true);
     setShowAddModal(true);
     try {
-      const requests = [classService.getNextStudentCode(classId)];
-      if (isAdmin) requests.push(tuitionService.getDiscounts());
-      const [codeRes, discountRes] = await Promise.all(requests);
-      setDiscounts(discountRes?.data || []);
+      const codeRes = await classService.getNextStudentCode(classId);
       setSubjectLabel(codeRes.data.subject_label || '');
 
-      if (isAdmin && codeRes.data.subject) {
-        const courseRes = await studentService.getCourses({
-          subject: codeRes.data.subject,
-          active_only: '1',
-        });
-        setCourses(courseRes.data);
-      } else {
-        setCourses([]);
+      let nextDiscounts = [];
+      let nextCourses = [];
+      try {
+        const discountRes = await tuitionService.getDiscounts();
+        nextDiscounts = discountRes?.data || [];
+      } catch {
+        nextDiscounts = [];
       }
+      if (codeRes.data.subject) {
+        try {
+          const courseRes = await studentService.getCourses({
+            subject: codeRes.data.subject,
+            active_only: '1',
+          });
+          nextCourses = courseRes.data || [];
+        } catch {
+          nextCourses = [];
+        }
+      }
+      setDiscounts(nextDiscounts);
+      setCourses(nextCourses);
 
       setForm({
         ...emptyForm,
@@ -192,7 +204,7 @@ export default function ClassMembersTab({ classId, className, members, isTeacher
         phone: form.phone,
         zalo: form.zalo,
       };
-      if (isAdmin) {
+      if (canManageTuition) {
         payload.tuition = {
           course_id: form.course_id,
           start_date: form.start_date,
@@ -703,7 +715,7 @@ export default function ClassMembersTab({ classId, className, members, isTeacher
       <AddStudentModal
         show={showAddModal}
         onHide={() => setShowAddModal(false)}
-        isAdmin={isAdmin}
+        withTuition
         subjectLabel={subjectLabel}
         loadingMeta={loadingMeta}
         saving={saving}

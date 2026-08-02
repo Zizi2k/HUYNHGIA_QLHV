@@ -25,7 +25,7 @@ const emptyTuitionFields = {
 export default function AddStudentModal({
   show,
   onHide,
-  isAdmin,
+  withTuition = true,
   subjectLabel,
   loadingMeta,
   saving,
@@ -40,7 +40,7 @@ export default function AddStudentModal({
   const endDatePreview = calcEndDate(form.start_date, selectedCourse?.duration_months);
   const feeAfterAuto = isFeeAfterAutoCalculated(form.discount_id);
   return (
-    <Modal show={show} onHide={onHide} size={isAdmin ? 'lg' : undefined} className={isAdmin ? 'scrollable-form-modal' : ''}>
+    <Modal show={show} onHide={onHide} size={withTuition ? 'lg' : undefined} className={withTuition ? 'scrollable-form-modal' : ''}>
       <Modal.Header closeButton>
         <Modal.Title>Thêm học viên</Modal.Title>
       </Modal.Header>
@@ -51,20 +51,20 @@ export default function AddStudentModal({
             <div className="text-center py-4"><Spinner animation="border" /></div>
           ) : (
             <>
-              {isAdmin && subjectLabel && (
+              {withTuition && subjectLabel && (
                 <Alert variant="info" className="py-2 small">
                   Môn học: <strong>{subjectLabel}</strong>. Mã học viên được tự sinh theo danh sách môn.
                 </Alert>
               )}
 
               <Row className="g-3">
-                <Col md={isAdmin ? 6 : 12}>
+                <Col md={withTuition ? 6 : 12}>
                   <Form.Group>
                     <Form.Label>Mã học viên <span className="text-danger">*</span></Form.Label>
                     <Form.Control value={form.code} readOnly required className="bg-light" />
                   </Form.Group>
                 </Col>
-                <Col md={isAdmin ? 6 : 12}>
+                <Col md={withTuition ? 6 : 12}>
                   <Form.Group>
                     <Form.Label>Họ tên <span className="text-danger">*</span></Form.Label>
                     <Form.Control
@@ -75,7 +75,7 @@ export default function AddStudentModal({
                     />
                   </Form.Group>
                 </Col>
-                <Col md={isAdmin ? 6 : 12}>
+                <Col md={withTuition ? 6 : 12}>
                   <Form.Group>
                     <Form.Label>Số điện thoại</Form.Label>
                     <Form.Control
@@ -85,7 +85,7 @@ export default function AddStudentModal({
                     />
                   </Form.Group>
                 </Col>
-                <Col md={isAdmin ? 6 : 12}>
+                <Col md={withTuition ? 6 : 12}>
                   <Form.Group>
                     <Form.Label>Zalo</Form.Label>
                     <Form.Control
@@ -97,7 +97,7 @@ export default function AddStudentModal({
                 </Col>
               </Row>
 
-              {isAdmin && (
+              {withTuition && (
                 <>
                   <hr className="my-4" />
                   <h6 className="fw-bold mb-3">Khóa học & thời hạn</h6>

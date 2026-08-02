@@ -364,7 +364,7 @@ const createStudentMember = async (req, res) => {
   try {
     const { fullname, phone, zalo, tuition } = req.body;
     let { code } = req.body;
-    const isAdmin = req.user.role === 'admin';
+    const canSetTuition = req.user.role === 'admin' || req.user.role === 'teacher';
 
     if (!fullname?.trim()) {
       return res.status(400).json({ message: 'Vui lòng nhập họ tên' });
@@ -382,7 +382,7 @@ const createStudentMember = async (req, res) => {
       });
     }
 
-    if (isAdmin) {
+    if (canSetTuition) {
       const tuitionError = validateTuitionFields(tuition);
       if (tuitionError) {
         return res.status(400).json({ message: tuitionError });
@@ -439,7 +439,7 @@ const createStudentMember = async (req, res) => {
       req.params.id, userId,
     ]);
 
-    if (isAdmin) {
+    if (canSetTuition) {
       const [courses] = await conn.query(
         'SELECT * FROM training_courses WHERE id = ? AND is_active = TRUE',
         [tuition.course_id]
@@ -493,7 +493,7 @@ const createStudentMember = async (req, res) => {
     });
 
     res.status(201).json({
-      message: isAdmin ? 'Thêm học viên và hồ sơ học phí thành công' : 'Thêm học viên thành công',
+      message: canSetTuition ? 'Thêm học viên và hồ sơ học phí thành công' : 'Thêm học viên thành công',
       id: userId,
       code: code.trim(),
     });
