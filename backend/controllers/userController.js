@@ -24,20 +24,24 @@ const ROLE_PROFILE_META = {
   },
 };
 
-async function canViewUserProfile(viewer, targetId) {
-  if (!viewer?.id || !targetId) return false;
-  if (Number(viewer.id) === Number(targetId)) return true;
-  if (viewer.role === 'admin') return true;
-
+async function shareClassWith(viewerId, targetId) {
   const [shared] = await pool.query(
     `SELECT 1
      FROM class_members a
      INNER JOIN class_members b ON a.class_id = b.class_id
      WHERE a.user_id = ? AND b.user_id = ?
      LIMIT 1`,
-    [viewer.id, targetId],
+    [viewerId, targetId],
   );
-  if (shared.length > 0) return true;
+  return shared.length > 0;
+}
+
+async function canViewUserProfile(viewer, targetId) {
+  if (!viewer?.id || !targetId) return false;
+  if (Number(viewer.id) === Number(targetId)) return true;
+  if (viewer.role === 'admin') return true;
+
+  if (await shareClassWith(viewer.id, targetId)) return true;
 
   if (viewer.role === 'teacher') {
     const [rows] = await pool.query(
@@ -46,6 +50,21 @@ async function canViewUserProfile(viewer, targetId) {
     );
     const role = rows[0]?.role;
     if (role === 'teacher' || role === 'admin') return true;
+  }
+
+  return false;
+}
+
+/** Admin / giáo viên được sửa hồ sơ học viên (không áp dụng cho tài khoản khác). */
+async function canManageStudentProfile(req, target) {
+  if (!req?.user || !target || target.role !== 'student') return false;
+
+  if (req.user.role === 'admin') {
+    return !validateScopedUserManagement(req, { targetUser: target, role: 'student', code: target.code });
+  }
+
+  if (req.user.role === 'teacher') {
+    return shareClassWith(req.user.id, target.id);
   }
 
   return false;
@@ -363,13 +382,31 @@ const uploadUserAvatar = async (req, res) => {
     if (target.role === 'admin') {
       return res.status(403).json({ message: 'Không thể đổi ảnh tài khoản quản trị tại đây' });
     }
-    if (target.role !== 'student' && target.role !== 'teacher') {
-      return res.status(403).json({ message: 'Chỉ hỗ trợ đổi ảnh cho học sinh và giáo viên' });
-    }
 
-    const scopeError = validateScopedUserManagement(req, { targetUser: target });
-    if (scopeError) {
-      return res.status(403).json({ message: scopeError });
+    // Giáo viên / admin: chỉ đổi ảnh học viên; admin vẫn đổi được ảnh giáo viên qua trang quản lý
+    if (req.user.role === 'teacher') {
+      if (target.role !== 'student') {
+        return res.status(403).json({ message: 'Giáo viên chỉ được đổi ảnh học viên' });
+      }
+      if (!(await canManageStudentProfile(req, target))) {
+        return res.status(403).json({ message: 'Bạn không có quyền đổi ảnh học viên này' });
+      }
+    } else if (req.user.role === 'admin') {
+      if (target.role !== 'student' && target.role !== 'teacher') {
+        return res.status(403).json({ message: 'Chỉ hỗ trợ đổi ảnh cho học sinh và giáo viên' });
+      }
+      if (target.role === 'student') {
+        if (!(await canManageStudentProfile(req, target))) {
+          return res.status(403).json({ message: 'Không có quyền đổi ảnh học viên này' });
+        }
+      } else {
+        const scopeError = validateScopedUserManagement(req, { targetUser: target });
+        if (scopeError) {
+          return res.status(403).json({ message: scopeError });
+        }
+      }
+    } else {
+      return res.status(403).json({ message: 'Không có quyền đổi ảnh đại diện' });
     }
 
     const saved = await saveMulterFile(req);
@@ -385,6 +422,97 @@ const uploadUserAvatar = async (req, res) => {
     });
 
     res.json({ message: 'Đã cập nhật ảnh đại diện', avatar_url: saved.file_url });
+  } catch (err) {
+    res.status(500).json({ message: 'Lỗi hệ thống', error: err.message });
+  }
+};
+
+const updateManagedProfile = async (req, res) => {
+  try {
+    const targetId = parseInt(req.params.id, 10);
+    if (!Number.isFinite(targetId)) {
+      return res.status(400).json({ message: 'ID không hợp lệ' });
+    }
+
+    const [targetRows] = await pool.query(
+      'SELECT id, fullname, username, code, role, admin_scope, phone, zalo, avatar_url, status FROM users WHERE id = ?',
+      [targetId],
+    );
+    if (targetRows.length === 0) {
+      return res.status(404).json({ message: 'Không tìm thấy người dùng' });
+    }
+    const target = targetRows[0];
+
+    if (!(await canManageStudentProfile(req, target))) {
+      return res.status(403).json({ message: 'Bạn không có quyền sửa thông tin học viên này' });
+    }
+
+    const { fullname, username, code, phone, zalo } = req.body;
+    if (!fullname?.trim() || !username?.trim() || !code?.trim()) {
+      return res.status(400).json({ message: 'Vui lòng điền họ tên, tên đăng nhập và mã' });
+    }
+
+    if (req.user.role === 'admin') {
+      const scopeError = validateScopedUserManagement(req, {
+        role: 'student',
+        code: code.trim(),
+        targetUser: target,
+      });
+      if (scopeError) {
+        return res.status(403).json({ message: scopeError });
+      }
+    }
+
+    const [dupUser] = await pool.query(
+      'SELECT id FROM users WHERE username = ? AND id != ?',
+      [username.trim(), targetId],
+    );
+    if (dupUser.length > 0) {
+      return res.status(409).json({ message: 'Tên đăng nhập đã tồn tại' });
+    }
+
+    const [dupCode] = await pool.query(
+      'SELECT id FROM users WHERE code = ? AND id != ?',
+      [code.trim(), targetId],
+    );
+    if (dupCode.length > 0) {
+      return res.status(409).json({ message: 'Mã học viên đã tồn tại' });
+    }
+
+    let avatarUrl = target.avatar_url || null;
+    if (req.file) {
+      const saved = await saveMulterFile(req);
+      avatarUrl = saved.file_url;
+    }
+
+    await pool.query(
+      'UPDATE users SET fullname=?, username=?, code=?, phone=?, zalo=?, avatar_url=? WHERE id=?',
+      [
+        fullname.trim(),
+        username.trim(),
+        code.trim(),
+        phone !== undefined ? (String(phone).trim() || null) : (target.phone || null),
+        zalo !== undefined ? (String(zalo).trim() || null) : (target.zalo || null),
+        avatarUrl,
+        targetId,
+      ],
+    );
+
+    await logAction({
+      actorId: req.user.id,
+      action: 'update',
+      resourceType: 'user',
+      resourceId: targetId,
+      resourceLabel: fullname.trim(),
+      metadata: { managed_profile: true, avatar_updated: Boolean(req.file) },
+    });
+
+    const [rows] = await pool.query(
+      'SELECT id, fullname, username, code, role, status, avatar_url, phone, zalo FROM users WHERE id = ?',
+      [targetId],
+    );
+
+    res.json({ message: 'Cập nhật thông tin học viên thành công', user: rows[0] });
   } catch (err) {
     res.status(500).json({ message: 'Lỗi hệ thống', error: err.message });
   }
@@ -424,7 +552,9 @@ const getUserProfile = async (req, res) => {
     );
 
     const meta = ROLE_PROFILE_META[userRow.role] || ROLE_PROFILE_META.student;
-    const showPii = canViewMemberPII(req.user) || Number(req.user.id) === Number(targetId);
+    const isSelf = Number(req.user.id) === Number(targetId);
+    const showPii = canViewMemberPII(req.user) || isSelf;
+    const canEditStudent = await canManageStudentProfile(req, userRow);
 
     const profile = {
       id: userRow.id,
@@ -437,7 +567,8 @@ const getUserProfile = async (req, res) => {
       quote: meta.quote,
       highlights: meta.highlights,
       classes: classes.map((c) => ({ id: c.id, name: c.name })),
-      is_self: Number(req.user.id) === Number(targetId),
+      is_self: isSelf,
+      can_edit: isSelf || canEditStudent,
     };
 
     if (showPii) {
@@ -458,6 +589,7 @@ module.exports = {
   listTeachers,
   getUsers,
   getUserProfile,
+  updateManagedProfile,
   createUser,
   updateUser,
   deleteUser,

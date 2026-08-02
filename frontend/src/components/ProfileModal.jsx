@@ -1,13 +1,19 @@
 import { useEffect, useState } from 'react';
 import { Modal, Form, Button, Alert } from 'react-bootstrap';
-import { authService } from '../services';
+import { authService, userService } from '../services';
 import { useAuth } from '../context/AuthContext';
 import UserAvatar from './UserAvatar';
 
 const roleLabels = { admin: 'Quản trị viên', teacher: 'Giáo viên', student: 'Học sinh' };
 
-export default function ProfileModal({ show, onHide, onSaved }) {
+/**
+ * @param {object} [targetProfile] — khi admin/GV sửa học viên; bỏ trống = sửa chính mình
+ */
+export default function ProfileModal({ show, onHide, onSaved, targetProfile = null }) {
   const { user, updateUser } = useAuth();
+  const isManagingOther = Boolean(targetProfile && Number(targetProfile.id) !== Number(user?.id));
+  const source = isManagingOther ? targetProfile : user;
+
   const [form, setForm] = useState({
     fullname: '',
     username: '',
@@ -21,19 +27,20 @@ export default function ProfileModal({ show, onHide, onSaved }) {
   const [error, setError] = useState('');
 
   useEffect(() => {
-    if (show && user) {
-      setForm({
-        fullname: user.fullname || '',
-        username: user.username || '',
-        code: user.code || '',
-        phone: user.phone || '',
-        zalo: user.zalo || '',
-      });
-      setAvatarFile(null);
-      setPreview(null);
-      setError('');
-    }
-  }, [show, user]);
+    if (!show) return;
+    const src = isManagingOther ? targetProfile : user;
+    if (!src) return;
+    setForm({
+      fullname: src.fullname || '',
+      username: src.username || '',
+      code: src.code || '',
+      phone: src.phone || '',
+      zalo: src.zalo || '',
+    });
+    setAvatarFile(null);
+    setPreview(null);
+    setError('');
+  }, [show, isManagingOther, targetProfile, user]);
 
   const handleAvatarChange = (e) => {
     const file = e.target.files[0];
@@ -55,9 +62,14 @@ export default function ProfileModal({ show, onHide, onSaved }) {
       formData.append('zalo', form.zalo || '');
       if (avatarFile) formData.append('avatar', avatarFile);
 
-      const res = await authService.updateProfile(formData);
-      updateUser(res.data.user);
-      onSaved?.(res.data.user);
+      if (isManagingOther) {
+        const res = await userService.updateManagedProfile(targetProfile.id, formData);
+        onSaved?.(res.data.user);
+      } else {
+        const res = await authService.updateProfile(formData);
+        updateUser(res.data.user);
+        onSaved?.(res.data.user);
+      }
       onHide();
     } catch (err) {
       setError(err.response?.data?.message || 'Có lỗi xảy ra');
@@ -67,13 +79,15 @@ export default function ProfileModal({ show, onHide, onSaved }) {
   };
 
   const displayUser = preview
-    ? { ...user, avatar_url: preview }
-    : user;
+    ? { ...source, avatar_url: preview, role: source?.role || 'student' }
+    : { ...source, role: source?.role || 'student' };
 
   return (
     <Modal show={show} onHide={onHide} centered>
       <Modal.Header closeButton>
-        <Modal.Title>Thông tin cá nhân</Modal.Title>
+        <Modal.Title>
+          {isManagingOther ? 'Sửa thông tin học viên' : 'Thông tin cá nhân'}
+        </Modal.Title>
       </Modal.Header>
       <Form onSubmit={handleSubmit}>
         <Modal.Body>
@@ -124,7 +138,7 @@ export default function ProfileModal({ show, onHide, onSaved }) {
               onChange={(e) => setForm({ ...form, code: e.target.value })}
               required
             />
-            {user?.role === 'student' && user?.student_codes?.length > 1 && (
+            {!isManagingOther && user?.role === 'student' && user?.student_codes?.length > 1 && (
               <Form.Text className="text-muted d-block mt-1">
                 Các mã theo môn: {user.student_codes.map((item) => item.code).join(', ')}
               </Form.Text>
@@ -148,7 +162,11 @@ export default function ProfileModal({ show, onHide, onSaved }) {
           </Form.Group>
           <Form.Group>
             <Form.Label>Vai trò</Form.Label>
-            <Form.Control value={roleLabels[user?.role] || ''} disabled readOnly />
+            <Form.Control
+              value={roleLabels[source?.role] || roleLabels.student}
+              disabled
+              readOnly
+            />
           </Form.Group>
         </Modal.Body>
         <Modal.Footer>

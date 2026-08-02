@@ -10,6 +10,9 @@ export const authService = {
 export const userService = {
   getAll: (classId) => api.get('/users', { params: classId ? { class_id: classId } : {} }),
   getProfile: (id) => api.get(`/users/${id}/profile`),
+  updateManagedProfile: (id, formData) => api.put(`/users/${id}/profile`, formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  }),
   listAdmins: () => api.get('/users/admins'),
   listTeachers: () => api.get('/users/teachers'),
   create: (data) => api.post('/users', data),

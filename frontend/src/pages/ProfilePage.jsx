@@ -67,25 +67,31 @@ export default function ProfilePage() {
   const joined = formatJoined(profile?.created_at);
   const highlights = profile?.highlights || [];
   const isSelf = profile?.is_self || Number(me?.id) === Number(userId);
-  const canEdit = isSelf;
+  const canEdit = Boolean(profile?.can_edit || isSelf);
   const zaloLink = zaloHref(profile?.zalo);
 
   const handleAvatarFile = async (e) => {
     const file = e.target.files?.[0];
     e.target.value = '';
-    if (!file || !canEdit) return;
+    if (!file || !canEdit || !profile) return;
     setUploadingAvatar(true);
     setError('');
     try {
-      const formData = new FormData();
-      formData.append('fullname', profile.fullname || me?.fullname || '');
-      formData.append('username', profile.username || me?.username || '');
-      formData.append('code', profile.code || me?.code || '');
-      formData.append('phone', profile.phone || '');
-      formData.append('zalo', profile.zalo || '');
-      formData.append('avatar', file);
-      const res = await authService.updateProfile(formData);
-      updateUser(res.data.user);
+      if (isSelf) {
+        const formData = new FormData();
+        formData.append('fullname', profile.fullname || me?.fullname || '');
+        formData.append('username', profile.username || me?.username || '');
+        formData.append('code', profile.code || me?.code || '');
+        formData.append('phone', profile.phone || '');
+        formData.append('zalo', profile.zalo || '');
+        formData.append('avatar', file);
+        const res = await authService.updateProfile(formData);
+        updateUser(res.data.user);
+      } else {
+        const formData = new FormData();
+        formData.append('avatar', file);
+        await userService.uploadAvatar(profile.id, formData);
+      }
       await reloadProfile();
     } catch (err) {
       setError(err.response?.data?.message || 'Không thể cập nhật ảnh đại diện');
@@ -322,6 +328,7 @@ export default function ProfilePage() {
         <ProfileModal
           show={showEdit}
           onHide={() => setShowEdit(false)}
+          targetProfile={isSelf ? null : profile}
           onSaved={async () => {
             try {
               await reloadProfile();

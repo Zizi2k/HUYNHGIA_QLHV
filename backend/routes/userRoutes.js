@@ -4,6 +4,7 @@ const {
   listTeachers,
   getUsers,
   getUserProfile,
+  updateManagedProfile,
   createUser,
   updateUser,
   deleteUser,
@@ -20,14 +21,26 @@ router.use(authenticate);
 router.get('/admins', authorize('admin'), requireSuperAdmin, listAdmins);
 router.get('/teachers', authorize('admin'), listTeachers);
 
-// Trang cá nhân — mọi vai trò đã đăng nhập (controller kiểm tra quyền xem)
+// Trang cá nhân
 router.get('/:id/profile', getUserProfile);
+// Admin / giáo viên sửa hồ sơ học viên (avatar + thông tin)
+router.put(
+  '/:id/profile',
+  authorize('admin', 'teacher'),
+  uploadMemory.single('avatar'),
+  updateManagedProfile,
+);
+router.post(
+  '/:id/avatar',
+  authorize('admin', 'teacher'),
+  uploadMemory.single('avatar'),
+  uploadUserAvatar,
+);
 
 router.use(authorize('admin'));
 
 router.get('/', getUsers);
 router.post('/', createUser);
-router.post('/:id/avatar', uploadMemory.single('avatar'), uploadUserAvatar);
 router.put('/:id', updateUser);
 router.delete('/:id', deleteUser);
 
