@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  Alert, Badge, Button, ButtonGroup, Carousel, Col, Form, Modal, Row, Spinner, Table,
+  Alert, Badge, Button, Carousel, Col, Form, Modal, Row, Spinner, Table,
 } from 'react-bootstrap';
 import { promoService } from '../services';
 import { useAuth } from '../context/AuthContext';
@@ -8,10 +8,20 @@ import { getUserScope, isScopedAdmin, isSuperAdmin, scopeLabel } from '../utils/
 import { getAvatarUrl } from '../utils/avatar';
 import LoadingOverlay from '../components/common/LoadingOverlay';
 
+export const CATEGORY_OPTIONS = [
+  { value: 'Tiếng Anh', label: 'Tiếng Anh', icon: 'bi-translate' },
+  { value: 'Tiếng Trung', label: 'Tiếng Trung', icon: 'bi-chat-square-text' },
+  { value: 'Tin học văn phòng', label: 'Tin học văn phòng', icon: 'bi-file-earmark-spreadsheet' },
+  { value: 'Lập trình', label: 'Lập trình', icon: 'bi-code-slash' },
+  { value: 'Kỹ năng mềm', label: 'Kỹ năng mềm', icon: 'bi-people' },
+  { value: 'Luyện thi', label: 'Luyện thi', icon: 'bi-mortarboard' },
+  { value: 'Khóa học thiếu nhi', label: 'Khóa học thiếu nhi', icon: 'bi-stars' },
+];
+
 const emptyBanner = {
   title: '',
   subtitle: '',
-  cta_label: 'Tìm ngay',
+  cta_label: 'Khám phá khóa học',
   link_url: '',
   branch_scope: 'all',
   sort_order: 0,
@@ -25,6 +35,12 @@ const emptyCourse = {
   branch_scope: 'HG',
   sort_order: 0,
   is_active: true,
+  category: 'Tiếng Anh',
+  instructor_name: '',
+  duration_label: '20 buổi',
+  level_label: 'Cơ bản',
+  rating: '5.0',
+  student_count: '0',
   original_price: '',
   discount_type: 'none',
   discount_value: '',
@@ -122,12 +138,39 @@ function statusBadge(status) {
   );
 }
 
-function CoursePriceBlock({ course }) {
+/** Bỏ dấu tiếng Việt để tìm kiếm không phân biệt dấu */
+function normalizeSearch(str) {
+  return (str || '')
+    .toString()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
+}
+
+function instructorInitials(name) {
+  const trimmed = (name || '').trim();
+  if (!trimmed) return 'LH';
+  const parts = trimmed.split(/\s+/);
+  const first = parts[0]?.[0] || '';
+  const last = parts.length > 1 ? parts[parts.length - 1][0] : '';
+  return `${first}${last}`.toUpperCase() || 'LH';
+}
+
+function scrollToId(id) {
+  document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function PromoCardPrice({ course }) {
   const original = course.original_price != null && course.original_price !== ''
     ? Number(course.original_price)
     : null;
-  if (original == null || !Number.isFinite(original) || original <= 0) return null;
-
+  if (original == null || !Number.isFinite(original) || original <= 0) {
+    return (
+      <div className="promo-mkt-card-price">
+        <span className="promo-mkt-card-price-sale">Liên hệ tư vấn</span>
+      </div>
+    );
+  }
   const sale = course.sale_price != null
     ? Number(course.sale_price)
     : computeSalePrice(course.original_price, course.discount_type, course.discount_value);
@@ -135,12 +178,10 @@ function CoursePriceBlock({ course }) {
   const label = getDiscountLabel(course);
 
   return (
-    <div className="promo-price-block">
-      {discounted && (
-        <span className="promo-price-original">{formatVnd(original)}</span>
-      )}
-      <span className="promo-price-sale">{formatVnd(discounted ? sale : original)}</span>
-      {label && <span className="promo-price-discount">{label}</span>}
+    <div className="promo-mkt-card-price">
+      <span className="promo-mkt-card-price-sale">{formatVnd(discounted ? sale : original)}</span>
+      {discounted && <span className="promo-mkt-card-price-original">{formatVnd(original)}</span>}
+      {label && <span className="promo-mkt-card-price-off">{label}</span>}
     </div>
   );
 }
@@ -156,6 +197,8 @@ export default function PromoCoursesPage() {
   const scopedAdmin = isScopedAdmin(user);
 
   const [filterScope, setFilterScope] = useState('all');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState('all');
   const [banners, setBanners] = useState([]);
   const [courses, setCourses] = useState([]);
   const [registrations, setRegistrations] = useState([]);
@@ -292,6 +335,12 @@ export default function PromoCoursesPage() {
       branch_scope: item.branch_scope || lockedScope || 'HG',
       sort_order: item.sort_order || 0,
       is_active: Boolean(item.is_active),
+      category: item.category || 'Tiếng Anh',
+      instructor_name: item.instructor_name || '',
+      duration_label: item.duration_label || '20 buổi',
+      level_label: item.level_label || 'Cơ bản',
+      rating: item.rating != null ? String(item.rating) : '5.0',
+      student_count: item.student_count != null ? String(item.student_count) : '0',
       original_price: item.original_price != null ? String(item.original_price) : '',
       discount_type: item.discount_type || 'none',
       discount_value: item.discount_value != null ? String(item.discount_value) : '',
@@ -306,6 +355,7 @@ export default function PromoCoursesPage() {
   };
 
   const openRegister = async (course) => {
+    if (!canRegister || !isRegistrationOpen(course)) return;
     setRegisterCourseItem(course);
     setFormError('');
     setRegisterForm({
@@ -470,209 +520,362 @@ export default function PromoCoursesPage() {
     [courses, isAdmin],
   );
 
+  const categoryCounts = useMemo(() => {
+    const map = {};
+    CATEGORY_OPTIONS.forEach((opt) => { map[opt.value] = 0; });
+    activeCourses.forEach((c) => {
+      if (c.category && map[c.category] !== undefined) map[c.category] += 1;
+    });
+    return map;
+  }, [activeCourses]);
+
+  const filteredCourses = useMemo(() => {
+    let list = activeCourses;
+    if (categoryFilter !== 'all') {
+      list = list.filter((c) => (c.category || '') === categoryFilter);
+    }
+    if (searchQuery.trim()) {
+      const q = normalizeSearch(searchQuery);
+      list = list.filter((c) => normalizeSearch(c.title).includes(q));
+    }
+    return list;
+  }, [activeCourses, categoryFilter, searchQuery]);
+
   const branchHint = lockedScope
     ? `Nội dung nhánh ${scopeLabel(lockedScope)}`
     : isSuper
       ? 'Admin tối cao — lọc HG / EG / Tất cả'
       : 'Khóa học theo nhánh của bạn';
 
+  const heroSlides = activeBanners.length > 0
+    ? activeBanners.map((b) => ({
+      key: `banner-${b.id}`,
+      banner: b,
+      tag: 'LHG EDUCATION',
+      title: b.title,
+      subtitle: b.subtitle,
+      ctaLabel: b.cta_label || 'Khám phá khóa học',
+      ctaLink: b.link_url || '#promo-courses',
+      image: b.image_url ? mediaUrl(b.image_url) : null,
+    }))
+    : [{
+      key: 'default',
+      banner: null,
+      tag: 'NỀN TẢNG HỌC TẬP LHG',
+      title: 'Học đúng kỹ năng\nVững bước tương lai',
+      subtitle: 'Nền tảng học tập LHG Education đồng hành cùng bạn trên con đường chinh phục tri thức — học mọi lúc, mọi nơi, cùng đội ngũ giảng viên giàu kinh nghiệm.',
+      ctaLabel: 'Khám phá khóa học',
+      ctaLink: '#promo-courses',
+      image: null,
+    }];
+
   return (
     <LoadingOverlay loading={loading && banners.length === 0 && courses.length === 0} minHeight={360}>
       <div className="promo-page">
-        {error && <Alert variant="danger">{error}</Alert>}
-        {successMsg && (
-          <Alert variant="success" dismissible onClose={() => setSuccessMsg('')}>
-            {successMsg}
-          </Alert>
+        {(error || successMsg) && (
+          <div className="promo-mkt-alerts">
+            {error && <Alert variant="danger">{error}</Alert>}
+            {successMsg && (
+              <Alert variant="success" dismissible onClose={() => setSuccessMsg('')}>
+                {successMsg}
+              </Alert>
+            )}
+          </div>
         )}
 
-        <section className="promo-hero">
-          <div className="promo-hero-inner">
-            <div className="promo-hero-copy">
-              <p className="promo-hero-eyebrow">LHG Education</p>
-              <h1 className="promo-hero-title">Chinh phục hàng ngàn khóa học</h1>
-              <p className="promo-hero-sub">Trên nền tảng giáo dục LHG — học tập hiện đại, đồng hành cùng bạn.</p>
-              <a href="#promo-courses" className="promo-hero-cta">
-                Tìm ngay
-                <i className="bi bi-arrow-right" />
-              </a>
+        {/* A. Local top bar */}
+        <div className="promo-mkt-topbar">
+          <div className="promo-mkt-topbar-inner">
+            <div className="promo-mkt-brand">
+              <span className="promo-mkt-brand-icon"><i className="bi bi-mortarboard-fill" /></span>
+              <span className="promo-mkt-brand-text">LHG Education</span>
             </div>
-            <div className="promo-hero-visual" aria-hidden="true">
-              <div className="promo-hero-orb promo-hero-orb--a" />
-              <div className="promo-hero-orb promo-hero-orb--b" />
-              <div className="promo-hero-phone">
-                <span>LHG</span>
-                <small>Học mọi lúc</small>
-              </div>
+            <nav className="promo-mkt-nav">
+              <a href="#promo-courses">Khóa học</a>
+              <a href="#promo-values">Lộ trình</a>
+              <a href="#promo-categories">Giảng viên</a>
+              <a href="#promo-values">Về chúng tôi</a>
+            </nav>
+            <div className="promo-mkt-search">
+              <i className="bi bi-search" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Tìm kiếm khóa học..."
+              />
             </div>
-          </div>
-        </section>
-
-        <div className="promo-toolbar">
-          <p className="promo-toolbar-hint mb-0">{branchHint}</p>
-          <div className="d-flex flex-wrap gap-2 align-items-center">
-            {isSuper && (
-              <ButtonGroup size="sm">
-                {[
-                  { value: 'all', label: 'Tất cả' },
-                  { value: 'HG', label: 'HG' },
-                  { value: 'EG', label: 'EG' },
-                ].map((opt) => (
-                  <Button
-                    key={opt.value}
-                    variant={filterScope === opt.value ? 'primary' : 'outline-primary'}
-                    onClick={() => setFilterScope(opt.value)}
-                  >
-                    {opt.label}
-                  </Button>
-                ))}
-              </ButtonGroup>
-            )}
-            {isAdmin && (
-              <>
-                <Button size="sm" variant="outline-secondary" onClick={openCreateBanner}>
-                  <i className="bi bi-image me-1" />
-                  Thêm banner
-                </Button>
-                <Button size="sm" variant="primary" onClick={openCreateCourse}>
-                  <i className="bi bi-plus-lg me-1" />
-                  Thêm khóa học
-                </Button>
-              </>
-            )}
+            <div className="promo-mkt-topbar-actions">
+              {isSuper && (
+                <div className="promo-mkt-scope-tabs" role="group" aria-label="Lọc theo nhánh">
+                  {[
+                    { value: 'all', label: 'Tất cả' },
+                    { value: 'HG', label: 'HG' },
+                    { value: 'EG', label: 'EG' },
+                  ].map((opt) => (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      className={`promo-mkt-scope-tab${filterScope === opt.value ? ' is-active' : ''}`}
+                      onClick={() => setFilterScope(opt.value)}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              )}
+              {isAdmin && (
+                <button
+                  type="button"
+                  className="promo-mkt-admin-btn"
+                  onClick={() => scrollToId('promo-admin-panel')}
+                >
+                  <i className="bi bi-gear-fill" />
+                  Quản trị
+                </button>
+              )}
+            </div>
           </div>
         </div>
 
-        <section className="promo-section">
-          <div className="promo-section-head">
-            <span className="promo-section-rule" />
-            <h2>Chương trình ưu đãi hấp dẫn</h2>
-          </div>
-
-          {activeBanners.length === 0 ? (
-            <div className="promo-empty">
-              <i className="bi bi-megaphone" />
-              <p>Chưa có banner ưu đãi{isAdmin ? ' — bấm “Thêm banner” để đăng.' : '.'}</p>
-            </div>
-          ) : (
-            <Carousel
-              className="promo-banner-carousel"
-              indicators={activeBanners.length > 1}
-              controls={activeBanners.length > 1}
-              interval={6000}
-            >
-              {activeBanners.map((b) => (
-                <Carousel.Item key={b.id}>
-                  <div className="promo-banner-slide">
-                    <div className="promo-banner-copy">
-                      <div className="d-flex gap-2 align-items-center mb-2">
-                        {branchBadge(b.branch_scope)}
-                        {isAdmin && !b.is_active && <Badge bg="warning" text="dark">Ẩn</Badge>}
+        {/* B. Hero slider */}
+        <section className="promo-mkt-hero" id="promo-hero">
+          <div className="promo-mkt-hero-pattern" aria-hidden="true" />
+          <Carousel
+            className="promo-mkt-hero-carousel"
+            indicators={heroSlides.length > 1}
+            controls={heroSlides.length > 1}
+            interval={7000}
+          >
+            {heroSlides.map((slide) => (
+              <Carousel.Item key={slide.key}>
+                <div className="promo-mkt-hero-inner">
+                  <div className="promo-mkt-hero-copy">
+                    <span className="promo-mkt-hero-tag">{slide.tag}</span>
+                    <h1 className="promo-mkt-hero-title">
+                      {slide.title.split('\n').map((line, i) => (
+                        <span className="promo-mkt-hero-title-line" key={`${slide.key}-line-${i}`}>{line}</span>
+                      ))}
+                    </h1>
+                    {slide.subtitle && <p className="promo-mkt-hero-sub">{slide.subtitle}</p>}
+                    <div className="promo-mkt-hero-actions">
+                      <a
+                        href={slide.ctaLink}
+                        className="promo-mkt-btn promo-mkt-btn-yellow"
+                        target={slide.ctaLink.startsWith('http') ? '_blank' : undefined}
+                        rel={slide.ctaLink.startsWith('http') ? 'noreferrer' : undefined}
+                        onClick={slide.ctaLink === '#promo-courses'
+                          ? (e) => { e.preventDefault(); scrollToId('promo-courses'); }
+                          : undefined}
+                      >
+                        {slide.ctaLabel}
+                        <i className="bi bi-arrow-right" />
+                      </a>
+                      <a
+                        href="#promo-values"
+                        className="promo-mkt-btn promo-mkt-btn-outline"
+                        onClick={(e) => { e.preventDefault(); scrollToId('promo-values'); }}
+                      >
+                        Xem lộ trình học
+                      </a>
+                    </div>
+                    {isAdmin && slide.banner && (
+                      <div className="promo-mkt-hero-admin">
+                        {branchBadge(slide.banner.branch_scope)}
+                        <Button size="sm" variant="light" onClick={() => openEditBanner(slide.banner)}>
+                          <i className="bi bi-pencil" /> Sửa
+                        </Button>
+                        <Button size="sm" variant="outline-danger" onClick={() => handleDeleteBanner(slide.banner)}>
+                          <i className="bi bi-trash" /> Xóa
+                        </Button>
                       </div>
-                      <h3>{b.title}</h3>
-                      {b.subtitle && <p>{b.subtitle}</p>}
-                      {b.cta_label && (
-                        b.link_url ? (
-                          <a href={b.link_url} className="promo-banner-cta" target="_blank" rel="noreferrer">
-                            {b.cta_label}
-                          </a>
-                        ) : (
-                          <span className="promo-banner-cta">{b.cta_label}</span>
-                        )
-                      )}
-                      {isAdmin && (
-                        <div className="promo-admin-actions mt-3">
-                          <Button size="sm" variant="light" onClick={() => openEditBanner(b)}>Sửa</Button>
-                          <Button size="sm" variant="outline-danger" onClick={() => handleDeleteBanner(b)}>Xóa</Button>
-                        </div>
+                    )}
+                  </div>
+                  <div className="promo-mkt-hero-visual" aria-hidden="true">
+                    <div
+                      className="promo-mkt-hero-phone"
+                      style={slide.image ? { backgroundImage: `url(${slide.image})` } : undefined}
+                    >
+                      {!slide.image && (
+                        <>
+                          <i className="bi bi-mortarboard-fill" />
+                          <span>LHG</span>
+                        </>
                       )}
                     </div>
-                    <div
-                      className="promo-banner-media"
-                      style={b.image_url ? { backgroundImage: `url(${mediaUrl(b.image_url)})` } : undefined}
-                    />
+                    <div className="promo-mkt-stat-card promo-mkt-stat-card--a">
+                      <i className="bi bi-journal-bookmark-fill" />
+                      <div>
+                        <strong>50+</strong>
+                        <span>Khóa học</span>
+                      </div>
+                    </div>
+                    <div className="promo-mkt-stat-card promo-mkt-stat-card--b">
+                      <i className="bi bi-people-fill" />
+                      <div>
+                        <strong>1.200+</strong>
+                        <span>Học viên</span>
+                      </div>
+                    </div>
+                    <div className="promo-mkt-stat-card promo-mkt-stat-card--c">
+                      <i className="bi bi-patch-check-fill" />
+                      <div>
+                        <strong>100%</strong>
+                        <span>Chứng nhận</span>
+                      </div>
+                    </div>
                   </div>
-                </Carousel.Item>
-              ))}
-            </Carousel>
-          )}
-
-          {isAdmin && banners.some((b) => !b.is_active) && (
-            <div className="promo-admin-inactive mt-3">
-              <h6 className="text-muted small text-uppercase">Banner đang ẩn</h6>
-              <ul className="list-unstyled mb-0">
-                {banners.filter((b) => !b.is_active).map((b) => (
-                  <li key={b.id} className="d-flex justify-content-between align-items-center py-1">
-                    <span>{b.title} {branchBadge(b.branch_scope)}</span>
-                    <Button size="sm" variant="link" onClick={() => openEditBanner(b)}>Sửa</Button>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
+                </div>
+              </Carousel.Item>
+            ))}
+          </Carousel>
         </section>
 
-        <section className="promo-section" id="promo-courses">
-          <div className="promo-section-head">
-            <span className="promo-section-rule" />
-            <h2>Khóa học chất lượng</h2>
+        <p className="promo-mkt-branch-hint">{branchHint}</p>
+
+        {/* C. Categories */}
+        <section className="promo-mkt-categories" id="promo-categories">
+          <div className="promo-mkt-section-head">
+            <span className="promo-mkt-eyebrow">Danh mục học tập</span>
+            <h2>Khám phá theo danh mục</h2>
+            <p>Chọn lĩnh vực phù hợp với mục tiêu của bạn</p>
+          </div>
+          <div className="promo-mkt-category-grid">
+            <button
+              type="button"
+              className={`promo-mkt-category-card${categoryFilter === 'all' ? ' is-active' : ''}`}
+              onClick={() => { setCategoryFilter('all'); scrollToId('promo-courses'); }}
+            >
+              <span className="promo-mkt-category-icon"><i className="bi bi-grid-fill" /></span>
+              <span className="promo-mkt-category-label">Tất cả</span>
+              <span className="promo-mkt-category-count">{activeCourses.length} khóa học</span>
+            </button>
+            {CATEGORY_OPTIONS.map((opt) => (
+              <button
+                key={opt.value}
+                type="button"
+                className={`promo-mkt-category-card${categoryFilter === opt.value ? ' is-active' : ''}`}
+                onClick={() => { setCategoryFilter(opt.value); scrollToId('promo-courses'); }}
+              >
+                <span className="promo-mkt-category-icon"><i className={`bi ${opt.icon}`} /></span>
+                <span className="promo-mkt-category-label">{opt.label}</span>
+                <span className="promo-mkt-category-count">{categoryCounts[opt.value] || 0} khóa học</span>
+              </button>
+            ))}
+          </div>
+        </section>
+
+        {/* D. Slim promo strip */}
+        <section className="promo-mkt-strip">
+          <div className="promo-mkt-strip-inner">
+            <span className="promo-mkt-strip-text">
+              <i className="bi bi-gift-fill" />
+              Giảm đến 40% học phí cho khóa học mới trong tháng
+            </span>
+            <button
+              type="button"
+              className="promo-mkt-strip-btn"
+              onClick={() => scrollToId('promo-courses')}
+            >
+              Đăng ký ngay
+            </button>
+          </div>
+        </section>
+
+        {/* E. Popular courses */}
+        <section className="promo-mkt-courses" id="promo-courses">
+          <div className="promo-mkt-section-head">
+            <span className="promo-mkt-eyebrow">Chương trình học</span>
+            <h2>Khóa học phổ biến</h2>
+            <p>Được đông đảo học viên LHG Education lựa chọn</p>
           </div>
 
-          {activeCourses.length === 0 ? (
-            <div className="promo-empty">
+          {isAdmin && (
+            <div className="promo-mkt-admin-toolbar">
+              <Button size="sm" variant="outline-primary" onClick={openCreateBanner}>
+                <i className="bi bi-image me-1" />
+                Thêm banner
+              </Button>
+              <Button size="sm" variant="primary" onClick={openCreateCourse}>
+                <i className="bi bi-plus-lg me-1" />
+                Thêm khóa học
+              </Button>
+            </div>
+          )}
+
+          {filteredCourses.length === 0 ? (
+            <div className="promo-mkt-empty">
               <i className="bi bi-journal-richtext" />
-              <p>Chưa có khóa học quảng bá{isAdmin ? ' — bấm “Thêm khóa học” và chọn HG/EG.' : '.'}</p>
+              <p>
+                {searchQuery || categoryFilter !== 'all'
+                  ? 'Không tìm thấy khóa học phù hợp.'
+                  : `Chưa có khóa học quảng bá${isAdmin ? ' — bấm "Thêm khóa học" để đăng.' : '.'}`}
+              </p>
             </div>
           ) : (
-            <Row className="g-3">
-              {activeCourses.map((c) => (
-                <Col key={c.id} md={6} lg={4}>
-                  <article className="promo-course-card">
-                    <div
-                      className="promo-course-thumb"
-                      style={c.image_url ? { backgroundImage: `url(${mediaUrl(c.image_url)})` } : undefined}
-                    >
-                      {!c.image_url && <i className="bi bi-book" />}
-                      <span className="promo-course-badge">{branchBadge(c.branch_scope)}</span>
-                    </div>
-                    <div className="promo-course-body">
-                      <h3>{c.title}</h3>
-                      {c.highlight && <p className="promo-course-highlight">{c.highlight}</p>}
-                      {c.description && <p className="promo-course-desc">{c.description}</p>}
-                      <CoursePriceBlock course={c} />
-                    </div>
-                    <div className="promo-course-foot">
-                      <span><i className="bi bi-star-fill" /> Ưu đãi học tập</span>
-                      <div className="d-flex flex-wrap gap-2 align-items-center">
-                        {canRegister && isRegistrationOpen(c) && (
-                          <button
-                            type="button"
-                            className="promo-register-btn"
-                            onClick={() => openRegister(c)}
-                          >
-                            Đăng ký khóa học
-                          </button>
-                        )}
-                        {isAdmin && (
-                          <div className="promo-admin-actions">
-                            <Button size="sm" variant="outline-light" onClick={() => openEditCourse(c)}>Sửa</Button>
-                            <Button size="sm" variant="outline-danger" onClick={() => handleDeleteCourse(c)}>Xóa</Button>
-                          </div>
-                        )}
+            <div className="promo-mkt-course-grid">
+              {filteredCourses.map((c) => (
+                <article className="promo-mkt-course-card" key={c.id}>
+                  <div
+                    className="promo-mkt-card-thumb"
+                    style={c.image_url ? { backgroundImage: `url(${mediaUrl(c.image_url)})` } : undefined}
+                  >
+                    {!c.image_url && <i className="bi bi-mortarboard" />}
+                    <span className="promo-mkt-card-chip">{c.category || 'LHG'}</span>
+                    <span className="promo-mkt-card-heart" aria-hidden="true">
+                      <i className="bi bi-heart" />
+                    </span>
+                    {isAdmin && (
+                      <div className="promo-mkt-card-admin">
+                        <button type="button" title="Sửa" onClick={() => openEditCourse(c)}>
+                          <i className="bi bi-pencil-fill" />
+                        </button>
+                        <button type="button" title="Xóa" onClick={() => handleDeleteCourse(c)}>
+                          <i className="bi bi-trash-fill" />
+                        </button>
                       </div>
+                    )}
+                  </div>
+                  <div className="promo-mkt-card-body">
+                    <h3 className="promo-mkt-card-title">{c.title}</h3>
+                    <div className="promo-mkt-card-instructor">
+                      <span className="promo-mkt-card-avatar">{instructorInitials(c.instructor_name)}</span>
+                      <span className="promo-mkt-card-instructor-name">
+                        {c.instructor_name || 'Giảng viên LHG'}
+                      </span>
                     </div>
-                  </article>
-                </Col>
+                    <div className="promo-mkt-card-stats">
+                      <span><i className="bi bi-star-fill" /> {Number(c.rating ?? 5).toFixed(1)}</span>
+                      <span><i className="bi bi-people-fill" /> {Number(c.student_count ?? 0).toLocaleString('vi-VN')}</span>
+                    </div>
+                    <div className="promo-mkt-card-meta">
+                      <span><i className="bi bi-clock-fill" /> {c.duration_label || '—'}</span>
+                      <span className="promo-mkt-card-level">{c.level_label || 'Cơ bản'}</span>
+                    </div>
+                    <PromoCardPrice course={c} />
+                  </div>
+                  <div className="promo-mkt-card-foot">
+                    <button
+                      type="button"
+                      className="promo-mkt-card-cta"
+                      disabled={!canRegister || !isRegistrationOpen(c)}
+                      onClick={() => openRegister(c)}
+                    >
+                      <i className="bi bi-cart-plus-fill" />
+                      {isRegistrationOpen(c) ? 'Đăng ký khóa học' : 'Tạm dừng đăng ký'}
+                    </button>
+                  </div>
+                </article>
               ))}
-            </Row>
+            </div>
           )}
 
           {isAdmin && courses.some((c) => !c.is_active) && (
-            <div className="promo-admin-inactive mt-3">
-              <h6 className="text-muted small text-uppercase">Khóa học đang ẩn</h6>
+            <div className="promo-mkt-inactive mt-3">
+              <h6>Khóa học đang ẩn</h6>
               <ul className="list-unstyled mb-0">
                 {courses.filter((c) => !c.is_active).map((c) => (
-                  <li key={c.id} className="d-flex justify-content-between align-items-center py-1">
+                  <li key={c.id}>
                     <span>{c.title} {branchBadge(c.branch_scope)}</span>
                     <Button size="sm" variant="link" onClick={() => openEditCourse(c)}>Sửa</Button>
                   </li>
@@ -682,100 +885,162 @@ export default function PromoCoursesPage() {
           )}
         </section>
 
-        {isAdmin && (
-          <section className="promo-section">
-            <div className="promo-section-head">
-              <span className="promo-section-rule" />
-              <h2>Đăng ký khóa học</h2>
+        {/* F. Values */}
+        <section className="promo-mkt-values" id="promo-values">
+          <div className="promo-mkt-section-head">
+            <span className="promo-mkt-eyebrow">Vì sao chọn LHG</span>
+            <h2>Giá trị chúng tôi mang lại</h2>
+          </div>
+          <div className="promo-mkt-values-grid">
+            <div className="promo-mkt-value-card">
+              <span className="promo-mkt-value-icon"><i className="bi bi-person-video3" /></span>
+              <h3>Giảng viên chất lượng</h3>
+              <p>Đội ngũ giảng viên giàu kinh nghiệm, tận tâm đồng hành cùng học viên.</p>
             </div>
-            {registrations.length === 0 ? (
-              <div className="promo-empty">
-                <i className="bi bi-clipboard-check" />
-                <p>Chưa có yêu cầu đăng ký nào.</p>
+            <div className="promo-mkt-value-card">
+              <span className="promo-mkt-value-icon"><i className="bi bi-patch-check" /></span>
+              <h3>Chứng nhận uy tín</h3>
+              <p>Chứng nhận hoàn thành khóa học được công nhận rộng rãi.</p>
+            </div>
+            <div className="promo-mkt-value-card">
+              <span className="promo-mkt-value-icon"><i className="bi bi-laptop" /></span>
+              <h3>Học mọi lúc mọi nơi</h3>
+              <p>Linh hoạt thời gian học tập trên mọi thiết bị, mọi địa điểm.</p>
+            </div>
+            <div className="promo-mkt-value-card">
+              <span className="promo-mkt-value-icon"><i className="bi bi-headset" /></span>
+              <h3>Hỗ trợ tận tâm</h3>
+              <p>Đội ngũ hỗ trợ luôn sẵn sàng giải đáp thắc mắc của bạn.</p>
+            </div>
+          </div>
+        </section>
+
+        {/* G. Admin panel: banner CRUD, course CRUD, registrations */}
+        {isAdmin && (
+          <section className="promo-mkt-admin-panel" id="promo-admin-panel">
+            <div className="promo-mkt-section-head">
+              <span className="promo-mkt-eyebrow">Khu vực quản trị</span>
+              <h2>Quản lý nội dung quảng bá</h2>
+            </div>
+
+            <div className="promo-mkt-panel-card">
+              <div className="promo-mkt-panel-card-head">
+                <h6>Banner ưu đãi</h6>
+                <Button size="sm" variant="outline-primary" onClick={openCreateBanner}>
+                  <i className="bi bi-image me-1" />
+                  Thêm banner
+                </Button>
               </div>
-            ) : (
-              <div className="table-responsive">
-                <Table hover size="sm" className="align-middle mb-0">
-                  <thead>
-                    <tr>
-                      <th>Khóa học</th>
-                      <th>Học viên</th>
-                      <th>Người đăng ký</th>
-                      <th>SĐT</th>
-                      <th>Giá</th>
-                      <th>Trạng thái</th>
-                      <th>Ngày</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {registrations.map((r) => (
-                      <tr key={r.id}>
-                        <td>
-                          <div className="fw-semibold">{r.course_title || '—'}</div>
-                          {r.course_branch && (
-                            <small className="text-muted">{r.course_branch}</small>
-                          )}
-                        </td>
-                        <td>
-                          {r.student_name || r.fullname || '—'}
-                          {r.student_code && (
-                            <div><small className="text-muted">{r.student_code}</small></div>
-                          )}
-                        </td>
-                        <td>
-                          {r.registrant_name || '—'}
-                          {r.registrant_role && (
-                            <div>
-                              <small className="text-muted">
-                                {r.registrant_role === 'admin' && 'Admin'}
-                                {r.registrant_role === 'teacher' && 'Giáo viên'}
-                                {r.registrant_role === 'student' && 'Học viên'}
-                              </small>
-                            </div>
-                          )}
-                        </td>
-                        <td>
-                          <div>{r.phone || '—'}</div>
-                          {r.zalo && <small className="text-muted">Zalo: {r.zalo}</small>}
-                        </td>
-                        <td>
-                          <div className="promo-price-block">
-                            {r.original_price != null && r.sale_price != null
-                              && Number(r.sale_price) < Number(r.original_price) && (
-                              <span className="promo-price-original">{formatVnd(r.original_price)}</span>
-                            )}
-                            <span className="promo-price-sale">
-                              {formatVnd(r.sale_price ?? r.original_price) || '—'}
-                            </span>
-                          </div>
-                        </td>
-                        <td>
-                          <div className="d-flex flex-column gap-1">
-                            {statusBadge(r.status)}
-                            <Form.Select
-                              size="sm"
-                              value={r.status}
-                              disabled={updatingRegId === r.id}
-                              onChange={(e) => handleUpdateRegistration(r.id, e.target.value)}
-                              style={{ maxWidth: 150 }}
-                            >
-                              {Object.entries(STATUS_META).map(([value, meta]) => (
-                                <option key={value} value={value}>{meta.label}</option>
-                              ))}
-                            </Form.Select>
-                          </div>
-                        </td>
-                        <td>
-                          {r.created_at
-                            ? new Date(r.created_at).toLocaleString('vi-VN')
-                            : '—'}
-                        </td>
+              {banners.length === 0 ? (
+                <p className="text-muted small mb-0">Chưa có banner nào.</p>
+              ) : (
+                <ul className="list-unstyled mb-0 promo-mkt-panel-list">
+                  {banners.map((b) => (
+                    <li key={b.id}>
+                      <span>
+                        {b.title} {branchBadge(b.branch_scope)}
+                        {!b.is_active && <Badge bg="warning" text="dark" className="ms-1">Ẩn</Badge>}
+                      </span>
+                      <div className="d-flex gap-2">
+                        <Button size="sm" variant="link" onClick={() => openEditBanner(b)}>Sửa</Button>
+                        <Button size="sm" variant="link" className="text-danger" onClick={() => handleDeleteBanner(b)}>Xóa</Button>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+
+            <div className="promo-mkt-panel-card">
+              <div className="promo-mkt-panel-card-head">
+                <h6>Đăng ký khóa học</h6>
+              </div>
+              {registrations.length === 0 ? (
+                <p className="text-muted small mb-0">Chưa có yêu cầu đăng ký nào.</p>
+              ) : (
+                <div className="table-responsive">
+                  <Table hover size="sm" className="align-middle mb-0 promo-mkt-regs-table">
+                    <thead>
+                      <tr>
+                        <th>Khóa học</th>
+                        <th>Học viên</th>
+                        <th>Người đăng ký</th>
+                        <th>SĐT</th>
+                        <th>Giá</th>
+                        <th>Trạng thái</th>
+                        <th>Ngày</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </Table>
-              </div>
-            )}
+                    </thead>
+                    <tbody>
+                      {registrations.map((r) => (
+                        <tr key={r.id}>
+                          <td>
+                            <div className="fw-semibold">{r.course_title || '—'}</div>
+                            {r.course_branch && (
+                              <small className="text-muted">{r.course_branch}</small>
+                            )}
+                          </td>
+                          <td>
+                            {r.student_name || r.fullname || '—'}
+                            {r.student_code && (
+                              <div><small className="text-muted">{r.student_code}</small></div>
+                            )}
+                          </td>
+                          <td>
+                            {r.registrant_name || '—'}
+                            {r.registrant_role && (
+                              <div>
+                                <small className="text-muted">
+                                  {r.registrant_role === 'admin' && 'Admin'}
+                                  {r.registrant_role === 'teacher' && 'Giáo viên'}
+                                  {r.registrant_role === 'student' && 'Học viên'}
+                                </small>
+                              </div>
+                            )}
+                          </td>
+                          <td>
+                            <div>{r.phone || '—'}</div>
+                            {r.zalo && <small className="text-muted">Zalo: {r.zalo}</small>}
+                          </td>
+                          <td>
+                            <div className="promo-mkt-card-price promo-mkt-card-price--table">
+                              {r.original_price != null && r.sale_price != null
+                                && Number(r.sale_price) < Number(r.original_price) && (
+                                <span className="promo-mkt-card-price-original">{formatVnd(r.original_price)}</span>
+                              )}
+                              <span className="promo-mkt-card-price-sale">
+                                {formatVnd(r.sale_price ?? r.original_price) || '—'}
+                              </span>
+                            </div>
+                          </td>
+                          <td>
+                            <div className="d-flex flex-column gap-1">
+                              {statusBadge(r.status)}
+                              <Form.Select
+                                size="sm"
+                                value={r.status}
+                                disabled={updatingRegId === r.id}
+                                onChange={(e) => handleUpdateRegistration(r.id, e.target.value)}
+                                style={{ maxWidth: 150 }}
+                              >
+                                {Object.entries(STATUS_META).map(([value, meta]) => (
+                                  <option key={value} value={value}>{meta.label}</option>
+                                ))}
+                              </Form.Select>
+                            </div>
+                          </td>
+                          <td>
+                            {r.created_at
+                              ? new Date(r.created_at).toLocaleString('vi-VN')
+                              : '—'}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </Table>
+                </div>
+              )}
+            </div>
           </section>
         )}
 
@@ -877,7 +1142,7 @@ export default function PromoCoursesPage() {
                       }}
                     />
                     {bannerPreview && (
-                      <img src={bannerPreview} alt="Preview" className="promo-form-preview mt-2" />
+                      <img src={bannerPreview} alt="Preview" className="promo-mkt-form-preview mt-2" />
                     )}
                   </Form.Group>
                 </Col>
@@ -974,6 +1239,74 @@ export default function PromoCoursesPage() {
 
                 <Col md={4}>
                   <Form.Group>
+                    <Form.Label>Danh mục</Form.Label>
+                    <Form.Select
+                      value={courseForm.category}
+                      onChange={(e) => setCourseForm({ ...courseForm, category: e.target.value })}
+                    >
+                      {CATEGORY_OPTIONS.map((opt) => (
+                        <option key={opt.value} value={opt.value}>{opt.label}</option>
+                      ))}
+                    </Form.Select>
+                  </Form.Group>
+                </Col>
+                <Col md={4}>
+                  <Form.Group>
+                    <Form.Label>Giảng viên</Form.Label>
+                    <Form.Control
+                      value={courseForm.instructor_name}
+                      onChange={(e) => setCourseForm({ ...courseForm, instructor_name: e.target.value })}
+                      placeholder="VD: Nguyễn Văn A"
+                    />
+                  </Form.Group>
+                </Col>
+                <Col md={4}>
+                  <Form.Group>
+                    <Form.Label>Thời lượng</Form.Label>
+                    <Form.Control
+                      value={courseForm.duration_label}
+                      onChange={(e) => setCourseForm({ ...courseForm, duration_label: e.target.value })}
+                      placeholder="VD: 20 buổi"
+                    />
+                  </Form.Group>
+                </Col>
+                <Col md={4}>
+                  <Form.Group>
+                    <Form.Label>Cấp độ</Form.Label>
+                    <Form.Control
+                      value={courseForm.level_label}
+                      onChange={(e) => setCourseForm({ ...courseForm, level_label: e.target.value })}
+                      placeholder="VD: Cơ bản"
+                    />
+                  </Form.Group>
+                </Col>
+                <Col md={4}>
+                  <Form.Group>
+                    <Form.Label>Đánh giá (0-5)</Form.Label>
+                    <Form.Control
+                      type="number"
+                      min={0}
+                      max={5}
+                      step={0.1}
+                      value={courseForm.rating}
+                      onChange={(e) => setCourseForm({ ...courseForm, rating: e.target.value })}
+                    />
+                  </Form.Group>
+                </Col>
+                <Col md={4}>
+                  <Form.Group>
+                    <Form.Label>Số học viên</Form.Label>
+                    <Form.Control
+                      type="number"
+                      min={0}
+                      value={courseForm.student_count}
+                      onChange={(e) => setCourseForm({ ...courseForm, student_count: e.target.value })}
+                    />
+                  </Form.Group>
+                </Col>
+
+                <Col md={4}>
+                  <Form.Group>
                     <Form.Label>Giá gốc (VNĐ)</Form.Label>
                     <Form.Control
                       type="number"
@@ -1019,20 +1352,20 @@ export default function PromoCoursesPage() {
                   </Form.Group>
                 </Col>
                 <Col xs={12}>
-                  <div className="promo-price-block border rounded p-3 bg-light">
+                  <div className="promo-mkt-form-preview-price">
                     <div className="small text-muted mb-1">Xem trước giá</div>
                     {courseForm.original_price ? (
                       <>
                         {previewSaved > 0 && (
-                          <span className="promo-price-original me-2">
+                          <span className="promo-mkt-card-price-original me-2">
                             {formatVnd(courseForm.original_price)}
                           </span>
                         )}
-                        <span className="promo-price-sale me-2">
+                        <span className="promo-mkt-card-price-sale me-2">
                           {formatVnd(previewSalePrice)}
                         </span>
                         {previewSaved > 0 && (
-                          <span className="promo-price-discount">
+                          <span className="promo-mkt-card-price-off">
                             Tiết kiệm {formatVnd(previewSaved)}
                           </span>
                         )}
@@ -1071,7 +1404,7 @@ export default function PromoCoursesPage() {
                       }}
                     />
                     {coursePreview && (
-                      <img src={coursePreview} alt="Preview" className="promo-form-preview mt-2" />
+                      <img src={coursePreview} alt="Preview" className="promo-mkt-form-preview mt-2" />
                     )}
                   </Form.Group>
                 </Col>

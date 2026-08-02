@@ -385,6 +385,24 @@ function resolveCoursePricing(body, existing = {}) {
     discount_value: discountValue,
     sale_price: salePrice,
     registration_enabled: registrationEnabled ? 1 : 0,
+    category: Object.prototype.hasOwnProperty.call(body, 'category')
+      ? (String(body.category || '').trim() || null)
+      : (existing.category || null),
+    instructor_name: Object.prototype.hasOwnProperty.call(body, 'instructor_name')
+      ? (String(body.instructor_name || '').trim() || null)
+      : (existing.instructor_name || null),
+    duration_label: Object.prototype.hasOwnProperty.call(body, 'duration_label')
+      ? (String(body.duration_label || '').trim() || null)
+      : (existing.duration_label || null),
+    level_label: Object.prototype.hasOwnProperty.call(body, 'level_label')
+      ? (String(body.level_label || '').trim() || null)
+      : (existing.level_label || null),
+    rating: Object.prototype.hasOwnProperty.call(body, 'rating')
+      ? (body.rating === '' || body.rating == null ? 5.0 : Number(body.rating))
+      : (existing.rating != null ? Number(existing.rating) : 5.0),
+    student_count: Object.prototype.hasOwnProperty.call(body, 'student_count')
+      ? (body.student_count === '' || body.student_count == null ? 0 : parseInt(body.student_count, 10) || 0)
+      : (existing.student_count != null ? Number(existing.student_count) : 0),
   };
 }
 
@@ -416,8 +434,9 @@ const createCourse = async (req, res) => {
       `INSERT INTO promo_courses
        (title, description, image_url, highlight, branch_scope,
         original_price, discount_type, discount_value, sale_price, registration_enabled,
+        category, instructor_name, duration_label, level_label, rating, student_count,
         sort_order, is_active)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         title.trim(),
         description?.trim() || null,
@@ -429,6 +448,12 @@ const createCourse = async (req, res) => {
         pricing.discount_value,
         pricing.sale_price,
         pricing.registration_enabled,
+        pricing.category,
+        pricing.instructor_name,
+        pricing.duration_label,
+        pricing.level_label,
+        pricing.rating,
+        pricing.student_count,
         parseSortOrder(sort_order),
         parseActiveFlag(is_active, true) ? 1 : 0,
       ],
@@ -480,6 +505,7 @@ const updateCourse = async (req, res) => {
        SET title=?, description=?, image_url=?, highlight=?,
            branch_scope=?,
            original_price=?, discount_type=?, discount_value=?, sale_price=?, registration_enabled=?,
+           category=?, instructor_name=?, duration_label=?, level_label=?, rating=?, student_count=?,
            sort_order=?, is_active=?
        WHERE id=?`,
       [
@@ -493,6 +519,12 @@ const updateCourse = async (req, res) => {
         pricing.discount_value,
         pricing.sale_price,
         pricing.registration_enabled,
+        pricing.category,
+        pricing.instructor_name,
+        pricing.duration_label,
+        pricing.level_label,
+        pricing.rating,
+        pricing.student_count,
         req.body.sort_order !== undefined ? parseSortOrder(req.body.sort_order) : existing.sort_order,
         req.body.is_active !== undefined ? (parseActiveFlag(req.body.is_active) ? 1 : 0) : existing.is_active,
         req.params.id,

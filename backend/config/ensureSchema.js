@@ -538,6 +538,12 @@ async function ensureSchema() {
     "ALTER TABLE promo_courses ADD COLUMN discount_value DECIMAL(12,2) NULL",
     "ALTER TABLE promo_courses ADD COLUMN sale_price DECIMAL(12,0) NULL",
     "ALTER TABLE promo_courses ADD COLUMN registration_enabled TINYINT(1) NOT NULL DEFAULT 1",
+    "ALTER TABLE promo_courses ADD COLUMN category VARCHAR(100) NULL",
+    "ALTER TABLE promo_courses ADD COLUMN instructor_name VARCHAR(255) NULL",
+    "ALTER TABLE promo_courses ADD COLUMN duration_label VARCHAR(100) NULL",
+    "ALTER TABLE promo_courses ADD COLUMN level_label VARCHAR(100) NULL",
+    "ALTER TABLE promo_courses ADD COLUMN rating DECIMAL(3,1) NULL DEFAULT 5.0",
+    "ALTER TABLE promo_courses ADD COLUMN student_count INT NULL DEFAULT 0",
   ];
   for (const sql of promoCourseAlters) {
     try {

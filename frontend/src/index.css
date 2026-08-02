@@ -4113,360 +4113,1049 @@ a {
 }
 
 
-/* -- Promo / marketing courses page -- */
+/* ── Promo / marketing courses page ── */
 .promo-page {
-  --promo-accent: #f08a3c;
-  --promo-accent-deep: #e07020;
-  --promo-ink: #1e293b;
-  max-width: 1100px;
-  margin: 0 auto;
-  padding-bottom: 2.5rem;
+  --promo-blue: #0B57D0;
+  --promo-blue-deep: #004DC5;
+  --promo-yellow: #FFC107;
+  --promo-yellow-deep: #F5B800;
+  --promo-red: #E53935;
+  --promo-bg: #F5F7FB;
+  --promo-ink: #0F172A;
+  --promo-muted: #64748B;
+  --promo-radius-lg: 16px;
+  --promo-radius-md: 14px;
+  background: var(--promo-bg);
+  margin: -1.75rem -1.5rem -2.5rem;
+  padding: 0 0 3rem;
+  color: var(--promo-ink);
 }
 
-.promo-hero {
-  position: relative;
-  margin: 0 0 1.25rem;
-  border-radius: 20px;
-  overflow: hidden;
-  background:
-    radial-gradient(ellipse 80% 90% at 85% 20%, rgba(91, 141, 239, 0.45), transparent 55%),
-    linear-gradient(125deg, #2c4a9e 0%, #3f6ad8 48%, #1d4ed8 100%);
-  color: #fff;
-  min-height: 280px;
+@media (max-width: 991.98px) {
+  .promo-page {
+    margin: -1rem -0.75rem -1.5rem;
+  }
 }
 
-.promo-hero-inner {
-  display: grid;
-  grid-template-columns: 1.2fr 0.8fr;
-  gap: 1.5rem;
+.promo-mkt-alerts {
+  padding: 1rem 1.5rem 0;
+}
+
+/* ---------- A. Local top bar ---------- */
+.promo-mkt-topbar {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  background: #fff;
+  border-bottom: 1px solid #e7ebf3;
+  box-shadow: 0 2px 12px rgba(15, 23, 42, 0.04);
+}
+
+.promo-mkt-topbar-inner {
+  display: flex;
   align-items: center;
-  padding: 2.25rem 2rem;
-  position: relative;
-  z-index: 1;
+  gap: 1.25rem;
+  padding: 0.75rem 1.5rem;
+  max-width: 1320px;
+  margin: 0 auto;
 }
 
-.promo-hero-eyebrow {
-  margin: 0 0 0.5rem;
-  font-size: 0.78rem;
-  font-weight: 700;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  opacity: 0.85;
+.promo-mkt-brand {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  font-weight: 800;
+  font-size: 1.05rem;
+  color: var(--promo-blue-deep);
+  white-space: nowrap;
 }
 
-.promo-hero-title {
-  margin: 0 0 0.65rem;
-  font-size: clamp(1.75rem, 3.5vw, 2.55rem);
-  font-weight: 700;
-  line-height: 1.15;
-  letter-spacing: -0.02em;
-}
-
-.promo-hero-sub {
-  margin: 0 0 1.25rem;
-  font-size: 1rem;
-  opacity: 0.92;
-  max-width: 28rem;
-  line-height: 1.5;
-}
-
-.promo-hero-cta {
+.promo-mkt-brand-icon {
   display: inline-flex;
   align-items: center;
-  gap: 0.45rem;
-  padding: 0.65rem 1.35rem;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, var(--promo-blue) 0%, var(--promo-blue-deep) 100%);
+  color: #fff;
+  font-size: 1.05rem;
+}
+
+.promo-mkt-nav {
+  display: flex;
+  align-items: center;
+  gap: 1.35rem;
+  flex: 0 0 auto;
+}
+
+.promo-mkt-nav a {
+  color: var(--promo-ink);
+  font-weight: 600;
+  font-size: 0.9rem;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: color 0.15s ease;
+}
+
+.promo-mkt-nav a:hover {
+  color: var(--promo-blue);
+}
+
+.promo-mkt-search {
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: var(--promo-bg);
+  border: 1px solid #e2e8f0;
   border-radius: 999px;
-  background: var(--promo-accent);
+  padding: 0.45rem 1rem;
+  max-width: 320px;
+  color: var(--promo-muted);
+}
+
+.promo-mkt-search input {
+  border: none;
+  background: transparent;
+  outline: none;
+  font-size: 0.85rem;
+  width: 100%;
+  color: var(--promo-ink);
+}
+
+.promo-mkt-topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex: 0 0 auto;
+  margin-left: auto;
+}
+
+.promo-mkt-scope-tabs {
+  display: flex;
+  background: var(--promo-bg);
+  border-radius: 999px;
+  padding: 0.2rem;
+  gap: 0.15rem;
+}
+
+.promo-mkt-scope-tab {
+  border: none;
+  background: transparent;
+  color: var(--promo-muted);
+  font-weight: 700;
+  font-size: 0.78rem;
+  padding: 0.35rem 0.75rem;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.promo-mkt-scope-tab.is-active {
+  background: var(--promo-blue);
+  color: #fff;
+}
+
+.promo-mkt-admin-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  border: none;
+  border-radius: 999px;
+  background: var(--promo-blue-deep);
   color: #fff;
   font-weight: 700;
-  font-size: 0.85rem;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  text-decoration: none;
-  box-shadow: 0 8px 24px rgba(240, 138, 60, 0.35);
+  font-size: 0.82rem;
+  padding: 0.5rem 1.1rem;
+  cursor: pointer;
   transition: background 0.15s ease, transform 0.15s ease;
 }
 
-.promo-hero-cta:hover {
-  background: var(--promo-accent-deep);
-  color: #fff;
+.promo-mkt-admin-btn:hover {
+  background: var(--promo-blue);
   transform: translateY(-1px);
 }
 
-.promo-hero-visual {
+@media (max-width: 991.98px) {
+  .promo-mkt-topbar-inner {
+    flex-wrap: wrap;
+    padding: 0.75rem 1rem;
+  }
+
+  .promo-mkt-nav {
+    order: 3;
+    width: 100%;
+    justify-content: space-between;
+    gap: 0.75rem;
+  }
+
+  .promo-mkt-search {
+    order: 2;
+    max-width: none;
+    flex: 1 1 auto;
+  }
+}
+
+/* ---------- B. Hero slider ---------- */
+.promo-mkt-hero {
   position: relative;
-  min-height: 200px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 15% 20%, rgba(255, 255, 255, 0.08) 0, transparent 45%),
+    linear-gradient(120deg, var(--promo-blue-deep) 0%, var(--promo-blue) 55%, #2f7bff 100%);
+  color: #fff;
 }
 
-.promo-hero-orb {
+.promo-mkt-hero-pattern {
   position: absolute;
+  inset: 0;
+  background-image: radial-gradient(rgba(255, 255, 255, 0.16) 1.5px, transparent 1.5px);
+  background-size: 26px 26px;
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+.promo-mkt-hero-pattern::after {
+  content: '';
+  position: absolute;
+  top: -60px;
+  right: -60px;
+  width: 320px;
+  height: 320px;
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.08);
 }
 
-.promo-hero-orb--a {
-  width: 180px;
-  height: 180px;
-  right: 10%;
-  top: 5%;
-}
-
-.promo-hero-orb--b {
-  width: 110px;
-  height: 110px;
-  right: 35%;
-  bottom: 10%;
-  background: rgba(240, 138, 60, 0.25);
-}
-
-.promo-hero-phone {
+.promo-mkt-hero-carousel {
   position: relative;
   z-index: 1;
-  width: 140px;
-  height: 220px;
-  border-radius: 22px;
-  background: linear-gradient(160deg, #fff 0%, #e8eefc 100%);
-  color: #2c4a9e;
-  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
-  display: flex;
-  flex-direction: column;
+}
+
+.promo-mkt-hero-carousel .carousel-control-prev,
+.promo-mkt-hero-carousel .carousel-control-next {
+  width: 6%;
+  opacity: 0.7;
+}
+
+.promo-mkt-hero-carousel .carousel-indicators {
+  bottom: 0.5rem;
+}
+
+.promo-mkt-hero-inner {
+  display: grid;
+  grid-template-columns: 1.15fr 0.85fr;
+  gap: 2rem;
   align-items: center;
-  justify-content: center;
-  gap: 0.35rem;
-  border: 4px solid rgba(255, 255, 255, 0.7);
+  max-width: 1320px;
+  margin: 0 auto;
+  padding: 3.5rem 1.5rem 4.5rem;
+  min-height: 460px;
 }
 
-.promo-hero-phone span {
+.promo-mkt-hero-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.35rem 0.85rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.16);
+  font-size: 0.72rem;
   font-weight: 800;
-  font-size: 1.4rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  margin-bottom: 1rem;
 }
 
-.promo-hero-phone small {
-  color: #64748b;
-  font-size: 0.75rem;
+.promo-mkt-hero-title {
+  margin: 0 0 1rem;
+  font-size: clamp(2rem, 4vw, 3rem);
+  font-weight: 800;
+  line-height: 1.18;
+  letter-spacing: -0.02em;
 }
 
-.promo-toolbar {
+.promo-mkt-hero-title-line {
+  display: block;
+}
+
+.promo-mkt-hero-sub {
+  margin: 0 0 1.75rem;
+  font-size: 1.02rem;
+  line-height: 1.6;
+  opacity: 0.92;
+  max-width: 30rem;
+}
+
+.promo-mkt-hero-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.75rem;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 1.5rem;
-  padding: 0.75rem 1rem;
-  background: #fff;
-  border: 1px solid #e2e8f0;
-  border-radius: 12px;
+  gap: 0.85rem;
 }
 
-.promo-toolbar-hint {
-  font-size: 0.85rem;
-  color: #64748b;
-}
-
-.promo-section {
-  margin-bottom: 2.25rem;
-}
-
-.promo-section-head {
-  text-align: center;
-  margin-bottom: 1.25rem;
-}
-
-.promo-section-rule {
-  display: block;
-  width: 2.5rem;
-  height: 3px;
-  margin: 0 auto 0.55rem;
-  background: var(--promo-accent);
-  border-radius: 2px;
-}
-
-.promo-section-head h2 {
-  margin: 0;
-  font-size: 1.45rem;
-  font-weight: 700;
-  color: var(--promo-ink);
-}
-
-.promo-empty {
-  text-align: center;
-  padding: 2.5rem 1rem;
-  background: #fff;
-  border: 1px dashed #cbd5e1;
-  border-radius: 14px;
-  color: #64748b;
-}
-
-.promo-empty i {
-  font-size: 1.75rem;
-  color: #94a3b8;
-  display: block;
-  margin-bottom: 0.5rem;
-}
-
-.promo-banner-carousel {
-  border-radius: 16px;
-  overflow: hidden;
-  box-shadow: 0 8px 28px rgba(63, 106, 216, 0.1);
-}
-
-.promo-banner-carousel .carousel-control-prev,
-.promo-banner-carousel .carousel-control-next {
-  width: 8%;
-}
-
-.promo-banner-slide {
-  display: grid;
-  grid-template-columns: 1.1fr 1fr;
-  min-height: 240px;
-  background: #fff;
-}
-
-.promo-banner-copy {
-  padding: 1.75rem 1.75rem;
-  background: linear-gradient(135deg, #eff4ff 0%, #f8fafc 100%);
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-}
-
-.promo-banner-copy h3 {
-  margin: 0 0 0.5rem;
-  font-size: 1.35rem;
-  font-weight: 700;
-  color: var(--promo-ink);
-}
-
-.promo-banner-copy p {
-  margin: 0 0 1rem;
-  color: #64748b;
-  line-height: 1.5;
-}
-
-.promo-banner-cta {
+.promo-mkt-btn {
   display: inline-flex;
-  align-self: flex-start;
-  padding: 0.45rem 1rem;
-  border-radius: 999px;
-  background: var(--promo-accent);
-  color: #fff;
-  font-size: 0.8rem;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1.5rem;
+  border-radius: 10px;
   font-weight: 700;
+  font-size: 0.92rem;
   text-decoration: none;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
+  border: 2px solid transparent;
+  transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
 }
 
-.promo-banner-cta:hover {
-  color: #fff;
-  background: var(--promo-accent-deep);
+.promo-mkt-btn-yellow {
+  background: var(--promo-yellow);
+  color: #1a1a1a;
+  box-shadow: 0 10px 24px rgba(245, 184, 0, 0.35);
 }
 
-.promo-banner-media {
-  background:
-    linear-gradient(135deg, rgba(63, 106, 216, 0.35), rgba(240, 138, 60, 0.25)),
-    #cbd5e1 center/cover no-repeat;
-  min-height: 200px;
-}
-
-.promo-course-card {
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  background: #fff;
-  border: 1px solid #e2e8f0;
-  border-radius: 14px;
-  overflow: hidden;
-  box-shadow: 0 4px 16px rgba(15, 23, 42, 0.04);
-  transition: box-shadow 0.15s ease, transform 0.15s ease;
-}
-
-.promo-course-card:hover {
-  box-shadow: 0 10px 28px rgba(63, 106, 216, 0.12);
+.promo-mkt-btn-yellow:hover {
+  background: var(--promo-yellow-deep);
+  color: #1a1a1a;
   transform: translateY(-2px);
 }
 
-.promo-course-thumb {
+.promo-mkt-btn-outline {
+  background: transparent;
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.65);
+}
+
+.promo-mkt-btn-outline:hover {
+  background: rgba(255, 255, 255, 0.14);
+  color: #fff;
+  transform: translateY(-2px);
+}
+
+.promo-mkt-hero-admin {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 1.25rem;
+}
+
+.promo-mkt-hero-visual {
   position: relative;
-  height: 150px;
-  background: linear-gradient(145deg, #dbeafe, #e2e8f0) center/cover no-repeat;
+  min-height: 320px;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #94a3b8;
-  font-size: 2rem;
 }
 
-.promo-course-badge {
+.promo-mkt-hero-phone {
+  position: relative;
+  z-index: 1;
+  width: 190px;
+  height: 300px;
+  border-radius: 28px;
+  background: linear-gradient(160deg, #ffffff 0%, #dce7ff 100%) center/cover no-repeat;
+  color: var(--promo-blue-deep);
+  box-shadow: 0 30px 60px rgba(0, 22, 74, 0.35);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  border: 5px solid rgba(255, 255, 255, 0.75);
+  font-size: 2.5rem;
+}
+
+.promo-mkt-hero-phone span {
+  font-weight: 800;
+  font-size: 1.15rem;
+  letter-spacing: 0.05em;
+}
+
+.promo-mkt-stat-card {
   position: absolute;
-  top: 0.65rem;
-  left: 0.65rem;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  background: #fff;
+  color: var(--promo-ink);
+  border-radius: 12px;
+  padding: 0.6rem 0.9rem;
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.18);
+  font-size: 0.78rem;
 }
 
-.promo-course-body {
-  padding: 1rem 1.1rem 0.75rem;
+.promo-mkt-stat-card i {
+  font-size: 1.15rem;
+  color: var(--promo-blue);
+}
+
+.promo-mkt-stat-card strong {
+  display: block;
+  font-size: 0.95rem;
+  font-weight: 800;
+  line-height: 1.1;
+}
+
+.promo-mkt-stat-card span {
+  color: var(--promo-muted);
+  font-size: 0.72rem;
+}
+
+.promo-mkt-stat-card--a {
+  top: 5%;
+  left: -5%;
+}
+
+.promo-mkt-stat-card--b {
+  bottom: 18%;
+  right: -8%;
+}
+
+.promo-mkt-stat-card--c {
+  bottom: -4%;
+  left: 12%;
+}
+
+@media (max-width: 991.98px) {
+  .promo-mkt-hero-inner {
+    grid-template-columns: 1fr;
+    padding: 2.5rem 1.25rem 3rem;
+    min-height: auto;
+    text-align: center;
+  }
+
+  .promo-mkt-hero-actions {
+    justify-content: center;
+  }
+
+  .promo-mkt-hero-sub {
+    max-width: none;
+  }
+
+  .promo-mkt-hero-visual {
+    min-height: 260px;
+    margin-top: 1.5rem;
+  }
+
+  .promo-mkt-stat-card--a { left: 2%; }
+  .promo-mkt-stat-card--b { right: 2%; }
+  .promo-mkt-stat-card--c { left: 32%; }
+}
+
+.promo-mkt-branch-hint {
+  text-align: center;
+  font-size: 0.82rem;
+  color: var(--promo-muted);
+  margin: 1.25rem auto 0;
+}
+
+/* ---------- Shared section head ---------- */
+.promo-mkt-section-head {
+  text-align: center;
+  max-width: 640px;
+  margin: 0 auto 2rem;
+  padding: 0 1.5rem;
+}
+
+.promo-mkt-eyebrow {
+  display: inline-block;
+  font-size: 0.75rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--promo-blue);
+  margin-bottom: 0.5rem;
+}
+
+.promo-mkt-section-head h2 {
+  margin: 0 0 0.5rem;
+  font-size: clamp(1.5rem, 2.4vw, 1.9rem);
+  font-weight: 800;
+  color: var(--promo-ink);
+}
+
+.promo-mkt-section-head p {
+  margin: 0;
+  color: var(--promo-muted);
+  font-size: 0.95rem;
+}
+
+/* ---------- C. Categories ---------- */
+.promo-mkt-categories {
+  max-width: 1320px;
+  margin: 3.5rem auto 0;
+  padding: 0 1.5rem;
+}
+
+.promo-mkt-category-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1rem;
+}
+
+.promo-mkt-category-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  background: #fff;
+  border: 1px solid #e7ebf3;
+  border-radius: var(--promo-radius-md);
+  padding: 1.35rem 1rem;
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+}
+
+.promo-mkt-category-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 12px 28px rgba(11, 87, 208, 0.12);
+  border-color: #cfe0fb;
+}
+
+.promo-mkt-category-card.is-active {
+  border-color: var(--promo-blue);
+  background: linear-gradient(180deg, #eef4ff 0%, #ffffff 100%);
+  box-shadow: 0 10px 24px rgba(11, 87, 208, 0.14);
+}
+
+.promo-mkt-category-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 52px;
+  height: 52px;
+  border-radius: 14px;
+  background: #eef4ff;
+  color: var(--promo-blue);
+  font-size: 1.4rem;
+}
+
+.promo-mkt-category-card.is-active .promo-mkt-category-icon {
+  background: var(--promo-blue);
+  color: #fff;
+}
+
+.promo-mkt-category-label {
+  font-weight: 700;
+  font-size: 0.9rem;
+  color: var(--promo-ink);
+  text-align: center;
+}
+
+.promo-mkt-category-count {
+  font-size: 0.76rem;
+  color: var(--promo-muted);
+}
+
+@media (max-width: 991.98px) {
+  .promo-mkt-category-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+@media (max-width: 575.98px) {
+  .promo-mkt-category-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+/* ---------- D. Slim promo strip ---------- */
+.promo-mkt-strip {
+  margin: 3rem 0 0;
+  background: linear-gradient(90deg, var(--promo-blue-deep) 0%, var(--promo-blue) 100%);
+  color: #fff;
+}
+
+.promo-mkt-strip-inner {
+  max-width: 1320px;
+  margin: 0 auto;
+  padding: 0.9rem 1.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1.25rem;
+  flex-wrap: wrap;
+}
+
+.promo-mkt-strip-text {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+  font-weight: 700;
+  font-size: 0.92rem;
+  text-align: center;
+}
+
+.promo-mkt-strip-text i {
+  color: var(--promo-yellow);
+  font-size: 1.15rem;
+}
+
+.promo-mkt-strip-btn {
+  border: none;
+  border-radius: 999px;
+  background: var(--promo-yellow);
+  color: #1a1a1a;
+  font-weight: 800;
+  font-size: 0.85rem;
+  padding: 0.5rem 1.35rem;
+  cursor: pointer;
+  transition: background 0.15s ease, transform 0.15s ease;
+  white-space: nowrap;
+}
+
+.promo-mkt-strip-btn:hover {
+  background: var(--promo-yellow-deep);
+  transform: translateY(-1px);
+}
+
+/* ---------- E. Popular courses ---------- */
+.promo-mkt-courses {
+  max-width: 1320px;
+  margin: 3.5rem auto 0;
+  padding: 0 1.5rem;
+}
+
+.promo-mkt-admin-toolbar {
+  display: flex;
+  justify-content: center;
+  gap: 0.6rem;
+  margin-bottom: 1.5rem;
+}
+
+.promo-mkt-empty {
+  text-align: center;
+  padding: 3rem 1rem;
+  background: #fff;
+  border: 1px dashed #cbd5e1;
+  border-radius: var(--promo-radius-md);
+  color: var(--promo-muted);
+}
+
+.promo-mkt-empty i {
+  font-size: 1.9rem;
+  color: #94a3b8;
+  display: block;
+  margin-bottom: 0.6rem;
+}
+
+.promo-mkt-course-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1.25rem;
+}
+
+@media (max-width: 1199.98px) {
+  .promo-mkt-course-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+@media (max-width: 900px) {
+  .promo-mkt-course-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 575.98px) {
+  .promo-mkt-course-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.promo-mkt-course-card {
+  display: flex;
+  flex-direction: column;
+  background: #fff;
+  border: 1px solid #eef1f6;
+  border-radius: var(--promo-radius-md);
+  overflow: hidden;
+  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.05);
+  transition: box-shadow 0.2s ease, transform 0.2s ease;
+}
+
+.promo-mkt-course-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 18px 36px rgba(11, 87, 208, 0.14);
+}
+
+.promo-mkt-card-thumb {
+  position: relative;
+  height: 160px;
+  background: linear-gradient(145deg, #dbeafe 0%, #eef4ff 100%) center/cover no-repeat;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #a7bfe8;
+  font-size: 2.4rem;
+}
+
+.promo-mkt-card-chip {
+  position: absolute;
+  top: 0.7rem;
+  left: 0.7rem;
+  background: rgba(11, 87, 208, 0.92);
+  color: #fff;
+  font-size: 0.68rem;
+  font-weight: 700;
+  padding: 0.28rem 0.65rem;
+  border-radius: 999px;
+  max-width: 75%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.promo-mkt-card-heart {
+  position: absolute;
+  top: 0.7rem;
+  right: 0.7rem;
+  width: 30px;
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.9);
+  color: var(--promo-red);
+  border-radius: 50%;
+  font-size: 0.85rem;
+}
+
+.promo-mkt-card-admin {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  background: rgba(15, 23, 42, 0.55);
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.promo-mkt-course-card:hover .promo-mkt-card-admin {
+  opacity: 1;
+}
+
+.promo-mkt-card-admin button {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: #fff;
+  color: var(--promo-blue-deep);
+  cursor: pointer;
+  font-size: 0.9rem;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.promo-mkt-card-admin button:last-child:hover {
+  background: var(--promo-red);
+  color: #fff;
+}
+
+.promo-mkt-card-admin button:first-child:hover {
+  background: var(--promo-blue);
+  color: #fff;
+}
+
+.promo-mkt-card-body {
+  padding: 1.1rem 1.15rem 0.4rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
   flex: 1;
 }
 
-.promo-course-body h3 {
-  margin: 0 0 0.35rem;
-  font-size: 1.05rem;
-  font-weight: 700;
-  color: var(--promo-ink);
-  line-height: 1.3;
-}
-
-.promo-course-highlight {
-  margin: 0 0 0.4rem;
-  font-size: 0.8rem;
-  color: #64748b;
-}
-
-.promo-course-desc {
+.promo-mkt-card-title {
   margin: 0;
-  font-size: 0.85rem;
-  color: #64748b;
-  line-height: 1.45;
+  font-size: 1rem;
+  font-weight: 800;
+  color: var(--promo-ink);
+  line-height: 1.35;
+  min-height: 2.7em;
   display: -webkit-box;
-  -webkit-line-clamp: 3;
+  -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
 
-.promo-course-foot {
+.promo-mkt-card-instructor {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.promo-mkt-card-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--promo-blue) 0%, var(--promo-blue-deep) 100%);
+  color: #fff;
+  font-size: 0.68rem;
+  font-weight: 800;
+  flex-shrink: 0;
+}
+
+.promo-mkt-card-instructor-name {
+  font-size: 0.82rem;
+  color: var(--promo-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.promo-mkt-card-stats {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  font-size: 0.8rem;
+  color: var(--promo-muted);
+}
+
+.promo-mkt-card-stats i.bi-star-fill {
+  color: var(--promo-yellow-deep);
+  margin-right: 0.25rem;
+}
+
+.promo-mkt-card-stats i.bi-people-fill {
+  color: var(--promo-blue);
+  margin-right: 0.25rem;
+}
+
+.promo-mkt-card-meta {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 0.5rem;
-  padding: 0.65rem 1.1rem;
-  background: linear-gradient(90deg, #3f6ad8, #2c4a9e);
-  color: #fff;
-  font-size: 0.8rem;
-  font-weight: 600;
+  font-size: 0.78rem;
+  color: var(--promo-muted);
 }
 
-.promo-course-foot .bi-star-fill {
-  color: #fbbf24;
-  margin-right: 0.25rem;
+.promo-mkt-card-meta i {
+  margin-right: 0.3rem;
 }
 
-.promo-admin-actions {
+.promo-mkt-card-level {
+  background: #f1f5fb;
+  color: var(--promo-blue-deep);
+  font-weight: 700;
+  padding: 0.15rem 0.55rem;
+  border-radius: 999px;
+  font-size: 0.72rem;
+}
+
+.promo-mkt-card-price {
   display: flex;
-  gap: 0.35rem;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.4rem 0.6rem;
+  margin: 0.15rem 0 0.4rem;
 }
 
-.promo-admin-inactive {
-  padding: 0.75rem 1rem;
-  background: #f8fafc;
+.promo-mkt-card-price-sale {
+  font-size: 1.15rem;
+  font-weight: 800;
+  color: var(--promo-red);
+}
+
+.promo-mkt-card-price-original {
+  font-size: 0.82rem;
+  color: #9aa5b1;
+  text-decoration: line-through;
+}
+
+.promo-mkt-card-price-off {
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.75rem;
+  font-weight: 800;
+  color: var(--promo-red);
+}
+
+.promo-mkt-card-price--table {
+  margin: 0;
+}
+
+.promo-mkt-card-foot {
+  padding: 0 1.15rem 1.15rem;
+}
+
+.promo-mkt-card-cta {
+  width: 100%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  border: none;
   border-radius: 10px;
-  border: 1px solid #e2e8f0;
+  background: var(--promo-blue);
+  color: #fff;
+  font-weight: 700;
+  font-size: 0.88rem;
+  padding: 0.65rem 0.75rem;
+  cursor: pointer;
+  transition: background 0.15s ease, transform 0.15s ease;
 }
 
-.promo-form-preview {
+.promo-mkt-card-cta:hover:not(:disabled) {
+  background: var(--promo-blue-deep);
+  color: #fff;
+  transform: translateY(-1px);
+}
+
+.promo-mkt-card-cta:disabled {
+  background: #cbd5e1;
+  color: #64748b;
+  cursor: not-allowed;
+}
+
+.promo-mkt-inactive {
+  padding: 1rem 1.25rem;
+  background: #fff;
+  border-radius: var(--promo-radius-md);
+  border: 1px dashed #e2e8f0;
+}
+
+.promo-mkt-inactive h6 {
+  font-size: 0.78rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--promo-muted);
+  margin-bottom: 0.6rem;
+}
+
+.promo-mkt-inactive ul li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.35rem 0;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.promo-mkt-inactive ul li:last-child {
+  border-bottom: none;
+}
+
+/* ---------- F. Values ---------- */
+.promo-mkt-values {
+  max-width: 1320px;
+  margin: 4rem auto 0;
+  padding: 0 1.5rem;
+}
+
+.promo-mkt-values-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1.25rem;
+}
+
+.promo-mkt-value-card {
+  background: #fff;
+  border: 1px solid #eef1f6;
+  border-radius: var(--promo-radius-md);
+  padding: 1.75rem 1.5rem;
+  text-align: center;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.promo-mkt-value-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 14px 30px rgba(11, 87, 208, 0.1);
+}
+
+.promo-mkt-value-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 58px;
+  height: 58px;
+  border-radius: 16px;
+  background: linear-gradient(135deg, #eef4ff 0%, #dbe9ff 100%);
+  color: var(--promo-blue-deep);
+  font-size: 1.55rem;
+  margin-bottom: 1rem;
+}
+
+.promo-mkt-value-card h3 {
+  margin: 0 0 0.5rem;
+  font-size: 1rem;
+  font-weight: 800;
+  color: var(--promo-ink);
+}
+
+.promo-mkt-value-card p {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--promo-muted);
+  line-height: 1.55;
+}
+
+@media (max-width: 991.98px) {
+  .promo-mkt-values-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 575.98px) {
+  .promo-mkt-values-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ---------- G. Admin panel ---------- */
+.promo-mkt-admin-panel {
+  max-width: 1320px;
+  margin: 4rem auto 0;
+  padding: 0 1.5rem;
+}
+
+.promo-mkt-panel-card {
+  background: #fff;
+  border: 1px solid #eef1f6;
+  border-radius: var(--promo-radius-md);
+  padding: 1.25rem 1.5rem;
+  margin-bottom: 1.25rem;
+}
+
+.promo-mkt-panel-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1rem;
+}
+
+.promo-mkt-panel-card-head h6 {
+  margin: 0;
+  font-weight: 800;
+  font-size: 0.95rem;
+  color: var(--promo-ink);
+}
+
+.promo-mkt-panel-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.45rem 0;
+  border-bottom: 1px solid #f1f5f9;
+  gap: 0.75rem;
+}
+
+.promo-mkt-panel-list li:last-child {
+  border-bottom: none;
+}
+
+.promo-mkt-regs-table td,
+.promo-mkt-regs-table th {
+  vertical-align: middle;
+  font-size: 0.85rem;
+}
+
+.promo-mkt-form-preview {
   max-width: 100%;
   max-height: 160px;
   border-radius: 10px;
@@ -4474,96 +5163,9 @@ a {
   border: 1px solid #e2e8f0;
 }
 
-@media (max-width: 768px) {
-  .promo-hero-inner {
-    grid-template-columns: 1fr;
-    padding: 1.75rem 1.25rem;
-  }
-
-  .promo-hero-visual {
-    min-height: 140px;
-  }
-
-  .promo-hero-phone {
-    width: 100px;
-    height: 160px;
-  }
-
-  .promo-banner-slide {
-    grid-template-columns: 1fr;
-  }
-
-  .promo-banner-media {
-    min-height: 140px;
-  }
-}
-
-.promo-price-block {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 0.35rem 0.65rem;
-  margin: 0.55rem 0 0.35rem;
-}
-
-.promo-price-original {
-  font-size: 0.85rem;
-  color: #94a3b8;
-  text-decoration: line-through;
-}
-
-.promo-price-sale {
-  font-size: 1.1rem;
-  font-weight: 800;
-  color: #c2410c;
-}
-
-.promo-price-discount {
-  display: inline-flex;
-  align-items: center;
-  padding: 0.15rem 0.45rem;
-  border-radius: 6px;
-  background: #fff7ed;
-  color: #c2410c;
-  font-size: 0.72rem;
-  font-weight: 700;
-}
-
-.promo-register-btn {
-  width: 100%;
-  margin-top: 0.35rem;
-  border-radius: 8px !important;
-  font-weight: 700 !important;
-  border: none;
-  padding: 0.45rem 0.75rem;
-  background: var(--promo-accent, #f08a3c);
-  color: #fff;
-  cursor: pointer;
-  transition: background 0.15s ease;
-}
-
-.promo-register-btn:hover {
-  background: var(--promo-accent-deep, #e07020);
-  color: #fff;
-}
-
-.promo-course-foot {
-  flex-wrap: wrap;
-}
-
-.promo-course-foot .promo-register-btn {
-  margin-top: 0.5rem;
-}
-
-.promo-price-preview {
-  padding: 0.75rem 1rem;
-  background: #fff7ed;
-  border: 1px solid #fed7aa;
+.promo-mkt-form-preview-price {
+  padding: 0.85rem 1rem;
+  background: #fff5f5;
+  border: 1px solid #fecaca;
   border-radius: 10px;
-}
-
-.promo-regs-table td,
-.promo-regs-table th {
-  vertical-align: middle;
-  font-size: 0.875rem;
 }
