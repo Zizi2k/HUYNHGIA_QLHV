@@ -26,12 +26,16 @@ CREATE TABLE IF NOT EXISTS promo_courses (
   discount_value DECIMAL(12,2) NULL,
   sale_price DECIMAL(12,0) NULL,
   registration_enabled TINYINT(1) NOT NULL DEFAULT 1,
+  class_code VARCHAR(50) NULL,
   sort_order INT NOT NULL DEFAULT 0,
   is_active TINYINT(1) NOT NULL DEFAULT 1,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   INDEX idx_promo_courses_scope (branch_scope, is_active, sort_order)
 );
+
+-- Link promo course → class via matching code:
+-- ALTER TABLE promo_courses ADD COLUMN class_code VARCHAR(50) NULL;
 
 -- If promo_courses already exists without price columns:
 -- ALTER TABLE promo_courses ADD COLUMN original_price DECIMAL(12,0) NULL;

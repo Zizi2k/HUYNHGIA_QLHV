@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Alert, Badge, Button, Carousel, Col, Form, Modal, Row, Spinner, Table,
 } from 'react-bootstrap';
@@ -45,6 +46,7 @@ const emptyCourse = {
   discount_type: 'none',
   discount_value: '',
   registration_enabled: true,
+  class_code: '',
 };
 
 const emptyRegister = {
@@ -188,6 +190,7 @@ function PromoCardPrice({ course }) {
 
 export default function PromoCoursesPage() {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const isAdmin = user?.role === 'admin';
   const isTeacher = user?.role === 'teacher';
   const isStudent = user?.role === 'student';
@@ -206,6 +209,7 @@ export default function PromoCoursesPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
+  const [joiningId, setJoiningId] = useState(null);
 
   const [showBannerModal, setShowBannerModal] = useState(false);
   const [showCourseModal, setShowCourseModal] = useState(false);
@@ -347,6 +351,7 @@ export default function PromoCoursesPage() {
       registration_enabled: item.registration_enabled === undefined
         ? true
         : Boolean(Number(item.registration_enabled)),
+      class_code: item.class_code || '',
     });
     setCourseImage(null);
     setCoursePreview(mediaUrl(item.image_url));
@@ -373,6 +378,24 @@ export default function PromoCoursesPage() {
       }
     }
     setShowRegisterModal(true);
+  };
+
+  const handleJoinClass = async (course) => {
+    if (!course?.can_join || joiningId) return;
+    setJoiningId(course.id);
+    setError('');
+    try {
+      const res = await promoService.joinCourseClass(course.id);
+      setSuccessMsg(res.data?.message || 'Đã Join lớp học thành công');
+      await load();
+      if (res.data?.class_id) {
+        navigate(`/classes/${res.data.class_id}`);
+      }
+    } catch (err) {
+      setError(err.response?.data?.message || 'Không thể Join lớp học');
+    } finally {
+      setJoiningId(null);
+    }
   };
 
   const onSelectStudent = (studentId) => {
@@ -853,17 +876,61 @@ export default function PromoCoursesPage() {
                       <span className="promo-mkt-card-level">{c.level_label || 'Cơ bản'}</span>
                     </div>
                     <PromoCardPrice course={c} />
+                    {isAdmin && c.class_code && (
+                      <div className="promo-mkt-card-code">
+                        <i className="bi bi-key-fill" />
+                        Mã lớp: <strong>{c.class_code}</strong>
+                        {c.linked_class_id
+                          ? <span className="text-success ms-1">· đã có lớp</span>
+                          : <span className="text-muted ms-1">· chưa tạo lớp</span>}
+                      </div>
+                    )}
                   </div>
                   <div className="promo-mkt-card-foot">
-                    <button
-                      type="button"
-                      className="promo-mkt-card-cta"
-                      disabled={!canRegister || !isRegistrationOpen(c)}
-                      onClick={() => openRegister(c)}
-                    >
-                      <i className="bi bi-cart-plus-fill" />
-                      {isRegistrationOpen(c) ? 'Đăng ký khóa học' : 'Tạm dừng đăng ký'}
-                    </button>
+                    {c.can_join ? (
+                      <button
+                        type="button"
+                        className="promo-mkt-card-cta promo-mkt-card-cta--join"
+                        disabled={joiningId === c.id}
+                        onClick={() => handleJoinClass(c)}
+                      >
+                        {joiningId === c.id ? (
+                          <Spinner animation="border" size="sm" />
+                        ) : (
+                          <i className="bi bi-box-arrow-in-right" />
+                        )}
+                        Join vào lớp
+                      </button>
+                    ) : c.already_in_class ? (
+                      <button
+                        type="button"
+                        className="promo-mkt-card-cta promo-mkt-card-cta--joined"
+                        onClick={() => c.linked_class_id && navigate(`/classes/${c.linked_class_id}`)}
+                      >
+                        <i className="bi bi-check2-circle" />
+                        Đã vào lớp
+                      </button>
+                    ) : c.my_registration_status === 'approved' && !c.linked_class_id ? (
+                      <button type="button" className="promo-mkt-card-cta" disabled>
+                        <i className="bi bi-hourglass-split" />
+                        Chờ tạo lớp
+                      </button>
+                    ) : c.my_registration_status === 'pending' || c.my_registration_status === 'contacted' ? (
+                      <button type="button" className="promo-mkt-card-cta" disabled>
+                        <i className="bi bi-clock-history" />
+                        Đang chờ duyệt
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        className="promo-mkt-card-cta"
+                        disabled={!canRegister || !isRegistrationOpen(c)}
+                        onClick={() => openRegister(c)}
+                      >
+                        <i className="bi bi-cart-plus-fill" />
+                        {isRegistrationOpen(c) ? 'Đăng ký khóa học' : 'Tạm dừng đăng ký'}
+                      </button>
+                    )}
                   </div>
                 </article>
               ))}
@@ -1388,6 +1455,20 @@ export default function PromoCoursesPage() {
                         registration_enabled: e.target.checked,
                       })}
                     />
+                  </Form.Group>
+                </Col>
+                <Col md={6}>
+                  <Form.Group>
+                    <Form.Label>Mã lớp học</Form.Label>
+                    <Form.Control
+                      value={courseForm.class_code}
+                      onChange={(e) => setCourseForm({ ...courseForm, class_code: e.target.value })}
+                      placeholder="VD: HE2026-A1"
+                    />
+                    <Form.Text className="text-muted">
+                      Khi tạo lớp với đúng mã này, học viên đã duyệt sẽ thấy nút Join;
+                      admin cũng có thể thêm HV đã duyệt vào lớp.
+                    </Form.Text>
                   </Form.Group>
                 </Col>
 

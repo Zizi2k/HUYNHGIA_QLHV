@@ -13,7 +13,7 @@ import LoadingOverlay from '../components/common/LoadingOverlay';
 import { useSoftLoading } from '../hooks/useSoftLoading';
 import { preserveScrollDuring } from '../utils/scrollPreserve';
 
-const emptyForm = { name: '', description: '', subject: '', avatarFile: null };
+const emptyForm = { name: '', code: '', description: '', subject: '', avatarFile: null };
 
 const PREFIX_OPTIONS = [
   { value: '', label: 'Tất cả' },
@@ -90,6 +90,7 @@ export default function ClassesPage() {
     setEditingId(cls.id);
     setForm({
       name: cls.name,
+      code: cls.code || '',
       description: cls.description || '',
       subject: cls.subject || '',
       avatarFile: null,
@@ -127,6 +128,7 @@ export default function ClassesPage() {
       if (editingId) {
         await classService.update(editingId, {
           name: form.name,
+          code: form.code,
           description: form.description,
           subject: form.subject,
         });
@@ -138,6 +140,7 @@ export default function ClassesPage() {
       } else {
         const res = await classService.create({
           name: form.name,
+          code: form.code,
           description: form.description,
           subject: form.subject,
         });
@@ -279,6 +282,17 @@ export default function ClassesPage() {
                 onChange={(e) => setForm({ ...form, name: e.target.value })}
                 required
               />
+            </Form.Group>
+            <Form.Group className="mb-3">
+              <Form.Label>Mã lớp học</Form.Label>
+              <Form.Control
+                value={form.code}
+                onChange={(e) => setForm({ ...form, code: e.target.value })}
+                placeholder="VD: HE2026-A1 (khớp mã trên khóa học quảng bá)"
+              />
+              <Form.Text className="text-muted">
+                Nếu trùng mã khóa học quảng bá, học viên đã duyệt có thể Join và admin thêm HV đã duyệt vào lớp.
+              </Form.Text>
             </Form.Group>
             <Form.Group className="mb-3">
               <Form.Label>Môn học</Form.Label>

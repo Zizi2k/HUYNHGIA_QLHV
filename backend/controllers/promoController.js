@@ -191,7 +191,80 @@ const listCourses = async (req, res) => {
     sql += ' ORDER BY sort_order ASC, id DESC';
 
     const [rows] = await pool.query(sql, filtered.params);
-    res.json(rows);
+
+    // Gắn lớp học khớp mã + trạng thái join (học viên đã duyệt)
+    const codes = [...new Set(
+      rows
+        .map((r) => normalizeMatchCode(r.class_code))
+        .filter(Boolean),
+    )];
+    const classByCode = new Map();
+    if (codes.length) {
+      const [classRows] = await pool.query(
+        `SELECT id, name, code
+         FROM classes
+         WHERE UPPER(TRIM(code)) IN (${codes.map(() => '?').join(',')})`,
+        codes,
+      );
+      classRows.forEach((cls) => {
+        const key = normalizeMatchCode(cls.code);
+        if (!classByCode.has(key)) classByCode.set(key, cls);
+      });
+    }
+
+    let myRegsByCourse = new Map();
+    let memberClassIds = new Set();
+    if (req.user.role === 'student' && rows.length) {
+      const [regs] = await pool.query(
+        `SELECT id, course_id, status, student_user_id, registrant_user_id
+         FROM promo_registrations
+         WHERE student_user_id = ? OR registrant_user_id = ?`,
+        [req.user.id, req.user.id],
+      );
+      regs.forEach((r) => {
+        const forMe = r.student_user_id === req.user.id
+          || (!r.student_user_id && r.registrant_user_id === req.user.id);
+        if (!forMe) return;
+        const prev = myRegsByCourse.get(r.course_id);
+        // Ưu tiên approved nếu có nhiều bản ghi
+        if (!prev || r.status === 'approved' || (prev.status !== 'approved' && r.id > prev.id)) {
+          myRegsByCourse.set(r.course_id, r);
+        }
+      });
+
+      const linkedIds = [...classByCode.values()].map((c) => c.id);
+      if (linkedIds.length) {
+        const [mem] = await pool.query(
+          `SELECT class_id FROM class_members
+           WHERE user_id = ? AND class_id IN (${linkedIds.map(() => '?').join(',')})`,
+          [req.user.id, ...linkedIds],
+        );
+        memberClassIds = new Set(mem.map((m) => m.class_id));
+      }
+    }
+
+    const enriched = rows.map((course) => {
+      const key = normalizeMatchCode(course.class_code);
+      const linked = key ? classByCode.get(key) : null;
+      const myReg = myRegsByCourse.get(course.id) || null;
+      const alreadyIn = linked ? memberClassIds.has(linked.id) : false;
+      const canJoin = Boolean(
+        req.user.role === 'student'
+        && linked
+        && myReg?.status === 'approved'
+        && !alreadyIn,
+      );
+      return {
+        ...course,
+        linked_class_id: linked?.id || null,
+        linked_class_name: linked?.name || null,
+        my_registration_status: myReg?.status || null,
+        already_in_class: alreadyIn,
+        can_join: canJoin,
+      };
+    });
+
+    res.json(enriched);
   } catch (err) {
     res.status(500).json({ message: 'Lỗi hệ thống', error: err.message });
   }
@@ -403,7 +476,24 @@ function resolveCoursePricing(body, existing = {}) {
     student_count: Object.prototype.hasOwnProperty.call(body, 'student_count')
       ? (body.student_count === '' || body.student_count == null ? 0 : parseInt(body.student_count, 10) || 0)
       : (existing.student_count != null ? Number(existing.student_count) : 0),
+    class_code: Object.prototype.hasOwnProperty.call(body, 'class_code')
+      ? (String(body.class_code || '').trim() || null)
+      : (existing.class_code || null),
   };
+}
+
+function normalizeMatchCode(value) {
+  return String(value || '').trim().toUpperCase();
+}
+
+async function findClassByCode(classCode) {
+  const code = normalizeMatchCode(classCode);
+  if (!code) return null;
+  const [rows] = await pool.query(
+    'SELECT id, name, code FROM classes WHERE UPPER(TRIM(code)) = ? ORDER BY id DESC LIMIT 1',
+    [code],
+  );
+  return rows[0] || null;
 }
 
 const createCourse = async (req, res) => {
@@ -435,8 +525,8 @@ const createCourse = async (req, res) => {
        (title, description, image_url, highlight, branch_scope,
         original_price, discount_type, discount_value, sale_price, registration_enabled,
         category, instructor_name, duration_label, level_label, rating, student_count,
-        sort_order, is_active)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        class_code, sort_order, is_active)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         title.trim(),
         description?.trim() || null,
@@ -454,6 +544,7 @@ const createCourse = async (req, res) => {
         pricing.level_label,
         pricing.rating,
         pricing.student_count,
+        pricing.class_code,
         parseSortOrder(sort_order),
         parseActiveFlag(is_active, true) ? 1 : 0,
       ],
@@ -506,7 +597,7 @@ const updateCourse = async (req, res) => {
            branch_scope=?,
            original_price=?, discount_type=?, discount_value=?, sale_price=?, registration_enabled=?,
            category=?, instructor_name=?, duration_label=?, level_label=?, rating=?, student_count=?,
-           sort_order=?, is_active=?
+           class_code=?, sort_order=?, is_active=?
        WHERE id=?`,
       [
         title,
@@ -525,6 +616,7 @@ const updateCourse = async (req, res) => {
         pricing.level_label,
         pricing.rating,
         pricing.student_count,
+        pricing.class_code,
         req.body.sort_order !== undefined ? parseSortOrder(req.body.sort_order) : existing.sort_order,
         req.body.is_active !== undefined ? (parseActiveFlag(req.body.is_active) ? 1 : 0) : existing.is_active,
         req.params.id,
@@ -811,6 +903,242 @@ const listTeacherStudents = async (req, res) => {
   }
 };
 
+/** Học viên đã duyệt đăng ký → vào lớp khớp mã khóa học */
+const joinPromoClass = async (req, res) => {
+  try {
+    if (req.user.role !== 'student') {
+      return res.status(403).json({ message: 'Chỉ học viên được tự Join lớp' });
+    }
+    const courseId = parseInt(req.params.id, 10);
+    if (!Number.isFinite(courseId)) {
+      return res.status(400).json({ message: 'Khóa học không hợp lệ' });
+    }
+
+    const [courses] = await pool.query('SELECT * FROM promo_courses WHERE id = ? LIMIT 1', [courseId]);
+    if (courses.length === 0) {
+      return res.status(404).json({ message: 'Không tìm thấy khóa học' });
+    }
+    const course = courses[0];
+    if (!normalizeMatchCode(course.class_code)) {
+      return res.status(400).json({ message: 'Khóa học chưa gắn mã lớp học' });
+    }
+
+    const [regs] = await pool.query(
+      `SELECT id, status FROM promo_registrations
+       WHERE course_id = ?
+         AND status = 'approved'
+         AND (student_user_id = ? OR (student_user_id IS NULL AND registrant_user_id = ?))
+       LIMIT 1`,
+      [courseId, req.user.id, req.user.id],
+    );
+    if (regs.length === 0) {
+      return res.status(403).json({ message: 'Cần được duyệt đăng ký khóa học trước khi Join lớp' });
+    }
+
+    const linked = await findClassByCode(course.class_code);
+    if (!linked) {
+      return res.status(404).json({ message: 'Chưa có lớp học với mã này. Vui lòng chờ admin tạo lớp.' });
+    }
+
+    const [existing] = await pool.query(
+      'SELECT id FROM class_members WHERE class_id = ? AND user_id = ?',
+      [linked.id, req.user.id],
+    );
+    if (existing.length > 0) {
+      return res.json({
+        message: 'Bạn đã ở trong lớp này',
+        class_id: linked.id,
+        class_name: linked.name,
+        already_member: true,
+      });
+    }
+
+    await pool.query(
+      'INSERT INTO class_members (class_id, user_id) VALUES (?, ?)',
+      [linked.id, req.user.id],
+    );
+    await logAction({
+      actorId: req.user.id,
+      action: 'join',
+      resourceType: 'class',
+      resourceId: linked.id,
+      resourceLabel: linked.name,
+      metadata: { promo_course_id: courseId, via: 'promo_join' },
+    });
+
+    res.status(201).json({
+      message: 'Đã Join lớp học thành công',
+      class_id: linked.id,
+      class_name: linked.name,
+    });
+  } catch (err) {
+    if (err.code === 'ER_DUP_ENTRY') {
+      return res.status(409).json({ message: 'Bạn đã ở trong lớp này' });
+    }
+    res.status(500).json({ message: 'Lỗi hệ thống', error: err.message });
+  }
+};
+
+/** Danh sách HV đã duyệt khóa học khớp mã lớp, chưa có trong lớp */
+const listApprovedForClass = async (req, res) => {
+  try {
+    const classId = parseInt(req.params.classId, 10);
+    if (!Number.isFinite(classId)) {
+      return res.status(400).json({ message: 'Lớp học không hợp lệ' });
+    }
+
+    const { assertClassAccess } = require('../middleware/classAccess');
+    if (!(await assertClassAccess(req.user, classId, res, { manage: true }))) return;
+
+    const [classes] = await pool.query('SELECT id, name, code FROM classes WHERE id = ?', [classId]);
+    if (classes.length === 0) {
+      return res.status(404).json({ message: 'Không tìm thấy lớp học' });
+    }
+    const classRow = classes[0];
+    const code = normalizeMatchCode(classRow.code);
+    if (!code) {
+      return res.json({ class_code: null, course: null, students: [] });
+    }
+
+    const [promoCourses] = await pool.query(
+      `SELECT id, title, class_code, branch_scope
+       FROM promo_courses
+       WHERE UPPER(TRIM(class_code)) = ?
+       ORDER BY id DESC
+       LIMIT 1`,
+      [code],
+    );
+    if (promoCourses.length === 0) {
+      return res.json({
+        class_code: classRow.code,
+        course: null,
+        students: [],
+      });
+    }
+    const course = promoCourses[0];
+
+    const [students] = await pool.query(
+      `SELECT r.id AS registration_id,
+              r.status,
+              r.fullname AS registration_fullname,
+              r.phone,
+              r.zalo,
+              r.created_at AS registered_at,
+              u.id AS student_user_id,
+              u.fullname,
+              u.code AS student_code,
+              u.phone AS user_phone,
+              u.zalo AS user_zalo,
+              u.avatar_url
+       FROM promo_registrations r
+       INNER JOIN users u ON u.id = COALESCE(r.student_user_id, r.registrant_user_id)
+       WHERE r.course_id = ?
+         AND r.status = 'approved'
+         AND u.role = 'student'
+         AND u.status = TRUE
+         AND u.id NOT IN (
+           SELECT user_id FROM class_members WHERE class_id = ?
+         )
+       ORDER BY r.updated_at DESC, r.id DESC`,
+      [course.id, classId],
+    );
+
+    res.json({
+      class_code: classRow.code,
+      course: { id: course.id, title: course.title, branch_scope: course.branch_scope },
+      students,
+    });
+  } catch (err) {
+    res.status(500).json({ message: 'Lỗi hệ thống', error: err.message });
+  }
+};
+
+/** Admin/GV thêm HV đã duyệt vào lớp khớp mã */
+const addApprovedToClass = async (req, res) => {
+  try {
+    const classId = parseInt(req.params.classId, 10);
+    const studentUserId = parseInt(req.body.student_user_id, 10);
+    if (!Number.isFinite(classId) || !Number.isFinite(studentUserId)) {
+      return res.status(400).json({ message: 'Thiếu lớp hoặc học viên' });
+    }
+
+    const { assertClassAccess } = require('../middleware/classAccess');
+    const { assertStudentCodeInScope } = require('../utils/adminScope');
+    if (!(await assertClassAccess(req.user, classId, res, { manage: true }))) return;
+
+    const [classes] = await pool.query('SELECT id, name, code FROM classes WHERE id = ?', [classId]);
+    if (classes.length === 0) {
+      return res.status(404).json({ message: 'Không tìm thấy lớp học' });
+    }
+    const classRow = classes[0];
+    const code = normalizeMatchCode(classRow.code);
+    if (!code) {
+      return res.status(400).json({ message: 'Lớp chưa có mã — không khớp khóa học quảng bá' });
+    }
+
+    const [promoCourses] = await pool.query(
+      `SELECT id, title FROM promo_courses WHERE UPPER(TRIM(class_code)) = ? LIMIT 1`,
+      [code],
+    );
+    if (promoCourses.length === 0) {
+      return res.status(404).json({ message: 'Không có khóa học quảng bá khớp mã lớp này' });
+    }
+
+    const [regs] = await pool.query(
+      `SELECT id FROM promo_registrations
+       WHERE course_id = ?
+         AND status = 'approved'
+         AND (student_user_id = ? OR (student_user_id IS NULL AND registrant_user_id = ?))
+       LIMIT 1`,
+      [promoCourses[0].id, studentUserId, studentUserId],
+    );
+    if (regs.length === 0) {
+      return res.status(400).json({ message: 'Học viên chưa được duyệt đăng ký khóa học tương ứng' });
+    }
+
+    const [users] = await pool.query(
+      'SELECT id, role, code, fullname FROM users WHERE id = ? AND status = TRUE',
+      [studentUserId],
+    );
+    if (users.length === 0 || users[0].role !== 'student') {
+      return res.status(404).json({ message: 'Không tìm thấy học viên' });
+    }
+    try {
+      assertStudentCodeInScope(req.user, users[0].code);
+    } catch (scopeErr) {
+      return res.status(scopeErr.status || 403).json({ message: scopeErr.message });
+    }
+
+    await pool.query(
+      'INSERT INTO class_members (class_id, user_id) VALUES (?, ?)',
+      [classId, studentUserId],
+    );
+    await logAction({
+      actorId: req.user.id,
+      action: 'create',
+      resourceType: 'class_member',
+      resourceId: classId,
+      resourceLabel: users[0].fullname,
+      metadata: {
+        student_user_id: studentUserId,
+        promo_course_id: promoCourses[0].id,
+        via: 'promo_approved_add',
+      },
+    });
+
+    res.status(201).json({
+      message: 'Đã thêm học viên vào lớp',
+      class_id: classId,
+      student_user_id: studentUserId,
+    });
+  } catch (err) {
+    if (err.code === 'ER_DUP_ENTRY') {
+      return res.status(409).json({ message: 'Học viên đã có trong lớp' });
+    }
+    res.status(500).json({ message: 'Lỗi hệ thống', error: err.message });
+  }
+};
+
 module.exports = {
   listBanners,
   listCourses,
@@ -824,5 +1152,8 @@ module.exports = {
   listRegistrations,
   updateRegistrationStatus,
   listTeacherStudents,
+  joinPromoClass,
+  listApprovedForClass,
+  addApprovedToClass,
   resolveViewerBranch,
 };

@@ -262,7 +262,13 @@ export const promoService = {
   }),
   deleteCourse: (id) => api.delete(`/promo/courses/${id}`),
   registerCourse: (id, data) => api.post(`/promo/courses/${id}/register`, data),
+  joinCourseClass: (id) => api.post(`/promo/courses/${id}/join`),
   getRegistrations: (params) => api.get('/promo/registrations', { params }),
   updateRegistration: (id, data) => api.patch(`/promo/registrations/${id}`, data),
   getStudents: () => api.get('/promo/students'),
+  getApprovedForClass: (classId) => api.get(`/promo/classes/${classId}/approved-students`),
+  addApprovedToClass: (classId, studentUserId) => api.post(
+    `/promo/classes/${classId}/add-approved`,
+    { student_user_id: studentUserId },
+  ),
 };

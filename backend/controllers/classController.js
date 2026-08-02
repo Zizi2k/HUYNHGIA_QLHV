@@ -222,11 +222,12 @@ const getClassById = async (req, res) => {
 
 const createClass = async (req, res) => {
   try {
-    const { name, description, subject } = req.body;
+    const { name, description, subject, code } = req.body;
     const resolvedSubject = subject || inferSubjectFromClassName(name) || null;
+    const classCode = code != null && String(code).trim() ? String(code).trim() : null;
     const [result] = await pool.query(
-      'INSERT INTO classes (name, description, subject) VALUES (?, ?, ?)',
-      [name, description, resolvedSubject]
+      'INSERT INTO classes (name, code, description, subject) VALUES (?, ?, ?, ?)',
+      [name, classCode, description, resolvedSubject]
     );
     await logAction({
       actorId: req.user.id,
@@ -234,6 +235,7 @@ const createClass = async (req, res) => {
       resourceType: 'class',
       resourceId: result.insertId,
       resourceLabel: name,
+      metadata: { code: classCode },
     });
     res.status(201).json({ message: 'Tạo lớp học thành công', id: result.insertId });
   } catch (err) {
@@ -243,10 +245,11 @@ const createClass = async (req, res) => {
 
 const updateClass = async (req, res) => {
   try {
-    const { name, description, subject } = req.body;
+    const { name, description, subject, code } = req.body;
     const resolvedSubject = subject || inferSubjectFromClassName(name) || null;
-    await pool.query('UPDATE classes SET name=?, description=?, subject=? WHERE id=?', [
-      name, description, resolvedSubject, req.params.id,
+    const classCode = code != null && String(code).trim() ? String(code).trim() : null;
+    await pool.query('UPDATE classes SET name=?, code=?, description=?, subject=? WHERE id=?', [
+      name, classCode, description, resolvedSubject, req.params.id,
     ]);
     await logAction({
       actorId: req.user.id,
@@ -254,6 +257,7 @@ const updateClass = async (req, res) => {
       resourceType: 'class',
       resourceId: Number(req.params.id),
       resourceLabel: name,
+      metadata: { code: classCode },
     });
     res.json({ message: 'Cập nhật thành công' });
   } catch (err) {

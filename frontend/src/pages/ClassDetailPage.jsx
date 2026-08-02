@@ -458,6 +458,7 @@ export default function ClassDetailPage() {
             <ClassMembersTab
               classId={id}
               className={classData?.name}
+              classCode={classData?.code}
               members={classData.members}
               isTeacher={canManageClass}
               isAdmin={isAdmin}

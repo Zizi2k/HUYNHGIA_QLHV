@@ -3,7 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { Modal, Form, Button, Alert, Spinner, InputGroup, ListGroup, Badge,
 } from 'react-bootstrap';
 import { notifyDeleteResult } from '../../utils/deleteHelpers';
-import { classService, tuitionService, studentService } from '../../services';
+import { classService, tuitionService, studentService, promoService } from '../../services';
 import { applyTuitionFieldChange } from '../tuition/tuitionDiscountCalc';
 import DataTable, { DataTableEmpty } from '../common/DataTable';
 import AddStudentModal, { emptyStudentFields, emptyTuitionFields } from './AddStudentModal';
@@ -15,7 +15,9 @@ import ProfileNameLink from '../profile/ProfileNameLink';
 
 const emptyForm = { ...emptyStudentFields, ...emptyTuitionFields };
 
-export default function ClassMembersTab({ classId, className, members, isTeacher, isAdmin, isStudent, onUpdated }) {
+export default function ClassMembersTab({
+  classId, className, classCode, members, isTeacher, isAdmin, isStudent, onUpdated,
+}) {
   const [searchParams, setSearchParams] = useSearchParams();
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
@@ -40,6 +42,9 @@ export default function ClassMembersTab({ classId, className, members, isTeacher
   const [discounts, setDiscounts] = useState([]);
   const [courses, setCourses] = useState([]);
   const [subjectLabel, setSubjectLabel] = useState('');
+  const [promoApproved, setPromoApproved] = useState({ course: null, students: [], class_code: null });
+  const [loadingPromo, setLoadingPromo] = useState(false);
+  const [addingPromoId, setAddingPromoId] = useState(null);
 
   const students = members?.filter((m) => m.role === 'student') || [];
   const teachers = members?.filter((m) => m.role !== 'student') || [];
@@ -125,6 +130,45 @@ export default function ClassMembersTab({ classId, className, members, isTeacher
       zalo: student.zalo || '',
     });
     setShowEditModal(true);
+  };
+
+  const loadPromoApproved = async () => {
+    if (!(isAdmin || isTeacher) || !classId || !classCode) {
+      setPromoApproved({ course: null, students: [], class_code: null });
+      return;
+    }
+    setLoadingPromo(true);
+    try {
+      const res = await promoService.getApprovedForClass(classId);
+      setPromoApproved({
+        course: res.data?.course || null,
+        students: res.data?.students || [],
+        class_code: res.data?.class_code || classCode,
+      });
+    } catch {
+      setPromoApproved({ course: null, students: [], class_code: classCode });
+    } finally {
+      setLoadingPromo(false);
+    }
+  };
+
+  useEffect(() => {
+    loadPromoApproved();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [classId, classCode, isAdmin, isTeacher, members?.length]);
+
+  const handleAddPromoStudent = async (studentUserId) => {
+    if (!studentUserId || addingPromoId) return;
+    setAddingPromoId(studentUserId);
+    try {
+      await promoService.addApprovedToClass(classId, studentUserId);
+      await loadPromoApproved();
+      onUpdated?.();
+    } catch (err) {
+      alert(err.response?.data?.message || 'Không thể thêm học viên vào lớp');
+    } finally {
+      setAddingPromoId(null);
+    }
   };
 
   useEffect(() => {
@@ -389,6 +433,66 @@ export default function ClassMembersTab({ classId, className, members, isTeacher
     <>
       {(isAdmin || isTeacher) && (
         <ClassGradeTools classId={classId} className={className} />
+      )}
+
+      {(isAdmin || isTeacher) && classCode && (
+        <Alert variant="light" className="border mb-3">
+          <div className="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-2">
+            <div>
+              <strong>
+                <i className="bi bi-person-check-fill me-1 text-primary" />
+                Học viên đã duyệt khóa học
+              </strong>
+              <div className="small text-muted">
+                Mã lớp <code>{classCode}</code>
+                {promoApproved.course
+                  ? <> · khớp khóa «{promoApproved.course.title}»</>
+                  : ' · chưa có khóa quảng bá khớp mã này'}
+              </div>
+            </div>
+            <Button size="sm" variant="outline-secondary" onClick={loadPromoApproved} disabled={loadingPromo}>
+              {loadingPromo ? <Spinner animation="border" size="sm" /> : <i className="bi bi-arrow-clockwise" />}
+            </Button>
+          </div>
+          {loadingPromo && promoApproved.students.length === 0 ? (
+            <div className="text-muted small">Đang tải…</div>
+          ) : !promoApproved.course ? (
+            <div className="text-muted small mb-0">
+              Tạo khóa học quảng bá với đúng mã lớp này để hiện danh sách HV đã duyệt.
+            </div>
+          ) : promoApproved.students.length === 0 ? (
+            <div className="text-muted small mb-0">Không còn học viên đã duyệt nào chờ thêm vào lớp.</div>
+          ) : (
+            <ListGroup variant="flush" className="border rounded">
+              {promoApproved.students.map((s) => (
+                <ListGroup.Item
+                  key={s.registration_id || s.student_user_id}
+                  className="d-flex flex-wrap justify-content-between align-items-center gap-2"
+                >
+                  <div>
+                    <div className="fw-semibold">{s.fullname || s.registration_fullname}</div>
+                    <small className="text-muted">
+                      {s.student_code || '—'}
+                      {(s.phone || s.user_phone) ? ` · ${s.phone || s.user_phone}` : ''}
+                    </small>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="primary"
+                    disabled={addingPromoId === s.student_user_id}
+                    onClick={() => handleAddPromoStudent(s.student_user_id)}
+                  >
+                    {addingPromoId === s.student_user_id ? (
+                      <Spinner animation="border" size="sm" />
+                    ) : (
+                      <><i className="bi bi-person-plus me-1" />Thêm vào lớp</>
+                    )}
+                  </Button>
+                </ListGroup.Item>
+              ))}
+            </ListGroup>
+          )}
+        </Alert>
       )}
 
       {isTeacher && (

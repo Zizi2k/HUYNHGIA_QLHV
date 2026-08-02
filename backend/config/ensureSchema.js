@@ -544,6 +544,7 @@ async function ensureSchema() {
     "ALTER TABLE promo_courses ADD COLUMN level_label VARCHAR(100) NULL",
     "ALTER TABLE promo_courses ADD COLUMN rating DECIMAL(3,1) NULL DEFAULT 5.0",
     "ALTER TABLE promo_courses ADD COLUMN student_count INT NULL DEFAULT 0",
+    "ALTER TABLE promo_courses ADD COLUMN class_code VARCHAR(50) NULL",
   ];
   for (const sql of promoCourseAlters) {
     try {

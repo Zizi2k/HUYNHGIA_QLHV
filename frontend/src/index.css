@@ -5013,6 +5013,36 @@ a {
   cursor: not-allowed;
 }
 
+.promo-mkt-card-cta--join {
+  background: #0f9f6e;
+}
+
+.promo-mkt-card-cta--join:hover:not(:disabled) {
+  background: #0b7f57;
+}
+
+.promo-mkt-card-cta--joined {
+  background: #64748b;
+}
+
+.promo-mkt-card-cta--joined:hover:not(:disabled) {
+  background: #475569;
+}
+
+.promo-mkt-card-code {
+  margin-top: 0.55rem;
+  font-size: 0.78rem;
+  color: #64748b;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+}
+
+.promo-mkt-card-code i {
+  color: #1552c1;
+}
+
 .promo-mkt-inactive {
   padding: 1rem 1.25rem;
   background: #fff;

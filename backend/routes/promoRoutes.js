@@ -12,6 +12,9 @@ const {
   listRegistrations,
   updateRegistrationStatus,
   listTeacherStudents,
+  joinPromoClass,
+  listApprovedForClass,
+  addApprovedToClass,
 } = require('../controllers/promoController');
 const { authenticate, authorize } = require('../middleware/auth');
 const { uploadMemory } = require('../middleware/upload');
@@ -26,7 +29,11 @@ router.get('/registrations', listRegistrations);
 router.get('/students', authorize('admin', 'teacher'), listTeacherStudents);
 
 router.post('/courses/:id/register', authorize('admin', 'teacher', 'student'), registerCourse);
+router.post('/courses/:id/join', authorize('student'), joinPromoClass);
 router.patch('/registrations/:id', authorize('admin'), updateRegistrationStatus);
+
+router.get('/classes/:classId/approved-students', authorize('admin', 'teacher'), listApprovedForClass);
+router.post('/classes/:classId/add-approved', authorize('admin', 'teacher'), addApprovedToClass);
 
 router.post('/banners', authorize('admin'), uploadMemory.single('image'), createBanner);
 router.put('/banners/:id', authorize('admin'), uploadMemory.single('image'), updateBanner);
