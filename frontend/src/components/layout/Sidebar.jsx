@@ -41,6 +41,7 @@ export default function Sidebar({ collapsed, mobileOpen, onNavigate }) {
           {!collapsed && <div className="app-sidebar-section-label">Điều hướng chính</div>}
           <NavItem to="/" icon="speedometer2" label="Tổng quan" end />
           <NavItem to="/classes" icon="collection" label="Lớp học" />
+          <NavItem to="/promo" icon="mortarboard" label="Khóa học" />
           <NavItem to="/honor" icon="trophy" label="Bảng vinh danh" />
           {user?.role === 'student' && (
             <NavItem to="/my-receipts" icon="receipt" label="Phiếu thu" />

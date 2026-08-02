@@ -243,3 +243,22 @@ export const auditService = {
   approveDeletion: (id, data) => api.post(`/audit/deletion-requests/${id}/approve`, data),
   rejectDeletion: (id, data) => api.post(`/audit/deletion-requests/${id}/reject`, data),
 };
+
+export const promoService = {
+  getBanners: (params) => api.get('/promo/banners', { params }),
+  getCourses: (params) => api.get('/promo/courses', { params }),
+  createBanner: (formData) => api.post('/promo/banners', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  }),
+  updateBanner: (id, formData) => api.put(`/promo/banners/${id}`, formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  }),
+  deleteBanner: (id) => api.delete(`/promo/banners/${id}`),
+  createCourse: (formData) => api.post('/promo/courses', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  }),
+  updateCourse: (id, formData) => api.put(`/promo/courses/${id}`, formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  }),
+  deleteCourse: (id) => api.delete(`/promo/courses/${id}`),
+};

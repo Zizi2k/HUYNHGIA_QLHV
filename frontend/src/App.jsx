@@ -17,6 +17,7 @@ import AdminStaffPage from './pages/AdminStaffPage';
 import AuditPage from './pages/AuditPage';
 import MyReceiptsPage from './pages/MyReceiptsPage';
 import ProfilePage from './pages/ProfilePage';
+import PromoCoursesPage from './pages/PromoCoursesPage';
 
 function App() {
   return (
@@ -32,6 +33,7 @@ function App() {
             <Route path="/quizzes/:id" element={<QuizPage />} />
             <Route path="/users" element={<UsersPage />} />
             <Route path="/profile/:userId" element={<ProfilePage />} />
+            <Route path="/promo" element={<PromoCoursesPage />} />
             <Route path="/honor" element={<HonorPage />} />
             <Route path="/attendance" element={<AttendancePage />} />
             <Route path="/tuition" element={<TuitionPage />} />
