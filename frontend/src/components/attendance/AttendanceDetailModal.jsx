@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { Modal, Button } from 'react-bootstrap';
 import { getAttendanceStatusLabel } from '../../constants/attendanceStatus';
 
@@ -47,21 +48,48 @@ function exportDetailList(detail) {
 }
 
 export default function AttendanceDetailModal({ show, onHide, detail }) {
+  const [expanded, setExpanded] = useState(false);
+
+  useEffect(() => {
+    if (!show) setExpanded(false);
+  }, [show]);
+
   return (
     <Modal
       show={show}
       onHide={onHide}
-      size="lg"
-      centered
-      className="attendance-detail-modal"
+      size={expanded ? undefined : 'lg'}
+      centered={!expanded}
+      dialogClassName={expanded ? 'attendance-detail-dialog attendance-detail-dialog--expanded' : 'attendance-detail-dialog'}
+      className={`attendance-detail-modal${expanded ? ' is-expanded' : ''}`}
     >
-      <Modal.Header closeButton className="attendance-detail-header">
+      <Modal.Header className="attendance-detail-header">
         <Modal.Title>
           <span className="attendance-detail-title-icon" aria-hidden="true">
             <i className="bi bi-file-earmark-text-fill" />
           </span>
           Chi tiết điểm danh
         </Modal.Title>
+        <div className="attendance-detail-header-actions">
+          <button
+            type="button"
+            className="attendance-detail-icon-btn"
+            title={expanded ? 'Thu nhỏ' : 'Phóng to'}
+            aria-label={expanded ? 'Thu nhỏ' : 'Phóng to'}
+            onClick={() => setExpanded((prev) => !prev)}
+          >
+            <i className={`bi ${expanded ? 'bi-fullscreen-exit' : 'bi-arrows-fullscreen'}`} />
+          </button>
+          <button
+            type="button"
+            className="attendance-detail-icon-btn"
+            title="Đóng"
+            aria-label="Đóng"
+            onClick={onHide}
+          >
+            <i className="bi bi-x-lg" />
+          </button>
+        </div>
       </Modal.Header>
 
       <Modal.Body className="attendance-detail-body">
