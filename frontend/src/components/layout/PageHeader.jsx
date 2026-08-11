@@ -1,4 +1,4 @@
-export default function PageHeader({ title, subtitle, actions, icon = 'bi-grid-1x2' }) {
+export default function PageHeader({ title, actions, icon = 'bi-grid-1x2' }) {
   return (
     <header className="module-hero">
       <div className="module-hero-content">
@@ -9,7 +9,6 @@ export default function PageHeader({ title, subtitle, actions, icon = 'bi-grid-1
             </span>
             {title}
           </h1>
-          {subtitle && <p className="module-hero-subtitle">{subtitle}</p>}
         </div>
         {actions && <div className="module-hero-actions">{actions}</div>}
       </div>

@@ -11,9 +11,13 @@ const downloadFile = async (req, res) => {
     }
 
     const file = rows[0];
-    const safeName = String(file.original_name || 'file').replace(/[^\w.\-() ]/g, '_');
+    const rawName = String(file.original_name || 'file');
+    const encodedName = encodeURIComponent(rawName);
     res.set('Content-Type', file.mime_type || 'application/octet-stream');
-    res.set('Content-Disposition', `inline; filename="${encodeURIComponent(safeName)}"`);
+    res.set(
+      'Content-Disposition',
+      `inline; filename="${encodedName}"; filename*=UTF-8''${encodedName}`,
+    );
     res.send(file.data);
   } catch (err) {
     res.status(500).json({ message: 'Lỗi hệ thống', error: err.message });
