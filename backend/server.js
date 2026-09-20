@@ -22,6 +22,7 @@ const feeDebtRoutes = require('./routes/feeDebtRoutes');
 const fileRoutes = require('./routes/fileRoutes');
 const notificationRoutes = require('./routes/notificationRoutes');
 const promoRoutes = require('./routes/promoRoutes');
+const aiRoutes = require('./routes/aiRoutes');
 const { ensureSchema } = require('./config/ensureSchema');
 const pool = require('./config/db');
 
@@ -59,6 +60,7 @@ app.use('/api/fee-debts', feeDebtRoutes);
 app.use('/api/files', fileRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/promo', promoRoutes);
+app.use('/api/ai', aiRoutes);
 
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'OK', message: 'API học trực tuyến đang hoạt động' });
