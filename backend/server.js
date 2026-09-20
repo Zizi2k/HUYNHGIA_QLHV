@@ -84,7 +84,10 @@ app.use((err, _req, res, _next) => {
   }
   res.status(err.status || 500).json({ message: err.message || 'Lỗi hệ thống' });
 });
-
+console.log("Gemini configuration:", {
+  configured: Boolean(process.env.GEMINI_API_KEY),
+  model: process.env.GEMINI_MODEL || "not-configured",
+});
 app.listen(PORT, () => {
   console.log(`Server chạy tại http://localhost:${PORT}`);
   ensureSchema().catch((err) => {
