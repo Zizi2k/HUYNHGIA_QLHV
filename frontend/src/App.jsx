@@ -18,6 +18,7 @@ import AuditPage from './pages/AuditPage';
 import MyReceiptsPage from './pages/MyReceiptsPage';
 import ProfilePage from './pages/ProfilePage';
 import PromoCoursesPage from './pages/PromoCoursesPage';
+import AIChatbot from "./components/ai/AIChatbot";
 
 function App() {
   return (
@@ -45,6 +46,7 @@ function App() {
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
+         <AIChatbot />
       </BrowserRouter>
     </AuthProvider>
   );
