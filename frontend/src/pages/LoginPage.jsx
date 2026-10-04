@@ -2,10 +2,33 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Form, Button, Alert } from 'react-bootstrap';
 import { useAuth } from '../context/AuthContext';
+import { authService } from '../services';
 
 export default function LoginPage() {
-  const [username, setUsername] = useState('');
-  const [code, setCode] = useState('');
+  const [username, setUsername] = useState(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem('rememberedLogin') || '{}');
+      return saved.username || '';
+    } catch {
+      return '';
+    }
+  });
+  const [code, setCode] = useState(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem('rememberedLogin') || '{}');
+      return saved.code || '';
+    } catch {
+      return '';
+    }
+  });
+  const [rememberMe, setRememberMe] = useState(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem('rememberedLogin') || '{}');
+      return Boolean(saved.remember);
+    } catch {
+      return false;
+    }
+  });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const { login } = useAuth();
@@ -18,6 +41,11 @@ export default function LoginPage() {
     setLoading(true);
     try {
       await login(username, code);
+      if (rememberMe) {
+        localStorage.setItem('rememberedLogin', JSON.stringify({ username, code, remember: true }));
+      } else {
+        localStorage.removeItem('rememberedLogin');
+      }
       navigate('/');
     } catch (err) {
       const serverMsg = err.response?.data?.message;
@@ -30,6 +58,37 @@ export default function LoginPage() {
         setError(serverMsg);
       } else {
         setError('Đăng nhập thất bại');
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const toggleRememberMe = (checked) => {
+    setRememberMe(checked);
+    if (!checked) {
+      localStorage.removeItem('rememberedLogin');
+      return;
+    }
+    localStorage.setItem('rememberedLogin', JSON.stringify({ username, code, remember: true }));
+  };
+
+  const handleForgotCode = async () => {
+    const input = window.prompt('Nhập tên đăng nhập của bạn để gửi yêu cầu cấp lại mã mới cho admin tối cao:');
+    if (!input || !input.trim()) return;
+
+    setError('');
+    setLoading(true);
+
+    try {
+      const res = await authService.forgotCode(input.trim());
+      window.alert(res?.data?.message || 'Yêu cầu đã được gửi tới admin tối cao.');
+    } catch (err) {
+      const serverMsg = err.response?.data?.message;
+      if (serverMsg) {
+        setError(serverMsg);
+      } else {
+        setError('Không thể gửi yêu cầu cấp lại mã. Vui lòng thử lại sau.');
       }
     } finally {
       setLoading(false);
@@ -175,13 +234,22 @@ export default function LoginPage() {
         <div className="login-options">
 
           <label>
-            <input type="checkbox" />
-            <span> Ghi nhớ tôi</span>
+            <input
+              type="checkbox"
+              checked={rememberMe}
+              onChange={(e) => toggleRememberMe(e.target.checked)}
+            />
+            <span> Ghi nhớ mã</span>
           </label>
 
-          <span className="forgot-code">
+          <button
+            type="button"
+            className="forgot-code"
+            onClick={handleForgotCode}
+            disabled={loading}
+          >
             Quên mã?
-          </span>
+          </button>
 
         </div>
 
