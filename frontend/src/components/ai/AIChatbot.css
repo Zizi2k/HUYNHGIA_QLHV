@@ -210,3 +210,32 @@
     height: 56px;
   }
 }
+@keyframes ai-border-running {
+  0% {
+    background-position: 0 0, 0% 50%;
+  }
+
+  50% {
+    background-position: 0 0, 100% 50%;
+  }
+
+  100% {
+    background-position: 0 0, 0% 50%;
+  }
+}
+
+@keyframes ai-glow-pulse {
+  0% {
+    box-shadow:
+      0 0 6px rgba(0, 229, 255, 0.55),
+      0 0 14px rgba(36, 107, 255, 0.4),
+      0 0 22px rgba(124, 77, 255, 0.25);
+  }
+
+  100% {
+    box-shadow:
+      0 0 12px rgba(0, 229, 255, 0.95),
+      0 0 26px rgba(36, 107, 255, 0.75),
+      0 0 42px rgba(255, 43, 214, 0.45);
+  }
+}
