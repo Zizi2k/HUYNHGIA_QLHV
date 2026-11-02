@@ -4,13 +4,7 @@ import { isSuperAdmin } from '../../utils/adminScope';
 
 function NavItem({ to, icon, label, end = false }) {
   return (
-    <NavLink
-      to={to}
-      end={end}
-      className={({ isActive }) =>
-        `app-sidebar-link${isActive ? ' active' : ''}`
-      }
-    >
+    <NavLink to={to} end={end} className={({ isActive }) => `app-sidebar-link${isActive ? ' active' : ''}`}>
       <i className={`bi bi-${icon}`} />
       <span>{label}</span>
     </NavLink>
@@ -22,44 +16,39 @@ export default function Sidebar({ collapsed, mobileOpen, onNavigate }) {
   const isAdmin = user?.role === 'admin';
   const isSuper = isSuperAdmin(user);
   const isTeacherOrAdmin = user?.role === 'admin' || user?.role === 'teacher';
-
-  const handleClick = () => {
-    if (onNavigate) onNavigate();
-  };
+  const handleClick = () => onNavigate?.();
 
   return (
-    <aside
-      className={`app-sidebar${collapsed ? ' collapsed' : ''}${mobileOpen ? ' mobile-open' : ''}`}
-    >
+    <aside className={`app-sidebar${collapsed ? ' collapsed' : ''}${mobileOpen ? ' mobile-open' : ''}`}>
       <div className="app-sidebar-brand">
-        <img src="/logo-navbar.png" alt="LHG" className="app-sidebar-logo" />
-        {!collapsed && <span className="app-sidebar-brand-text">LHG</span>}
+        <img src="/logo-navbar.png" alt="Huỳnh Gia" className="app-sidebar-logo" />
+        {!collapsed && (
+          <div className="app-sidebar-brand-copy">
+            <strong>HUỲNH GIA</strong>
+            <span>Education Center</span>
+          </div>
+        )}
       </div>
-
       <nav className="app-sidebar-nav" onClick={handleClick}>
         <div className="app-sidebar-section">
-          {!collapsed && <div className="app-sidebar-section-label">Điều hướng chính</div>}
-          <NavItem to="/" icon="speedometer2" label="Tổng quan" end />
-          <NavItem to="/classes" icon="collection" label="Lớp học" />
+          {!collapsed && <div className="app-sidebar-section-label">HỌC TẬP</div>}
+          <NavItem to="/" icon="house-door" label="Tổng quan" end />
+          <NavItem to="/classes" icon="book" label="Lớp học" />
           <NavItem to="/promo" icon="mortarboard" label="Khóa học" />
           <NavItem to="/honor" icon="trophy" label="Bảng vinh danh" />
-          {user?.role === 'student' && (
-            <NavItem to="/my-receipts" icon="receipt" label="Phiếu thu" />
-          )}
+          {user?.role === 'student' && <NavItem to="/my-receipts" icon="receipt" label="Phiếu thu" />}
         </div>
-
         {isTeacherOrAdmin && (
           <div className="app-sidebar-section">
-            {!collapsed && <div className="app-sidebar-section-label">Giảng dạy</div>}
+            {!collapsed && <div className="app-sidebar-section-label">GIẢNG DẠY</div>}
             <NavItem to="/attendance" icon="calendar-check" label="Điểm danh" />
           </div>
         )}
-
         {isAdmin && (
           <div className="app-sidebar-section">
-            {!collapsed && <div className="app-sidebar-section-label">Quản trị</div>}
+            {!collapsed && <div className="app-sidebar-section-label">QUẢN TRỊ</div>}
             {isSuper && <NavItem to="/admin-staff" icon="shield-lock" label="Phân quyền admin" />}
-            {isAdmin && <NavItem to="/users" icon="people" label="Người dùng" />}
+            <NavItem to="/users" icon="people" label="Người dùng" />
             <NavItem to="/students" icon="person-lines-fill" label="Quản lý học viên" />
             {isSuper && <NavItem to="/audit" icon="journal-text" label="Nhật ký & duyệt" />}
             <NavItem to="/tuition" icon="cash-coin" label="Học phí" />
@@ -67,33 +56,14 @@ export default function Sidebar({ collapsed, mobileOpen, onNavigate }) {
           </div>
         )}
       </nav>
-
-      <div className="app-sidebar-footer">
-        {!collapsed && (
-          <div className="app-sidebar-promo" aria-hidden="true">
-            <p className="app-sidebar-promo-tagline">
-              Learn to develop
-              <br />
-              your future.
-            </p>
-            <div className="app-sidebar-promo-visual">
-              <div className="app-sidebar-promo-monitor">
-                <div className="app-sidebar-promo-screen">
-                  <span className="app-sidebar-promo-screen-cap">
-                    <i className="bi bi-mortarboard-fill" />
-                  </span>
-                  <span className="app-sidebar-promo-screen-bars" />
-                </div>
-                <div className="app-sidebar-promo-stand" />
-              </div>
-              <div className="app-sidebar-promo-cap-front">
-                <i className="bi bi-mortarboard-fill" />
-              </div>
-              <div className="app-sidebar-promo-floor" />
-            </div>
+      {!collapsed && (
+        <div className="app-sidebar-footer">
+          <div className="app-sidebar-education-note">
+            <span className="app-sidebar-note-icon"><i className="bi bi-lightbulb" /></span>
+            <div><strong>Learn • Practice • Grow</strong><small>Học tập mỗi ngày cùng Huỳnh Gia</small></div>
           </div>
-        )}
-      </div>
+        </div>
+      )}
     </aside>
   );
 }
