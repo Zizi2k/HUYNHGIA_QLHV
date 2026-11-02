@@ -5,6 +5,7 @@ import 'bootstrap-icons/font/bootstrap-icons.css';
 import './index.css';
 import './theme/little-squirrel.css';
 import './theme/content-workspace.css';
+import './theme/final-polish.css';
 import App from './App.jsx';
 
 createRoot(document.getElementById('root')).render(
