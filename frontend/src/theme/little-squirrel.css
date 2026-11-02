@@ -1,0 +1,173 @@
+:root {
+  --ls-ink: #102a43;
+  --ls-muted: #627d98;
+  --ls-primary: #2f80ed;
+  --ls-primary-dark: #1d5fbf;
+  --ls-accent: #f7b731;
+  --ls-surface: #ffffff;
+  --ls-soft: #f5f9ff;
+  --ls-border: #e6edf5;
+  --ls-sidebar: #0f2742;
+  --ls-sidebar-2: #163b62;
+  --ls-radius: 18px;
+  --ls-shadow: 0 18px 45px rgba(16, 42, 67, .09);
+}
+
+body { background: #f6f9fc; color: var(--ls-ink); }
+
+.app-shell {
+  background:
+    radial-gradient(circle at 92% 8%, rgba(47,128,237,.09), transparent 28rem),
+    linear-gradient(180deg, #f9fbfe 0%, #f3f7fb 100%);
+}
+
+.app-sidebar {
+  width: 272px;
+  background: linear-gradient(180deg, var(--ls-sidebar) 0%, #102f50 62%, var(--ls-sidebar-2) 100%);
+  border-right: 0;
+  box-shadow: 16px 0 40px rgba(15,39,66,.12);
+  color: #fff;
+}
+.sidebar-collapsed .app-sidebar { width: 82px; }
+
+.app-sidebar-brand {
+  height: 78px;
+  border-bottom: 1px solid rgba(255,255,255,.1);
+  padding: 0 22px;
+}
+.app-sidebar-logo { height: 44px; filter: drop-shadow(0 5px 12px rgba(0,0,0,.12)); }
+.app-sidebar-brand-text { color: #fff; font-size: 1.15rem; letter-spacing: .08em; }
+.app-sidebar-nav { padding: 20px 14px; }
+.app-sidebar-section-label { color: #8fc4ff; font-size: .66rem; letter-spacing: .14em; padding-left: 14px; }
+.app-sidebar-link {
+  min-height: 46px;
+  color: rgba(255,255,255,.76);
+  border-radius: 13px;
+  padding: .72rem .9rem;
+  margin-bottom: 5px;
+}
+.app-sidebar-link i { color: #b9d9ff; opacity: 1; }
+.app-sidebar-link:hover {
+  color: #fff;
+  background: rgba(255,255,255,.09);
+  transform: translateX(2px);
+}
+.app-sidebar-link.active {
+  color: #fff;
+  background: linear-gradient(135deg, var(--ls-primary) 0%, #58a6ff 100%);
+  box-shadow: 0 10px 24px rgba(47,128,237,.28);
+}
+.app-sidebar-link.active i { color: #fff; }
+.app-sidebar-footer { border-top-color: rgba(255,255,255,.1); }
+.app-sidebar-promo {
+  background: rgba(255,255,255,.08) !important;
+  border: 1px solid rgba(255,255,255,.1) !important;
+  border-radius: 16px !important;
+  color: #fff;
+}
+.app-sidebar-promo-tagline { color: #fff !important; }
+
+.app-main { margin-left: 272px; }
+.sidebar-collapsed .app-main { margin-left: 82px; }
+
+.app-topbar {
+  height: 78px;
+  margin: 0;
+  padding: 0 28px;
+  background: rgba(255,255,255,.9);
+  border-bottom: 1px solid var(--ls-border);
+  box-shadow: 0 7px 28px rgba(16,42,67,.045);
+  backdrop-filter: blur(16px);
+}
+.app-topbar-btn {
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  color: var(--ls-ink);
+  background: var(--ls-soft);
+  border: 1px solid var(--ls-border);
+}
+.app-topbar-btn:hover { background: #eaf3ff; color: var(--ls-primary); }
+.app-topbar-user {
+  border: 1px solid var(--ls-border) !important;
+  background: #fff !important;
+  border-radius: 14px !important;
+  padding: 6px 9px !important;
+  box-shadow: 0 6px 18px rgba(16,42,67,.05);
+}
+.app-topbar-user-name { color: var(--ls-ink); font-weight: 700; }
+
+.app-content { padding: 30px; }
+
+/* Global component facelift: keeps existing markup/behaviour intact. */
+.card, .pro-table-card, .dashboard-card, .stat-card {
+  border: 1px solid var(--ls-border) !important;
+  border-radius: var(--ls-radius) !important;
+  box-shadow: var(--ls-shadow) !important;
+  background: var(--ls-surface);
+}
+.card-header {
+  background: transparent !important;
+  border-bottom: 1px solid var(--ls-border) !important;
+  padding: 1.1rem 1.25rem !important;
+}
+.table { --bs-table-bg: transparent; color: var(--ls-ink); }
+.table > thead > tr > th {
+  color: var(--ls-muted);
+  font-size: .75rem;
+  text-transform: uppercase;
+  letter-spacing: .055em;
+  border-bottom-color: var(--ls-border);
+  background: #f8fbff;
+}
+.table > tbody > tr { transition: background .18s ease; }
+.table > tbody > tr:hover { background: #f7fbff; }
+
+.btn { border-radius: 11px; font-weight: 650; }
+.btn-primary {
+  background: linear-gradient(135deg, var(--ls-primary), #5aa7ff);
+  border-color: transparent;
+  box-shadow: 0 8px 20px rgba(47,128,237,.22);
+}
+.btn-primary:hover { background: linear-gradient(135deg, var(--ls-primary-dark), var(--ls-primary)); border-color: transparent; }
+.form-control, .form-select {
+  border-radius: 11px;
+  border-color: var(--ls-border);
+  min-height: 42px;
+  box-shadow: none !important;
+}
+.form-control:focus, .form-select:focus { border-color: #8fc4ff; box-shadow: 0 0 0 4px rgba(47,128,237,.09) !important; }
+.modal-content { border: 0; border-radius: 20px; box-shadow: 0 25px 70px rgba(16,42,67,.18); }
+.dropdown-menu { border: 1px solid var(--ls-border); border-radius: 14px; box-shadow: var(--ls-shadow); padding: .55rem; }
+.dropdown-item { border-radius: 9px; padding: .58rem .7rem; }
+.badge { border-radius: 999px; padding: .45em .7em; }
+
+/* Page headings used throughout the current app. */
+.app-content h1, .app-content h2 { color: var(--ls-ink); letter-spacing: -.025em; }
+.app-content h1 { font-weight: 800; }
+.app-content h2 { font-weight: 750; }
+
+/* Chatbot: visually aligned with the new shell, logic untouched. */
+.ai-chatbot-panel {
+  border-radius: 20px !important;
+  border: 1px solid var(--ls-border) !important;
+  box-shadow: 0 24px 65px rgba(16,42,67,.2) !important;
+  overflow: hidden;
+}
+.ai-chatbot-header { background: linear-gradient(135deg, var(--ls-sidebar), var(--ls-primary)) !important; }
+.ai-chatbot-toggle {
+  background: linear-gradient(135deg, var(--ls-primary), #5aa7ff) !important;
+  box-shadow: 0 12px 30px rgba(47,128,237,.32) !important;
+}
+
+@media (max-width: 991.98px) {
+  .app-sidebar { width: 272px; }
+  .app-main, .sidebar-collapsed .app-main { margin-left: 0; }
+  .app-topbar { height: 68px; padding: 0 16px; }
+  .app-content { padding: 20px 14px; }
+}
+
+@media (max-width: 575.98px) {
+  .app-content { padding: 16px 10px; }
+  .card, .pro-table-card, .dashboard-card, .stat-card { border-radius: 14px !important; }
+}
