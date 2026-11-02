@@ -1,99 +1,76 @@
 import { Link } from 'react-router-dom';
-import { Button } from 'react-bootstrap';
 import { getAvatarUrl, getInitials } from '../../utils/avatar';
-import ShrinkFitText from '../common/ShrinkFitText';
 
 export function ClassMediaTile({
   variant, src, alt, initials, label, icon, className = '',
 }) {
   const resolved = src ? getAvatarUrl(src) : null;
-  const isClass = variant === 'class';
-
   return (
-    <div className={`class-card-media class-card-media--${variant} ${className}`.trim()}>
-      <div className={`class-card-media-body ${isClass ? 'class-card-media-body--rect' : 'class-card-media-body--round'}`}>
-        {resolved ? (
-          <img src={resolved} alt={alt} className="class-card-media-img" />
-        ) : (
-          <div className="class-card-media-fallback">
-            {initials || <i className={`bi bi-${icon}`} />}
-          </div>
-        )}
-      </div>
-      <div className="class-card-media-footer">
-        <i className={`bi bi-${icon}`} />
-        <span>{label}</span>
-      </div>
+    <div className={`ls-media-tile ls-media-tile-${variant} ${className}`.trim()}>
+      {resolved ? (
+        <img src={resolved} alt={alt} className="ls-media-tile-img" />
+      ) : (
+        <div className="ls-media-tile-fallback">
+          {initials || <i className={`bi bi-${icon}`} />}
+        </div>
+      )}
+      {label && <span className="ls-media-tile-label">{label}</span>}
     </div>
   );
 }
 
 export default function ClassCard({ cls, canManage, onEdit, onDelete }) {
-  const teacherName = cls.teacher_names?.split(',')[0]?.trim() || 'Giáo viên';
+  const teacherName = cls.teacher_names?.split(',')[0]?.trim() || 'Chưa phân công';
   const teacherInitials = getInitials(teacherName);
 
   return (
-    <article className="class-card">
-      <div className="class-card-left">
-        <div className="class-card-head">
-          <div className="class-card-head-text">
-            <ShrinkFitText as="h5" className="class-card-title" maxFontSize={22} minFontSize={11}>
-              {cls.name}
-            </ShrinkFitText>
-            <div className="class-card-title-line" aria-hidden="true" />
+    <article className="ls-course-card">
+      <div className="ls-course-cover">
+        {cls.avatar_url ? (
+          <img src={getAvatarUrl(cls.avatar_url)} alt={cls.name} />
+        ) : (
+          <div className="ls-course-cover-fallback">
+            <i className="bi bi-mortarboard-fill" />
           </div>
-        </div>
-
-        <div className="class-card-badges">
-          {cls.teacher_names && (
-            <div className="class-card-badge">
-              <i className="bi bi-person-badge" />
-              <ShrinkFitText className="class-card-badge-text" maxFontSize={13} minFontSize={9}>
-                {`GV: ${cls.teacher_names}`}
-              </ShrinkFitText>
-            </div>
-          )}
-          <div className="class-card-badge">
-            <i className="bi bi-people" />
-            <span>{cls.member_count} thành viên</span>
+        )}
+        <span className="ls-course-subject">{cls.subject || 'Lớp học'}</span>
+        {canManage && (
+          <div className="ls-course-actions">
+            <button type="button" title="Sửa lớp học" onClick={() => onEdit(cls)}>
+              <i className="bi bi-pencil" />
+            </button>
+            <button type="button" className="danger" title="Xóa lớp học" onClick={() => onDelete(cls)}>
+              <i className="bi bi-trash" />
+            </button>
           </div>
-        </div>
-
-        <div className="class-card-footer">
-          <Button as={Link} to={`/classes/${cls.id}`} className="class-card-enter">
-            Vào lớp học
-            <i className="bi bi-arrow-right" />
-          </Button>
-          {canManage && (
-            <div className="class-card-actions">
-              <button type="button" className="class-card-action-btn" title="Sửa lớp học" onClick={() => onEdit(cls)}>
-                <i className="bi bi-pencil" />
-              </button>
-              <button type="button" className="class-card-action-btn class-card-action-btn--danger" title="Xóa lớp học" onClick={() => onDelete(cls)}>
-                <i className="bi bi-trash" />
-              </button>
-            </div>
-          )}
-        </div>
+        )}
       </div>
 
-      <div className="class-card-right">
-        <ClassMediaTile
-          variant="class"
-          src={cls.avatar_url}
-          alt={cls.name}
-          initials={getInitials(cls.name)}
-          label="Lớp học"
-          icon="mortarboard"
-        />
-        <ClassMediaTile
-          variant="teacher"
-          src={cls.teacher_avatar_url}
-          alt={teacherName}
-          initials={teacherInitials}
-          label="Giáo viên"
-          icon="person"
-        />
+      <div className="ls-course-body">
+        <div className="ls-course-code">{cls.code || 'HUYNHGIA CLASS'}</div>
+        <h3>{cls.name}</h3>
+        <p>{cls.description || 'Chưa có mô tả cho lớp học này.'}</p>
+
+        <div className="ls-course-teacher">
+          <div className="ls-course-teacher-avatar">
+            {cls.teacher_avatar_url ? (
+              <img src={getAvatarUrl(cls.teacher_avatar_url)} alt={teacherName} />
+            ) : (
+              <span>{teacherInitials || 'GV'}</span>
+            )}
+          </div>
+          <div>
+            <small>Giáo viên phụ trách</small>
+            <strong>{teacherName}</strong>
+          </div>
+        </div>
+
+        <div className="ls-course-footer">
+          <span><i className="bi bi-people" /> {cls.member_count ?? 0} thành viên</span>
+          <Link to={`/classes/${cls.id}`}>
+            Vào lớp <i className="bi bi-arrow-right" />
+          </Link>
+        </div>
       </div>
     </article>
   );
