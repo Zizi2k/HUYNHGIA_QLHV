@@ -1,17 +1,20 @@
 import { useEffect, useState } from 'react';
-import { Spinner, Button } from 'react-bootstrap';
+import { Spinner } from 'react-bootstrap';
 import { Link } from 'react-router-dom';
 import { dashboardService, classService } from '../services';
 import { useAuth } from '../context/AuthContext';
-import PageHeader from '../components/layout/PageHeader';
-import { StatCard, StatCardGrid } from '../components/layout/StatCard';
-import ModuleSection from '../components/layout/ModuleSection';
+
+const roleLabel = {
+  admin: 'Quản trị viên',
+  teacher: 'Giáo viên',
+  student: 'Học viên',
+};
 
 const metricStyles = [
-  { icon: 'collection', tone: 'orange', label: 'Số lớp học' },
-  { icon: 'journal-text', tone: 'red', label: 'Số bài tập' },
-  { icon: 'patch-question', tone: 'green', label: 'Số bài kiểm tra' },
-  { icon: 'star', tone: 'blue', label: 'Điểm trung bình' },
+  { icon: 'collection', tone: 'primary', label: 'Lớp học', key: 'classCount' },
+  { icon: 'journal-check', tone: 'danger', label: 'Bài tập', key: 'assignmentCount' },
+  { icon: 'patch-question', tone: 'success', label: 'Bài kiểm tra', key: 'quizCount' },
+  { icon: 'graph-up-arrow', tone: 'warning', label: 'Điểm trung bình', key: 'avgScore' },
 ];
 
 export default function DashboardPage() {
@@ -24,130 +27,175 @@ export default function DashboardPage() {
     Promise.all([dashboardService.getStats(), classService.getAll()])
       .then(([statsRes, classesRes]) => {
         setStats(statsRes.data);
-        setClasses(classesRes.data.slice(0, 8));
+        setClasses(classesRes.data.slice(0, 6));
       })
       .finally(() => setLoading(false));
   }, []);
 
-  const metrics = [
-    stats?.classCount ?? 0,
-    stats?.assignmentCount ?? 0,
-    stats?.quizCount ?? 0,
-    stats?.avgScore || (user?.role === 'student' ? '0' : '—'),
-  ];
-
   if (loading) {
     return (
-      <div className="page-container module-page text-center py-5">
+      <div className="ls-dashboard-loading">
         <Spinner animation="border" variant="primary" />
       </div>
     );
   }
 
-  return (
-    <div className="page-container module-page">
-      <PageHeader
-        icon="bi-speedometer2"
-        title="Tổng quan"
-        subtitle={`Xin chào, ${user?.fullname}! Đây là bảng điều khiển học tập của bạn.`}
-        actions={(
-          <Button as={Link} to="/classes" variant="primary" size="sm">
-            <i className="bi bi-plus-lg me-1" />
-            Xem lớp học
-          </Button>
-        )}
-      />
+  const getMetricValue = (key) => {
+    if (key === 'avgScore') return stats?.avgScore || (user?.role === 'student' ? '0' : '—');
+    return stats?.[key] ?? 0;
+  };
 
-      <StatCardGrid>
-        {metricStyles.map((m, i) => (
-          <StatCard
-            key={m.label}
-            icon={m.icon}
-            tone={m.tone}
-            label={m.label}
-            value={metrics[i]}
-          />
+  return (
+    <div className="ls-dashboard">
+      <section className="ls-dashboard-hero">
+        <div className="ls-dashboard-hero-copy">
+          <span className="ls-dashboard-eyebrow">
+            <i className="bi bi-stars" /> Trung tâm Ngoại ngữ - Tin học Huỳnh Gia
+          </span>
+          <h1>Xin chào, {user?.fullname || 'bạn'}!</h1>
+          <p>
+            Theo dõi lớp học, bài tập và tiến độ của bạn trong một không gian quản lý hiện đại, trực quan.
+          </p>
+          <div className="ls-dashboard-hero-actions">
+            <Link to="/classes" className="ls-btn ls-btn-primary">
+              <i className="bi bi-collection" /> Xem lớp học
+            </Link>
+            <Link to="/promo" className="ls-btn ls-btn-light">
+              <i className="bi bi-mortarboard" /> Khám phá khóa học
+            </Link>
+          </div>
+        </div>
+        <div className="ls-dashboard-hero-profile">
+          <div className="ls-dashboard-profile-icon">
+            <i className="bi bi-mortarboard-fill" />
+          </div>
+          <div>
+            <span>Vai trò hiện tại</span>
+            <strong>{roleLabel[user?.role] || user?.role || 'Người dùng'}</strong>
+          </div>
+        </div>
+      </section>
+
+      <section className="ls-dashboard-metrics">
+        {metricStyles.map((metric) => (
+          <article className="ls-metric-card" key={metric.key}>
+            <div className={`ls-metric-icon ls-tone-${metric.tone}`}>
+              <i className={`bi bi-${metric.icon}`} />
+            </div>
+            <div className="ls-metric-copy">
+              <span>{metric.label}</span>
+              <strong>{getMetricValue(metric.key)}</strong>
+              <small>Dữ liệu cập nhật từ hệ thống</small>
+            </div>
+          </article>
         ))}
-      </StatCardGrid>
+      </section>
 
       {user?.role === 'student' && (
-        <StatCardGrid>
-          <StatCard
-            icon="check-circle"
-            tone="green"
-            label="Bài đã nộp"
-            value={stats?.submittedCount ?? 0}
-          />
-          <StatCard
-            icon="exclamation-circle"
-            tone="orange"
-            label="Bài còn thiếu"
-            value={stats?.missingCount ?? 0}
-          />
-        </StatCardGrid>
+        <section className="ls-student-progress">
+          <article className="ls-progress-card success">
+            <span className="ls-progress-icon"><i className="bi bi-check2-circle" /></span>
+            <div>
+              <small>Đã hoàn thành</small>
+              <strong>{stats?.submittedCount ?? 0} bài đã nộp</strong>
+            </div>
+          </article>
+          <article className="ls-progress-card warning">
+            <span className="ls-progress-icon"><i className="bi bi-clock-history" /></span>
+            <div>
+              <small>Cần chú ý</small>
+              <strong>{stats?.missingCount ?? 0} bài còn thiếu</strong>
+            </div>
+          </article>
+        </section>
       )}
 
-      <ModuleSection
-        title="Lớp học của bạn"
-        icon="bi-collection"
-        count={classes.length}
-        flush
-      >
-        {classes.length === 0 ? (
-          <div className="pro-table-empty">
-            <i className="bi bi-collection pro-table-empty-icon" />
-            Chưa có lớp học nào.
+      <section className="ls-dashboard-grid">
+        <div className="ls-dashboard-panel ls-dashboard-classes">
+          <header className="ls-panel-header">
+            <div>
+              <span className="ls-panel-kicker">HỌC TẬP</span>
+              <h2>Lớp học của bạn</h2>
+              <p>Các lớp gần đây được lấy trực tiếp từ dữ liệu hệ thống.</p>
+            </div>
+            <Link to="/classes" className="ls-panel-link">
+              Xem tất cả <i className="bi bi-arrow-right" />
+            </Link>
+          </header>
+
+          {classes.length === 0 ? (
+            <div className="ls-empty-state">
+              <span><i className="bi bi-collection" /></span>
+              <h3>Chưa có lớp học</h3>
+              <p>Khi được thêm vào lớp, thông tin sẽ xuất hiện tại đây.</p>
+            </div>
+          ) : (
+            <div className="ls-class-list">
+              {classes.map((cls, index) => (
+                <Link to={`/classes/${cls.id}`} className="ls-class-row" key={cls.id}>
+                  <div className="ls-class-number">{String(index + 1).padStart(2, '0')}</div>
+                  <div className="ls-class-info">
+                    <strong>{cls.name}</strong>
+                    <span>{cls.description || 'Chưa có mô tả cho lớp học này.'}</span>
+                  </div>
+                  <div className="ls-class-members">
+                    <i className="bi bi-people" />
+                    <span>{cls.member_count ?? 0}</span>
+                  </div>
+                  <span className="ls-class-arrow"><i className="bi bi-chevron-right" /></span>
+                </Link>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <aside className="ls-dashboard-side">
+          <div className="ls-dashboard-panel ls-quick-panel">
+            <header className="ls-panel-header compact">
+              <div>
+                <span className="ls-panel-kicker">TRUY CẬP NHANH</span>
+                <h2>Tiện ích</h2>
+              </div>
+            </header>
+            <div className="ls-quick-grid">
+              <Link to="/classes" className="ls-quick-item">
+                <span><i className="bi bi-collection" /></span>
+                <div><strong>Lớp học</strong><small>Xem nội dung học tập</small></div>
+              </Link>
+              <Link to="/promo" className="ls-quick-item">
+                <span><i className="bi bi-mortarboard" /></span>
+                <div><strong>Khóa học</strong><small>Khám phá chương trình</small></div>
+              </Link>
+              {user?.role === 'student' && (
+                <Link to="/my-receipts" className="ls-quick-item">
+                  <span><i className="bi bi-receipt" /></span>
+                  <div><strong>Phiếu thu</strong><small>Theo dõi thanh toán</small></div>
+                </Link>
+              )}
+              {(user?.role === 'teacher' || user?.role === 'admin') && (
+                <Link to="/attendance" className="ls-quick-item">
+                  <span><i className="bi bi-calendar-check" /></span>
+                  <div><strong>Điểm danh</strong><small>Quản lý buổi học</small></div>
+                </Link>
+              )}
+              {user?.role === 'admin' && (
+                <Link to="/students" className="ls-quick-item">
+                  <span><i className="bi bi-person-lines-fill" /></span>
+                  <div><strong>Học viên</strong><small>Quản lý hồ sơ</small></div>
+                </Link>
+              )}
+            </div>
           </div>
-        ) : (
-          <div className="pro-table-wrap">
-            <table className="pro-table">
-              <thead>
-                <tr>
-                  <th style={{ width: 48 }}>#</th>
-                  <th>Tên lớp</th>
-                  <th>Mô tả</th>
-                  <th>Thành viên</th>
-                  <th style={{ width: 100 }}>Thao tác</th>
-                </tr>
-              </thead>
-              <tbody>
-                {classes.map((cls, idx) => (
-                  <tr key={cls.id}>
-                    <td>
-                      <span className="pro-row-num">{idx + 1}</span>
-                    </td>
-                    <td>
-                      <Link to={`/classes/${cls.id}`} className="dash-class-link">
-                        {cls.name}
-                      </Link>
-                    </td>
-                    <td className="text-muted small">
-                      {cls.description || '—'}
-                    </td>
-                    <td>
-                      <span className="dash-member-badge">
-                        <i className="bi bi-people" />
-                        {cls.member_count} thành viên
-                      </span>
-                    </td>
-                    <td>
-                      <Button
-                        as={Link}
-                        to={`/classes/${cls.id}`}
-                        variant="outline-primary"
-                        size="sm"
-                        className="dash-action-btn"
-                      >
-                        Xem
-                      </Button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+
+          <div className="ls-dashboard-panel ls-ai-card">
+            <div className="ls-ai-card-icon"><i className="bi bi-robot" /></div>
+            <span>TRỢ LÝ THÔNG MINH</span>
+            <h3>AI Huỳnh Gia luôn sẵn sàng</h3>
+            <p>Hỏi về khóa học, bài tập và học phí ngay trên hệ thống.</p>
+            <small>Bấm nút AI ở góc phải màn hình để bắt đầu.</small>
           </div>
-        )}
-      </ModuleSection>
+        </aside>
+      </section>
     </div>
   );
 }
