@@ -1,0 +1,215 @@
+/* Immersive course-banner carousel override.
+   Loaded from index.html so it can enhance the restored PromoCoursesPage without touching business logic. */
+
+.promo-mkt-hero {
+  position: relative !important;
+  min-height: 430px !important;
+  background: linear-gradient(120deg, #edf3ff 0%, #f8faff 100%) !important;
+}
+
+.promo-mkt-hero-carousel,
+.promo-mkt-hero-carousel .carousel-inner,
+.promo-mkt-hero-carousel .carousel-item {
+  min-height: 430px !important;
+}
+
+.promo-mkt-hero-carousel .carousel-item {
+  transition: transform .75s cubic-bezier(.22,.61,.36,1), opacity .55s ease !important;
+}
+
+/* When an uploaded banner image exists, turn it into a full-bleed hero background. */
+.promo-mkt-hero-inner:has(.promo-mkt-hero-phone[style]) {
+  position: relative !important;
+  min-height: 430px !important;
+  padding: 54px 64px !important;
+  isolation: isolate;
+}
+
+.promo-mkt-hero-inner:has(.promo-mkt-hero-phone[style]) .promo-mkt-hero-visual {
+  position: absolute !important;
+  inset: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  max-width: none !important;
+  z-index: 0 !important;
+  pointer-events: none;
+}
+
+.promo-mkt-hero-inner:has(.promo-mkt-hero-phone[style]) .promo-mkt-hero-phone {
+  position: absolute !important;
+  inset: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  max-width: none !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  transform: none !important;
+  background-size: cover !important;
+  background-position: center !important;
+  box-shadow: none !important;
+}
+
+.promo-mkt-hero-inner:has(.promo-mkt-hero-phone[style]) .promo-mkt-hero-visual::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background:
+    linear-gradient(90deg, rgba(18,35,74,.88) 0%, rgba(31,61,127,.76) 38%, rgba(31,61,127,.30) 68%, rgba(18,35,74,.10) 100%),
+    linear-gradient(0deg, rgba(15,31,68,.20), rgba(15,31,68,.02));
+}
+
+.promo-mkt-hero-inner:has(.promo-mkt-hero-phone[style]) .promo-mkt-hero-copy {
+  position: relative !important;
+  z-index: 3 !important;
+  max-width: 610px !important;
+}
+
+.promo-mkt-hero-inner:has(.promo-mkt-hero-phone[style]) .promo-mkt-hero-tag {
+  color: #3158cc !important;
+  background: rgba(255,255,255,.94) !important;
+  border-color: rgba(255,255,255,.68) !important;
+  backdrop-filter: blur(10px);
+}
+
+.promo-mkt-hero-inner:has(.promo-mkt-hero-phone[style]) .promo-mkt-hero-title {
+  color: #fff !important;
+  text-shadow: 0 3px 18px rgba(0,0,0,.22) !important;
+}
+
+.promo-mkt-hero-inner:has(.promo-mkt-hero-phone[style]) .promo-mkt-hero-sub {
+  color: rgba(255,255,255,.88) !important;
+  text-shadow: 0 2px 10px rgba(0,0,0,.18);
+}
+
+.promo-mkt-hero-inner:has(.promo-mkt-hero-phone[style]) .promo-mkt-btn-outline {
+  color: #fff !important;
+  background: rgba(255,255,255,.10) !important;
+  border-color: rgba(255,255,255,.60) !important;
+  backdrop-filter: blur(10px);
+}
+
+.promo-mkt-hero-inner:has(.promo-mkt-hero-phone[style]) .promo-mkt-btn-outline:hover {
+  background: rgba(255,255,255,.20) !important;
+  border-color: #fff !important;
+}
+
+.promo-mkt-hero-inner:has(.promo-mkt-hero-phone[style]) .promo-mkt-stat-card {
+  display: none !important;
+}
+
+/* Admin edit/delete controls stay readable on top of the image. */
+.promo-mkt-hero-admin {
+  position: relative !important;
+  z-index: 4 !important;
+  display: flex !important;
+  align-items: center !important;
+  flex-wrap: wrap;
+  gap: 8px !important;
+  margin-top: 18px !important;
+}
+
+.promo-mkt-hero-inner:has(.promo-mkt-hero-phone[style]) .promo-mkt-hero-admin {
+  width: fit-content;
+  padding: 8px 10px !important;
+  border: 1px solid rgba(255,255,255,.28);
+  border-radius: 12px;
+  background: rgba(18,35,74,.30);
+  backdrop-filter: blur(10px);
+}
+
+/* Modern carousel arrows and indicators. */
+.promo-mkt-hero-carousel .carousel-control-prev,
+.promo-mkt-hero-carousel .carousel-control-next {
+  width: 54px !important;
+  opacity: 0;
+  transition: opacity .2s ease, transform .2s ease;
+}
+
+.promo-mkt-hero:hover .carousel-control-prev,
+.promo-mkt-hero:hover .carousel-control-next {
+  opacity: .9;
+}
+
+.promo-mkt-hero-carousel .carousel-control-prev:hover { transform: translateX(-2px); }
+.promo-mkt-hero-carousel .carousel-control-next:hover { transform: translateX(2px); }
+
+.promo-mkt-hero-carousel .carousel-control-prev-icon,
+.promo-mkt-hero-carousel .carousel-control-next-icon {
+  width: 38px !important;
+  height: 38px !important;
+  padding: 9px;
+  border-radius: 50%;
+  background-color: rgba(20,38,78,.48);
+  background-size: 48% 48%;
+  box-shadow: 0 5px 18px rgba(0,0,0,.18);
+  backdrop-filter: blur(8px);
+}
+
+.promo-mkt-hero-carousel .carousel-indicators {
+  z-index: 6 !important;
+  gap: 7px;
+  margin-bottom: 16px !important;
+}
+
+.promo-mkt-hero-carousel .carousel-indicators [data-bs-target] {
+  width: 8px !important;
+  height: 8px !important;
+  margin: 0 !important;
+  border: 0 !important;
+  border-radius: 999px !important;
+  background-color: rgba(255,255,255,.70) !important;
+  opacity: .8 !important;
+  transition: width .25s ease, opacity .25s ease, background-color .25s ease !important;
+}
+
+.promo-mkt-hero-carousel .carousel-indicators .active {
+  width: 28px !important;
+  background-color: #fff !important;
+  opacity: 1 !important;
+}
+
+/* Make the existing admin banner action visually prominent and consistent. */
+.promo-mkt-admin-toolbar .btn-outline-primary:first-child {
+  border-color: #4169e1 !important;
+  color: #3158cc !important;
+  background: #eef3fd !important;
+  font-weight: 700 !important;
+}
+
+.promo-mkt-admin-toolbar .btn-outline-primary:first-child:hover {
+  color: #fff !important;
+  background: #4169e1 !important;
+}
+
+@media (max-width: 767.98px) {
+  .promo-mkt-hero,
+  .promo-mkt-hero-carousel,
+  .promo-mkt-hero-carousel .carousel-inner,
+  .promo-mkt-hero-carousel .carousel-item {
+    min-height: 480px !important;
+  }
+
+  .promo-mkt-hero-inner:has(.promo-mkt-hero-phone[style]) {
+    min-height: 480px !important;
+    padding: 46px 28px 58px !important;
+    align-items: flex-end !important;
+  }
+
+  .promo-mkt-hero-inner:has(.promo-mkt-hero-phone[style]) .promo-mkt-hero-visual::after {
+    background: linear-gradient(0deg, rgba(16,32,70,.92) 0%, rgba(20,42,88,.60) 58%, rgba(20,42,88,.16) 100%);
+  }
+
+  .promo-mkt-hero-title { font-size: clamp(2rem,10vw,3rem) !important; }
+  .promo-mkt-hero-carousel .carousel-control-prev,
+  .promo-mkt-hero-carousel .carousel-control-next { display: none !important; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .promo-mkt-hero-carousel .carousel-item,
+  .promo-mkt-hero-carousel .carousel-control-prev,
+  .promo-mkt-hero-carousel .carousel-control-next,
+  .promo-mkt-hero-carousel .carousel-indicators [data-bs-target] {
+    transition: none !important;
+  }
+}
