@@ -19,35 +19,19 @@ export default function AIChatbot() {
   const { user } = useAuth();
 
   const [isOpen, setIsOpen] = useState(false);
-  const [messages, setMessages] = useState([
-    WELCOME_MESSAGE,
-  ]);
+  const [messages, setMessages] = useState([WELCOME_MESSAGE]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
 
-  if (!user) {
-    return null;
-  }
+  if (!user) return null;
 
   const sendMessage = async (text = input) => {
     const cleanText = String(text || "").trim();
+    if (!cleanText || loading) return;
 
-    if (!cleanText || loading) {
-      return;
-    }
-
-    const userMessage = {
-      role: "user",
-      content: cleanText,
-    };
-
+    const userMessage = { role: "user", content: cleanText };
     const previousMessages = messages.slice(-10);
-
-    setMessages((current) => [
-      ...current,
-      userMessage,
-    ]);
-
+    setMessages((current) => [...current, userMessage]);
     setInput("");
     setLoading(true);
 
@@ -57,29 +41,23 @@ export default function AIChatbot() {
         history: previousMessages,
       });
 
-      const assistantMessage = {
-        role: "assistant",
-        content:
-          response.data.answer ||
-          "Tôi chưa thể tạo câu trả lời.",
-      };
-
       setMessages((current) => [
         ...current,
-        assistantMessage,
+        {
+          role: "assistant",
+          content: response.data.answer || "Tôi chưa thể tạo câu trả lời.",
+        },
       ]);
     } catch (error) {
-      const errorMessage = {
-        role: "assistant",
-        content:
-          error.response?.data?.message ||
-          "Không thể kết nối với Trợ lý AI. Vui lòng thử lại.",
-        error: true,
-      };
-
       setMessages((current) => [
         ...current,
-        errorMessage,
+        {
+          role: "assistant",
+          content:
+            error.response?.data?.message ||
+            "Không thể kết nối với Trợ lý AI. Vui lòng thử lại.",
+          error: true,
+        },
       ]);
     } finally {
       setLoading(false);
@@ -100,96 +78,67 @@ export default function AIChatbot() {
               <strong>Trợ lý AI Huỳnh Gia</strong>
               <small>Hỗ trợ học tập trực tuyến</small>
             </div>
-
-            <button
-              type="button"
-              className="ai-chatbot-close"
-              onClick={() => setIsOpen(false)}
-              aria-label="Đóng chatbot"
-            >
-              ×
-            </button>
+            <button type="button" className="ai-chatbot-close" onClick={() => setIsOpen(false)} aria-label="Đóng chatbot">×</button>
           </header>
 
           <div className="ai-chatbot-messages">
             {messages.map((message, index) => (
               <div
                 key={`${message.role}-${index}`}
-                className={
-                  "ai-message " +
-                  `ai-message-${message.role}` +
-                  (message.error
-                    ? " ai-message-error"
-                    : "")
-                }
+                className={`ai-message ai-message-${message.role}${message.error ? " ai-message-error" : ""}`}
               >
                 {message.content}
               </div>
             ))}
-
-            {loading && (
-              <div className="ai-message ai-message-assistant">
-                Trợ lý AI đang trả lời...
-              </div>
-            )}
+            {loading && <div className="ai-message ai-message-assistant">Trợ lý AI đang trả lời...</div>}
           </div>
 
           {messages.length <= 1 && (
             <div className="ai-chatbot-suggestions">
               {SUGGESTIONS.map((suggestion) => (
-                <button
-                  type="button"
-                  key={suggestion}
-                  onClick={() => sendMessage(suggestion)}
-                >
-                  {suggestion}
-                </button>
+                <button type="button" key={suggestion} onClick={() => sendMessage(suggestion)}>{suggestion}</button>
               ))}
             </div>
           )}
 
-          <form
-            className="ai-chatbot-form"
-            onSubmit={handleSubmit}
-          >
+          <form className="ai-chatbot-form" onSubmit={handleSubmit}>
             <textarea
               value={input}
-              onChange={(event) =>
-                setInput(event.target.value)
-              }
+              onChange={(event) => setInput(event.target.value)}
               placeholder="Nhập câu hỏi..."
               rows="2"
               maxLength="5000"
               disabled={loading}
               onKeyDown={(event) => {
-                if (
-                  event.key === "Enter" &&
-                  !event.shiftKey
-                ) {
+                if (event.key === "Enter" && !event.shiftKey) {
                   event.preventDefault();
                   sendMessage();
                 }
               }}
             />
-
-            <button
-              type="submit"
-              disabled={loading || !input.trim()}
-            >
-              Gửi
-            </button>
+            <button type="submit" disabled={loading || !input.trim()}>Gửi</button>
           </form>
         </section>
       )}
 
       <button
         type="button"
-        className="ai-chatbot-toggle"
+        className={`ai-chatbot-toggle${isOpen ? " is-open" : ""}${loading ? " is-thinking" : ""}`}
         onClick={() => setIsOpen((current) => !current)}
-        aria-label="Mở Trợ lý AI"
+        aria-label={isOpen ? "Đóng Trợ lý AI" : "Mở Trợ lý AI"}
+        title="Trợ lý AI Huỳnh Gia"
       >
-        <i className="bi bi-robot" />
-        <span>AI</span>
+        <span className="ai-orb-halo" aria-hidden="true" />
+        <span className="ai-orb-core" aria-hidden="true">
+          <span className="ai-orb-face">
+            <span className="ai-orb-eye ai-orb-eye-left" />
+            <span className="ai-orb-eye ai-orb-eye-right" />
+            <span className="ai-orb-smile" />
+          </span>
+          <span className="ai-orb-spark ai-orb-spark-one" />
+          <span className="ai-orb-spark ai-orb-spark-two" />
+        </span>
+        <span className="ai-orb-status" aria-hidden="true" />
       </button>
     </div>
   );
