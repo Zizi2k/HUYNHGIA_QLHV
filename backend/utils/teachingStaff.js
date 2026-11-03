@@ -38,11 +38,33 @@ async function getClassStudentScope(classId) {
 
 function teachingStaffMatchesScope(userRow, scope) {
   if (!scope) return true;
+
+  // Admin phụ luôn phải đúng phạm vi chi nhánh.
   if (userRow.role === 'admin') {
     return userRow.admin_scope === scope || userRow.admin_scope === 'all';
   }
-  if (userRow.admin_scope === scope) return true;
-  return studentCodeMatchesScope(userRow.code, scope);
+
+  if (userRow.role === 'teacher') {
+    // Giáo viên mới có admin_scope thì lọc đúng HG/EG.
+    if (userRow.admin_scope === 'HG' || userRow.admin_scope === 'EG') {
+      return userRow.admin_scope === scope;
+    }
+
+    // Tương thích các tài khoản giáo viên cũ: nếu có mã HG/EG thì dùng mã
+    // để xác định chi nhánh; nếu chưa có cả scope lẫn mã chi nhánh thì vẫn
+    // cho xuất hiện trong danh sách để admin có thể phân công vào lớp.
+    if (userRow.code) {
+      const belongsHG = studentCodeMatchesScope(userRow.code, 'HG');
+      const belongsEG = studentCodeMatchesScope(userRow.code, 'EG');
+      if (belongsHG || belongsEG) {
+        return studentCodeMatchesScope(userRow.code, scope);
+      }
+    }
+
+    return true;
+  }
+
+  return false;
 }
 
 function filterTeachingStaffByScope(rows, scope) {
