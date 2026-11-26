@@ -19,7 +19,15 @@ function questionFields(input) {
   return { prompt, kind: 'choice', options, correct: input.correct };
 }
 
-async function change(q, input, user, manage, findStudent) {
+function duration(value) {
+  if (value == null || value === 0) return 0;
+  if (!Number.isInteger(value) || value < 5 || value > 3600) {
+    fail(400, 'Thời gian phải từ 5 đến 3.600 giây, hoặc 0 nếu không giới hạn');
+  }
+  return value;
+}
+
+async function change(q, input, user, manage, findStudent, now = Date.now) {
   const { action } = input;
   if (action === 'submit' ? user.role !== 'student' : !manage) fail(403, 'Bạn không có quyền thực hiện thao tác này');
   if ((q?.id ?? null) !== input.questionId || (q?.revision ?? 0) !== input.revision) {
@@ -28,20 +36,29 @@ async function change(q, input, user, manage, findStudent) {
   if (action === 'publish') {
     if (q && q.phase !== 'closed') fail(409, 'Hãy kết thúc câu hiện tại trước');
     return { ...questionFields(input), id: randomUUID(), revision: 1, phase: 'open', student: null,
-      response: null, review: null, publishedAt: new Date().toISOString() };
+      durationSeconds: duration(input.durationSeconds), deadlineAt: null,
+      response: null, review: null, publishedAt: new Date(now()).toISOString() };
   }
   if (!q) fail(404, 'Chưa có câu hỏi');
   const next = { ...q, revision: q.revision + 1 };
-  if (action === 'edit' && q.phase === 'open') return { ...next, ...questionFields(input) };
+  if (action === 'edit' && q.phase === 'open') {
+    const seconds = duration(input.durationSeconds ?? q.durationSeconds);
+    if (q.student && seconds !== (q.durationSeconds ?? 0)) {
+      fail(409, 'Không thể đổi thời lượng sau khi đã gọi học sinh');
+    }
+    return { ...next, ...questionFields(input), durationSeconds: seconds };
+  }
   if (action === 'assign' && q.phase === 'open') {
     if (!Number.isSafeInteger(input.studentId) || input.studentId <= 0) fail(400, 'Hãy chọn một học sinh');
     const student = await findStudent(input.studentId);
     if (!student) fail(400, 'Học sinh không còn trực tuyến trong phòng');
-    return { ...next, student };
+    if (q.student?.id === student.id) return q;
+    return { ...next, student, deadlineAt: q.durationSeconds ? now() + q.durationSeconds * 1000 : null };
   }
   if (action === 'submit') {
     if (q.student?.id !== user.id) fail(403, 'Chỉ học sinh được gọi mới có thể nộp');
     if (q.phase !== 'open') fail(409, 'Câu này không còn nhận bài');
+    if (q.deadlineAt != null && now() >= q.deadlineAt) fail(409, 'Đã hết giờ, hệ thống không nhận bài nộp');
     const response = q.kind === 'essay' ? text(input.answer, 20000) : input.answer;
     if (q.kind === 'choice' && (!Number.isInteger(response) || response < 0 || response >= q.options.length)) {
       fail(400, 'Hãy chọn một đáp án');

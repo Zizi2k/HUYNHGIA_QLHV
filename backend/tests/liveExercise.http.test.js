@@ -88,11 +88,15 @@ test('HTTP: giáo viên, hai học sinh cùng lớp và tài khoản ngoài lớ
   await call('sync', b, { present: false });
   assert.deepEqual((await call('sync', teacher, {})).students.map((s) => s.id), [a.id]);
 
-  let { question: q } = await act(teacher, null, 'publish', { kind: 'essay', prompt: 'Tính căn bậc hai của 4' });
+  let { question: q } = await act(teacher, null, 'publish', { kind: 'essay', prompt: 'Tính căn bậc hai của 4', durationSeconds: 60 });
+  assert.equal(q.deadlineAt, null);
   assert.equal((await call('sync', b, {})).question.prompt, q.prompt);
   await act(teacher, q, 'assign', { studentId: b.id }, 400);
   ({ question: q } = await act(teacher, q, 'assign', { studentId: a.id }));
-  assert.equal((await call('sync', a, {})).question.assignedToMe, true);
+  const sync = await call('sync', a, {});
+  assert.equal(sync.question.assignedToMe, true);
+  assert.equal(sync.question.deadlineAt, q.deadlineAt);
+  assert.ok(q.deadlineAt > sync.serverNow);
   await act(b, q, 'submit', { answer: '2' }, 403);
   const original = String.raw`$\sqrt{4}=4$`;
   const corrected = String.raw`$\sqrt{4}=2$`;
