@@ -5,6 +5,7 @@ import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 import 'katex/dist/katex.min.css';
 import api from '../../services/api';
+import { readFormulaClipboard } from './formulaPaste';
 
 const blank = { kind: 'choice', prompt: '', options: ['', '', '', ''], correct: 0, durationSeconds: 0 };
 const labels = { open: 'Đang mở', submitted: 'Đã nộp · chờ chữa', reviewed: 'Đã chữa', closed: 'Đã kết thúc' };
@@ -22,6 +23,33 @@ function Document({ children }) {
 
 function Editor({ label, value, onChange, maxLength = 8000 }) {
   const area = useRef(null);
+  const [pasteMessage, setPasteMessage] = useState('');
+  function paste(event) {
+    setPasteMessage('');
+    const pasted = readFormulaClipboard(event.clipboardData);
+    if (!pasted) return;
+    if (pasted.unsupported) {
+      if (event.clipboardData.getData('text/plain')) {
+        setPasteMessage('Không giữ được định dạng công thức này. Hãy thử sao chép dưới dạng LaTeX hoặc MathML.');
+      } else {
+        event.preventDefault();
+        setPasteMessage('Clipboard không có công thức đọc được. Hãy thử sao chép dưới dạng LaTeX hoặc MathML.');
+      }
+      return;
+    }
+    event.preventDefault();
+    const { selectionStart: start, selectionEnd: end } = event.currentTarget;
+    const left = value.slice(0, start);
+    const right = value.slice(end);
+    const text = pasted.latex && /\$\s*$/.test(left) && /^\s*\$/.test(right) ? pasted.latex : pasted.text;
+    const next = left + text + right;
+    if (next.length > maxLength) {
+      setPasteMessage('Nội dung sau khi dán vượt giới hạn ký tự.');
+      return;
+    }
+    onChange(next);
+    requestAnimationFrame(() => area.current?.setSelectionRange(start + text.length, start + text.length));
+  }
   function insert(before, after, example) {
     const { selectionStart: start, selectionEnd: end } = area.current;
     const replacement = value.slice(start, end) || example;
@@ -48,8 +76,9 @@ function Editor({ label, value, onChange, maxLength = 8000 }) {
           onClick={() => insert(before, after, example)}>{name}</Button>)}
     </Stack>
     <Form.Control ref={area} as="textarea" rows={5} maxLength={maxLength} aria-label={label}
-      value={value} onChange={(e) => onChange(e.target.value)} />
-    <Form.Text>Công thức dùng cú pháp LaTeX. Bản xem trước cập nhật khi nhập.</Form.Text>
+      value={value} onPaste={paste} onChange={(e) => onChange(e.target.value)} />
+    <Form.Text>Dán công thức LaTeX hoặc MathML bằng Ctrl+V. Một số công thức Word cũng được hỗ trợ nếu clipboard chứa công thức có thể chỉnh sửa.</Form.Text>
+    {pasteMessage && <div className="small text-danger mt-1" role="status">{pasteMessage}</div>}
     {value && <div className="bg-body-tertiary border rounded p-3 mt-2">
       <span className="small text-body-secondary">Xem trước</span><Document>{value}</Document>
     </div>}

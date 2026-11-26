@@ -43,5 +43,5 @@ jobs:
           DB_NAME: live_exercise_test
           DB_USER: fixture
           DB_PASSWORD: fixture-password
-      - run: npm ci --no-audit --no-fund && npm run build
+      - run: npm ci --no-audit --no-fund && node --test tests/formulaPaste.test.js && npm run build
         working-directory: frontend
