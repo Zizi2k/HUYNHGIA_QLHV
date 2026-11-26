@@ -6,7 +6,7 @@ import rehypeKatex from 'rehype-katex';
 import 'katex/dist/katex.min.css';
 import api from '../../services/api';
 
-const blank = { kind: 'choice', prompt: '', options: ['', '', '', ''], correct: 0 };
+const blank = { kind: 'choice', prompt: '', options: ['', '', '', ''], correct: 0, durationSeconds: 0 };
 const labels = { open: 'Đang mở', submitted: 'Đã nộp · chờ chữa', reviewed: 'Đã chữa', closed: 'Đã kết thúc' };
 const mathOptions = { trust: false, maxExpand: 100, maxSize: 10 };
 const markdownPlugins = [remarkMath];
@@ -61,7 +61,7 @@ function QuestionForm({ initial = blank, edit, busy, send, onCancel }) {
   function set(key, value) { setDraft((old) => ({ ...old, [key]: value })); }
   return <Form onSubmit={async (e) => {
     e.preventDefault();
-    if (await send(edit ? 'edit' : 'publish', draft)) {
+    if (await send(edit ? 'edit' : 'publish', { ...draft, durationSeconds: Number(draft.durationSeconds || 0) })) {
       setDraft(blank);
       onCancel?.();
     }
@@ -70,6 +70,15 @@ function QuestionForm({ initial = blank, edit, busy, send, onCancel }) {
     <Form.Select className="mb-3" aria-label="Loại câu hỏi" value={draft.kind} onChange={(e) => set('kind', e.target.value)}>
       <option value="choice">Trắc nghiệm một đáp án</option><option value="essay">Tự luận</option>
     </Form.Select>
+    <Form.Group className="mb-3" controlId="live-duration">
+      <Form.Label>Thời gian trả lời (giây)</Form.Label>
+      <Form.Control type="number" min={0} max={3600} step={1} className="w-auto"
+        value={draft.durationSeconds ?? 0} disabled={Boolean(initial.student)}
+        onChange={(e) => set('durationSeconds', e.target.value)} />
+      <Form.Text>{initial.student
+        ? 'Không đổi thời lượng sau khi đã gọi học sinh.'
+        : 'Nhập 5–3.600 giây hoặc 0 để không giới hạn. Đồng hồ chạy khi giáo viên gọi học sinh.'}</Form.Text>
+    </Form.Group>
     <Editor label="Nội dung câu hỏi" value={draft.prompt} onChange={(value) => set('prompt', value)} />
     {draft.kind === 'choice' && <fieldset className="mb-3">
       <legend className="fs-6">Các lựa chọn · đánh dấu đáp án đúng</legend>
@@ -121,6 +130,16 @@ function Review({ question: q, send, busy }) {
 
 const message = (err) => err.response?.data?.message || 'Không kết nối được với phòng bài tập';
 
+function Countdown({ remaining, duration }) {
+  if (remaining === null) return duration > 0
+    ? <span className="text-body-secondary">Thời lượng: {duration} giây · Chưa bắt đầu</span>
+    : null;
+  const format = (value) => String(value).padStart(2, '0');
+  return <Badge bg={remaining <= 10 ? 'danger' : 'primary'} className="fs-6" role={remaining === 0 ? 'status' : 'timer'}>
+    {remaining === 0 ? 'Hết giờ' : `Còn ${format(Math.floor(remaining / 60))}:${format(remaining % 60)}`}
+  </Badge>;
+}
+
 export default function ClassLiveExercise({ classId, active, onOpen }) {
   const [state, setState] = useState(null);
   const [error, setError] = useState('');
@@ -129,10 +148,21 @@ export default function ClassLiveExercise({ classId, active, onOpen }) {
   const [editing, setEditing] = useState(false);
   const [student, setStudent] = useState('');
   const [history, setHistory] = useState(null);
+  const [clock, setClock] = useState(() => Date.now());
   const generation = useRef(0);
   const locked = useRef(false);
   const base = `/classes/${classId}/live-exercise`;
   const q = state?.question;
+  const deadline = active && q?.phase === 'open' ? q.deadlineAt : null;
+  const remaining = deadline == null ? null : Math.max(0, Math.ceil((deadline - clock - (state?.clockOffset || 0)) / 1000));
+
+  useEffect(() => {
+    if (deadline == null) return;
+    const tick = () => setClock(Date.now());
+    tick();
+    const interval = setInterval(tick, 250);
+    return () => clearInterval(interval);
+  }, [deadline]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -143,7 +173,9 @@ export default function ClassLiveExercise({ classId, active, onOpen }) {
         if (!locked.current && !document.hidden) {
           const { data } = await api.post(base + '/sync', { present: active }, { signal: controller.signal, timeout: 12000 });
           if (!controller.signal.aborted && started === generation.current && !locked.current) {
-            setState(data);
+            const receivedAt = Date.now();
+            setClock(receivedAt);
+            setState({ ...data, clockOffset: typeof data.serverNow === 'number' ? data.serverNow - receivedAt : 0 });
             setConnectionError('');
           }
         }
@@ -167,7 +199,10 @@ export default function ClassLiveExercise({ classId, active, onOpen }) {
       const { data } = await api.post(base + '/action', {
         ...fields, action, questionId: q?.id ?? null, revision: q?.revision ?? 0,
       }, { timeout: 12000 });
-      setState((old) => ({ ...old, question: data.question }));
+      const receivedAt = Date.now();
+      setClock(receivedAt);
+      setState((old) => ({ ...old, question: data.question,
+        clockOffset: typeof data.serverNow === 'number' ? data.serverNow - receivedAt : old?.clockOffset ?? 0 }));
       if (action === 'publish') setHistory(null);
       return true;
     } catch (err) {
@@ -196,12 +231,15 @@ export default function ClassLiveExercise({ classId, active, onOpen }) {
       {error && <Alert variant="danger" dismissible onClose={() => setError('')}>{error}</Alert>}
       {!state && !connectionError && <p role="status">Đang vào phòng…</p>}
       {q && <section className="border rounded p-3 mb-3">
-        <Badge bg="secondary" className="mb-3">{labels[q.phase]}</Badge>
+        <Stack direction="horizontal" gap={2} className="flex-wrap mb-3">
+          <Badge bg="secondary">{labels[q.phase]}</Badge>
+          {q.phase === 'open' && <Countdown remaining={remaining} duration={q.durationSeconds} />}
+        </Stack>
         <Document>{q.prompt}</Document>
         {q.kind === 'choice' && (state.manage || !q.assignedToMe || q.phase !== 'open') &&
           <ol type="A">{q.options.map((option, i) => <li key={i}>{option}</li>)}</ol>}
         {q.assignedToMe && q.phase === 'open' &&
-          <StudentAnswer key={`${q.id}:${q.revision}`} question={q} send={send} busy={busy} />}
+          <StudentAnswer key={`${q.id}:${q.revision}`} question={q} send={send} busy={busy || remaining === 0} />}
         {!state.manage && q.assignedToMe && q.response != null && <><h3 className="fs-6">Bài đã nộp</h3>
           {q.kind === 'essay' ? <Document>{q.response}</Document> : <p>{q.options[q.response]}</p>}
         </>}
@@ -218,8 +256,11 @@ export default function ClassLiveExercise({ classId, active, onOpen }) {
               <option value="">Chọn học sinh</option>
               {state.students.map((s) => <option key={s.id} value={s.id}>{s.fullname}</option>)}
             </Form.Select>
-            <Button disabled={busy || !state.students.some((s) => String(s.id) === student)}
-              onClick={() => send('assign', { studentId: Number(student) })}>Gọi làm bài</Button>
+            <Button disabled={busy || String(q.student?.id) === student || !state.students.some((s) => String(s.id) === student)}
+              onClick={() => {
+                if (q.student && !window.confirm('Chuyển lượt cho học sinh khác? Đồng hồ sẽ tính lại từ đầu.')) return;
+                void send('assign', { studentId: Number(student) });
+              }}>Gọi làm bài</Button>
           </Stack>
           {editing ? <QuestionForm key={q.id} initial={{ ...q, options: q.kind === 'essay' ? blank.options : q.options,
             correct: q.correct ?? 0 }} edit busy={busy} send={send} onCancel={() => setEditing(false)} /> :

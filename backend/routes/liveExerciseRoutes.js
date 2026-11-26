@@ -52,7 +52,7 @@ router.post('/sync', handle(async (req, res, manage) => {
     pool.query('SELECT question FROM live_exercises WHERE class_id=?', [id]),
     manage ? pool.query(online + ' ORDER BY u.fullname, u.id', [id]) : [[]],
   ]);
-  res.json({ question: visibleQuestion(parse(rows[0]?.question), req.user.id, manage), students, manage });
+  res.json({ question: visibleQuestion(parse(rows[0]?.question), req.user.id, manage), students, manage, serverNow: Date.now() });
 }));
 
 router.get('/history', handle(async (req, res, manage) => {
@@ -79,7 +79,7 @@ router.post('/action', handle(async (req, res, manage) => {
     }
     await conn.query('UPDATE live_exercises SET question=? WHERE class_id=?', [JSON.stringify(next), id]);
     await conn.commit();
-    res.json({ question: visibleQuestion(next, req.user.id, manage) });
+    res.json({ question: visibleQuestion(next, req.user.id, manage), serverNow: Date.now() });
   } finally {
     try { await conn.rollback(); } finally { conn.release(); }
   }

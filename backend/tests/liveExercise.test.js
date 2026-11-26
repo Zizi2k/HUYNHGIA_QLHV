@@ -51,3 +51,28 @@ test('chặn khách, học sinh khác, học sinh vắng mặt và phiên bản 
   await assert.rejects(actor(q, 'submit', { answer: 99 }, student), { status: 400 });
   await assert.rejects(actor(q, 'publish', payload), { status: 409 });
 });
+
+test('đồng hồ tính từ lúc gọi, không reset khi gọi lại cùng người và chặn nộp đúng hạn chót', async () => {
+  let time = 1000;
+  const timed = (q, action, fields, user = teacher) => change(q, {
+    questionId: q?.id ?? null, revision: q?.revision ?? 0, action, ...fields,
+  }, user, user === teacher, async (id) => ({ id, fullname: 'Học sinh' }), () => time);
+
+  await assert.rejects(timed(null, 'publish', { ...payload, durationSeconds: 4 }), { status: 400 });
+  let q = await timed(null, 'publish', { ...payload, durationSeconds: 30 });
+  assert.equal(q.deadlineAt, null);
+  time = 12000;
+  q = await timed(q, 'assign', { studentId: student.id });
+  assert.equal(q.deadlineAt, 42000);
+  time = 20000;
+  assert.equal((await timed(q, 'assign', { studentId: student.id })).deadlineAt, 42000);
+  await assert.rejects(timed(q, 'edit', { ...payload, durationSeconds: 60 }), { status: 409 });
+  time = 41999;
+  assert.equal((await timed(q, 'submit', { answer: 0 }, student)).phase, 'submitted');
+  time = 42000;
+  await assert.rejects(timed(q, 'submit', { answer: 0 }, student), /hết giờ/);
+  q = await timed(q, 'assign', { studentId: other.id });
+  assert.equal(q.deadlineAt, 72000);
+  await assert.rejects(timed(q, 'submit', { answer: 0 }, student), { status: 403 });
+  assert.equal(visibleQuestion(q, other.id, false).deadlineAt, 72000);
+});
