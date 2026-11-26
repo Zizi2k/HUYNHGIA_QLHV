@@ -15,6 +15,7 @@ const { requireClassMember, requireClassTeacher } = require('../middleware/class
 const router = express.Router();
 
 router.use(authenticate);
+router.use('/:id/live-exercise', requireClassMember('id'), require('./liveExerciseRoutes'));
 router.get('/', getClasses);
 router.get('/share-targets', authorize('admin', 'teacher'), getShareTargetClasses);
 router.post('/', authorize('admin'), createClass);

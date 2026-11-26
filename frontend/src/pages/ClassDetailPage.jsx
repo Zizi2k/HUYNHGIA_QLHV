@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from 'react';
+import { lazy, Suspense, useEffect, useState, useMemo } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
 import {
   Tab, Card, Button, Form, Modal, Spinner, Badge, ListGroup, Alert,
@@ -35,6 +35,8 @@ import { canActAsClassTeacher } from '../utils/roles';
 import { API_BASE } from '../config/apiBase';
 import LoadingOverlay from '../components/common/LoadingOverlay';
 import { preserveScrollDuring } from '../utils/scrollPreserve';
+
+const ClassLiveExercise = lazy(() => import('../components/class/ClassLiveExercise'));
 
 export default function ClassDetailPage() {
   const { id } = useParams();
@@ -324,12 +326,18 @@ export default function ClassDetailPage() {
         <ClassGradeTools classId={id} className={classData.name} />
       )}
 
+      {activeTab !== 'live-exercise' && (
+        <Suspense fallback={null}>
+          <ClassLiveExercise key={id} classId={id} active={false} onOpen={() => setActiveTab('live-exercise')} />
+        </Suspense>
+      )}
       <ModuleTabs
         activeKey={activeTab}
         onSelect={(k) => setActiveTab(k || 'lessons')}
         tabs={[
           { key: 'lessons', label: 'Bài giảng', icon: 'bi-journal-text' },
           { key: 'assignments', label: 'Bài tập', icon: 'bi-clipboard-check' },
+          { key: 'live-exercise', label: 'Bài tập trực tiếp', icon: 'bi-lightning-charge' },
           { key: 'quizzes', label: 'Bài kiểm tra', icon: 'bi-patch-question' },
           { key: 'discussions', label: 'Thảo luận', icon: 'bi-chat-dots' },
           { key: 'online', label: 'Lớp online', icon: 'bi-camera-video' },
@@ -443,6 +451,12 @@ export default function ClassDetailPage() {
               isAdmin={isAdmin}
               onUpdated={refreshData}
             />
+          </Tab.Pane>
+
+          <Tab.Pane eventKey="live-exercise">
+            <Suspense fallback={<p role="status">Đang tải phòng…</p>}>
+              <ClassLiveExercise key={id} classId={id} active />
+            </Suspense>
           </Tab.Pane>
 
           <Tab.Pane eventKey="online">
