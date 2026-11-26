@@ -1,7 +1,7 @@
 name: Live exercise integration
 on:
   push:
-    branches: [feature/live-class-exercise]
+    branches: ['feature/live-*-exercise', 'feature/live-exercise-*']
   pull_request:
     paths:
       - 'backend/**'
