@@ -7,6 +7,7 @@ const pool = require('../config/db');
 const { authenticate } = require('../middleware/auth');
 const { requireClassMember } = require('../middleware/classAccess');
 const routes = require('../routes/liveExerciseRoutes');
+const realMysql = process.env.LIVE_EXERCISE_MYSQL === '1';
 
 test('HTTP: giáo viên, hai học sinh cùng lớp và tài khoản ngoài lớp', async (t) => {
   const secret = 'fixture-only-live-exercise-http';
@@ -42,10 +43,23 @@ test('HTTP: giáo viên, hai học sinh cùng lớp và tài khoản ngoài lớ
     if (sql.startsWith('SELECT question FROM live_exercise_history')) return rows(archived);
     throw new Error('Câu SQL chưa được hỗ trợ trong bộ dữ liệu giả');
   };
-  t.mock.method(pool, 'query', query);
-  t.mock.method(pool, 'getConnection', async () => ({
-    query, beginTransaction: async () => {}, commit: async () => {}, rollback: async () => {}, release: () => {},
-  }));
+  if (realMysql) {
+    assert.equal(process.env.DB_HOST, '127.0.0.1');
+    assert.equal(process.env.DB_NAME, 'live_exercise_test');
+    await pool.query('CREATE TABLE users (id INT PRIMARY KEY, fullname VARCHAR(100), role VARCHAR(10), admin_scope VARCHAR(10), status BOOLEAN) ENGINE=InnoDB');
+    await pool.query('CREATE TABLE classes (id INT PRIMARY KEY) ENGINE=InnoDB');
+    await pool.query(`CREATE TABLE class_members (id INT AUTO_INCREMENT PRIMARY KEY,
+      class_id INT NOT NULL, user_id INT NOT NULL, UNIQUE KEY class_user (class_id,user_id),
+      FOREIGN KEY (class_id) REFERENCES classes(id), FOREIGN KEY (user_id) REFERENCES users(id)) ENGINE=InnoDB`);
+    await pool.query("INSERT INTO users VALUES (1,'Giáo viên','teacher',NULL,1),(2,'Học sinh A','student',NULL,1),(3,'Học sinh B','student',NULL,1),(4,'Ngoài lớp','student',NULL,1)");
+    await pool.query('INSERT INTO classes VALUES (7)');
+    await pool.query('INSERT INTO class_members (class_id,user_id) VALUES (7,1),(7,2),(7,3)');
+  } else {
+    t.mock.method(pool, 'query', query);
+    t.mock.method(pool, 'getConnection', async () => ({
+      query, beginTransaction: async () => {}, commit: async () => {}, rollback: async () => {}, release: () => {},
+    }));
+  }
   const app = express();
   app.use(express.json());
   app.use('/api/classes/:id/live-exercise', authenticate, requireClassMember('id'), routes);
