@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Alert, Button, Form, Modal, Table } from 'react-bootstrap';
 import api from '../services/api';
+import StaffEmailSettings from '../components/attendance/StaffEmailSettings';
 
 const endpoint = '/staff-departments';
 const empty = { name: '', active: true, assignments: [] };
@@ -38,7 +39,7 @@ export default function StaffDepartmentPage() {
     <h1 className="h3">Phòng ban giảng dạy</h1>
     <p>Quản lý được xem công, minh chứng và kỳ lương của giáo viên trong phòng ban được phân công. Không có quyền chốt lương hoặc ghi giao dịch.</p>
     {!draft && error && <Alert variant="danger">{error}</Alert>}
-    {data && <><Button onClick={() => { setError(''); setDraft(empty); }}>Tạo phòng ban</Button>
+    {data && <><Button onClick={() => { setError(''); setDraft(empty); }}>Tạo phòng ban</Button><StaffEmailSettings />
       <Table responsive bordered className="mt-3"><thead><tr><th>Phòng ban</th><th>Giáo viên</th><th>Quản lý</th><th>Trạng thái</th><th>Thao tác</th></tr></thead>
         <tbody>{data.departments.map((d) => <tr key={d.id}>
           <td>{d.name}</td><td>{d.assignments.filter((a) => a.membership === 'member').length}</td>

@@ -5,6 +5,7 @@ const { isSuperAdmin } = require('../utils/adminScope');
 const { fail } = require('../services/teachingPeriods');
 const { ensureDepartments } = require('../services/staffDepartments');
 const { transaction } = require('../services/teachingPayroll');
+const { ensureStaffEmail, addressOK, settings } = require('../services/staffEmail');
 
 router.use(authenticate, async (req, res, next) => {
   try {
@@ -36,6 +37,29 @@ router.post('/', run(async (req) => {
     if (err.code === 'ER_DUP_ENTRY') fail('Tên phòng ban đã tồn tại', 409);
     throw err;
   }
+}));
+router.get('/email/settings', run(async () => {
+  await ensureStaffEmail();
+  const [contacts] = await pool.query(`SELECT u.id,u.fullname AS name,u.code,c.email,c.enabled,j.state AS last_state
+    FROM users u LEFT JOIN staff_email_contacts c ON c.user_id=u.id
+    LEFT JOIN staff_email_jobs j ON j.notification_id=(SELECT MAX(x.notification_id) FROM staff_email_jobs x WHERE x.user_id=u.id)
+    WHERE u.status=1 AND u.role IN ('admin','teacher') ORDER BY u.fullname,u.id`);
+  return { configured: Boolean(settings()), contacts };
+}));
+router.put('/email/:id', run(async (req) => {
+  const id = Number(req.params.id);
+  const { enabled } = req.body || {};
+  const email = typeof req.body?.email === 'string' ? req.body.email.trim() : '';
+  if (!Number.isSafeInteger(id) || id < 1 || typeof enabled !== 'boolean' || (enabled || email) && !addressOK(email)) {
+    fail('Địa chỉ email hoặc trạng thái không hợp lệ');
+  }
+  await ensureStaffEmail();
+  const [[user]] = await pool.query("SELECT id FROM users WHERE id=? AND status=1 AND role IN ('admin','teacher')", [id]);
+  if (!user) fail('Không tìm thấy tài khoản đang hoạt động', 404);
+  await pool.query(`INSERT INTO staff_email_contacts (user_id,email,enabled,configured_by) VALUES (?,?,?,?)
+    ON DUPLICATE KEY UPDATE enabled_at=IF(email<>? OR enabled<>?,CURRENT_TIMESTAMP(3),enabled_at),
+      email=?,enabled=?,configured_by=?`, [id, email, enabled, req.user.id, email, enabled, email, enabled, req.user.id]);
+  return { id, enabled };
 }));
 router.put('/:id', run(async (req) => {
   const id = Number(req.params.id);

@@ -11,6 +11,7 @@ const payroll = require('../routes/teachingPayrollRoutes');
 const staffClock = require('../routes/staffClockRoutes');
 const departments = require('../routes/staffDepartmentRoutes');
 const rota = require('../routes/staffRotaRoutes');
+const { tickStaffEmail } = require('../services/staffEmail');
 const ExcelJS = require('exceljs');
 const { template } = require('../services/staffClockImport');
 
@@ -27,7 +28,8 @@ test('MySQL: duyệt công theo tiết, không xem chéo và không chấm trùn
     await pool.query('CREATE TABLE class_members (id INT AUTO_INCREMENT PRIMARY KEY, class_id INT, user_id INT) ENGINE=InnoDB');
     await pool.query('CREATE TABLE tuition_profiles (class_id INT, student_code VARCHAR(20)) ENGINE=InnoDB');
     await pool.query(`CREATE TABLE notifications (id INT AUTO_INCREMENT PRIMARY KEY,user_id INT,type VARCHAR(50),title VARCHAR(255),
-      body TEXT,class_id INT,link_path VARCHAR(255),sent_by INT,zalo_status VARCHAR(30),zalo_error TEXT) ENGINE=InnoDB`);
+      body TEXT,class_id INT,link_path VARCHAR(255),sent_by INT,zalo_status VARCHAR(30),zalo_error TEXT,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP) ENGINE=InnoDB`);
     await pool.query(`CREATE TABLE teacher_schedule_slots (id INT PRIMARY KEY, class_id INT,
       slot_date DATE, start_time TIME, end_time TIME, is_available BOOLEAN) ENGINE=InnoDB`);
     await pool.query(`INSERT INTO users VALUES (1,'Quản trị','admin','AD1','all',1),
@@ -307,4 +309,23 @@ test('MySQL: duyệt công theo tiết, không xem chéo và không chấm trùn
     assert.equal((await pay(manager, id))[0], 403);
     assert.equal((await pay(manager, '/reports/preview?period=2025&department=' + department.id))[0], 403);
     assert.equal((await clock(manager, '/evidence/' + saved.outPhoto)).status, 403);
+    assert.equal((await json(manager, '/staff-departments/email/settings'))[0], 403);
+    assert.equal((await json(admin, '/staff-departments/email/' + a.id, 'PUT', { email: 'teacher@example.com', enabled: true }))[0], 200);
+    await pool.query('UPDATE notifications SET created_at=DATE_SUB(NOW(),INTERVAL 2 DAY)');
+    await pool.query('UPDATE staff_email_contacts SET enabled_at=DATE_SUB(NOW(),INTERVAL 1 MINUTE) WHERE user_id=?', [a.id]);
+    const [mailNotice] = await pool.query("INSERT INTO notifications(user_id,type,title,body) VALUES (?,'staff_payroll','Kỳ lương đã được chốt','Số tiền mẫu không được gửi')", [a.id]);
+    const requestsMail = [];
+    const config = { key: 'fixture-only', from: 'fixture@example.com' };
+    const fetcher = async (_url, request) => {
+      requestsMail.push(request);
+      return requestsMail.length === 1 ? new Response('{}', { status: 503 }) : new Response('{"id":"fixture-id"}', { status: 200 });
+    };
+    await tickStaffEmail({ config, fetcher });
+    assert.equal((await pool.query('SELECT state FROM staff_email_jobs WHERE notification_id=?', [mailNotice.insertId]))[0][0].state, 'queued');
+    await pool.query('UPDATE staff_email_jobs SET available_ms=? WHERE notification_id=?', [Date.now() - 1000, mailNotice.insertId]);
+    await Promise.all([tickStaffEmail({ config, fetcher }), tickStaffEmail({ config, fetcher })]);
+    assert.equal(requestsMail.length, 2);
+    assert.equal(requestsMail[0].headers['Idempotency-Key'], requestsMail[1].headers['Idempotency-Key']);
+    assert.doesNotMatch(requestsMail[1].body, /Số tiền mẫu/);
+    assert.equal((await pool.query('SELECT state FROM staff_email_jobs WHERE notification_id=?', [mailNotice.insertId]))[0][0].state, 'accepted');
   });
