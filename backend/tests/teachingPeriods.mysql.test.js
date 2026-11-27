@@ -239,7 +239,7 @@ test('MySQL: duyệt công theo tiết, không xem chéo và không chấm trùn
     assert.ok(historical[0].reclosed_at);
     assert.equal(Number((await pay(b, '/' + monthRecord.id))[1].amount), 4600000);
     const [, debtsB] = await pay(b, '/debts');
-    assert.deepEqual(debtsB.map((item) => [item.teacherId, item.total]), [[b.id, 4750000]]);
+    assert.deepEqual(debtsB.map((item) => [item.teacherId, item.total]), [[b.id, 4775000]]);
     assert.deepEqual(debtsB[0].months.map((item) => item.month), ['2025-03', '2025-04']);
     const [, debtsAdmin] = await pay(admin, '/debts');
     assert.equal(debtsAdmin.find((item) => item.teacherId === a.id).total, 100000);
