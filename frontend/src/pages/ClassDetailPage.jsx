@@ -19,6 +19,7 @@ import {
 } from '../utils/attachmentHelpers';
 import ClassMembersTab from '../components/class/ClassMembersTab';
 import ClassAttendanceTab from '../components/class/ClassAttendanceTab';
+import ClassTeachingPeriodsTab from '../components/class/ClassTeachingPeriodsTab';
 import ClassAssignmentsTab from '../components/class/ClassAssignmentsTab';
 import ClassQuizzesTab from '../components/class/ClassQuizzesTab';
 import ClassOnlineTab from '../components/class/ClassOnlineTab';
@@ -63,6 +64,8 @@ export default function ClassDetailPage() {
   const isAdmin = user?.role === 'admin';
   const isClassTeacher = canActAsClassTeacher(user, classData?.members);
   const canManageClass = isAdmin || isClassTeacher;
+  const canSeeTeachingPeriods = (user?.role === 'teacher' && isClassTeacher)
+    || (isAdmin && !['HG', 'EG'].includes(user?.admin_scope));
   const isStudent = user?.role === 'student';
   const classStudents = classData?.members?.filter((m) => m.role === 'student') || [];
   const primaryTeacher = useMemo(() => {
@@ -343,6 +346,7 @@ export default function ClassDetailPage() {
           { key: 'online', label: 'Lớp online', icon: 'bi-camera-video' },
           { key: 'members', label: 'Thành viên', icon: 'bi-people' },
           { key: 'attendance', label: 'Điểm danh', icon: 'bi-calendar-check' },
+          ...(canSeeTeachingPeriods ? [{ key: 'teaching-periods', label: 'Chấm công theo tiết', icon: 'bi-clock-history' }] : []),
         ]}
       >
           <Tab.Pane eventKey="lessons">
@@ -481,6 +485,9 @@ export default function ClassDetailPage() {
             />
           </Tab.Pane>
 
+          {canSeeTeachingPeriods && <Tab.Pane eventKey="teaching-periods">
+            <ClassTeachingPeriodsTab key={id} classId={id} />
+          </Tab.Pane>}
           <Tab.Pane eventKey="attendance">
             <ClassAttendanceTab
               classId={id}
