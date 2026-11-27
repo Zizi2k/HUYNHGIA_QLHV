@@ -78,6 +78,7 @@ router.use(authenticate, async (req, res, next) => {
 const handle = (fn) => async (req, res, next) => {
   try { await fn(req, res); } catch (err) { next(err); }
 };
+router.use('/photo-requests', require('./staffClockPhotoRoutes'));
 
 router.get('/', handle(async (req, res) => {
   const { id, admin, manager, teacher } = req.clockAccount;
@@ -86,7 +87,7 @@ router.get('/', handle(async (req, res) => {
   const current = Date.now();
   const [shifts] = await pool.query(`SELECT s.id,s.teacher_id,u.fullname AS teacher,s.started_ms,s.ended_ms,s.rest_minutes,s.payable_minutes,
     CASE WHEN im.shift_id IS NULL THEN 'self' ELSE 'excel' END AS source,
-    im.work_type,im.class_label,im.note AS import_note,
+    im.work_type,im.class_label,im.note AS import_note,ci.id AS inEvent,co.id AS outEvent,
     CASE WHEN ci.expires_ms>? AND ci.photo IS NOT NULL THEN ci.id ELSE NULL END AS inPhoto,
     CASE WHEN co.expires_ms>? AND co.photo IS NOT NULL THEN co.id ELSE NULL END AS outPhoto
     FROM staff_clock_shifts s JOIN users u ON u.id=s.teacher_id

@@ -238,6 +238,17 @@ test('MySQL: duyệt công theo tiết, không xem chéo và không chấm trùn
     ] };
     assert.equal((await json(admin, '/staff-departments/' + department.id, 'PUT', configuration))[0], 200);
     assert.equal((await clock(manager, '/evidence/' + saved.outPhoto)).status, 200);
+    const photoUrl = '/staff-clock/photo-requests';
+    assert.equal((await json(b, photoUrl + '/event/' + saved.outPhoto, 'POST', { reason: 'Ảnh mờ' }))[0], 403);
+    const [photoStatus, reqPhoto] = await json(manager, photoUrl + '/event/' + saved.outPhoto, 'POST', { reason: 'Ảnh mờ' });
+    assert.equal(photoStatus, 200, JSON.stringify(reqPhoto));
+    const uploadPhoto = () => { const form = new FormData(); form.append('photo', photo(), 'fixture-new.png'); return form; };
+    assert.equal((await clock(manager, '/photo-requests/' + reqPhoto.id + '/replace', uploadPhoto())).status, 403);
+    assert.equal((await clock(b, '/photo-requests/' + reqPhoto.id + '/replace', uploadPhoto())).status, 404);
+    const [beforePhoto] = await pool.query('SELECT lat,lng,shift_id FROM staff_clock_events WHERE id=?', [saved.outPhoto]);
+    assert.equal((await clock(a, '/photo-requests/' + reqPhoto.id + '/replace', uploadPhoto())).status, 200);
+    assert.equal((await clock(a, '/photo-requests/' + reqPhoto.id + '/replace', uploadPhoto())).status, 409);
+    assert.deepEqual((await pool.query('SELECT lat,lng,shift_id FROM staff_clock_events WHERE id=?', [saved.outPhoto]))[0], beforePhoto);
     assert.equal((await pay(manager, id))[0], 200);
     assert.equal((await pay(manager, '/' + hourRecord.id))[0], 404);
     assert.equal((await pay(manager, '/close', { teacherId: a.id, month: '2025-05' }))[0], 403);
