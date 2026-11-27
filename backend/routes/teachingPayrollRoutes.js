@@ -21,7 +21,8 @@ function endpoint(handler, adminOnly = false) {
       await ensureTeachingPeriodSchema();
       await ensurePayroll();
       res.set('Cache-Control', 'no-store');
-      res.json(await handler(req, account, admin));
+      const output = await handler(req, account, admin, res);
+      if (!res.headersSent) res.json(output);
     } catch (err) {
       if (!err.status) console.error('Teaching payroll:', err.message);
       res.status(err.status || 500).json({ message: err.status ? err.message : 'Không thể xử lý kỳ lương' });
@@ -76,8 +77,7 @@ router.post('/close', endpoint(async (req, account) => {
   });
 }, true));
 
-router.get('/:id', endpoint(async (req, account, admin) => {
-  const id = positiveId(req.params.id);
+async function detail(id, account, admin) {
   const [[row]] = await pool.query(`SELECT id,pay_month AS month,teacher_name AS name,teacher_code AS code,
     periods,amount_vnd AS amount,snapshot,closed_at FROM teaching_payroll WHERE id=? ${admin ? '' : 'AND teacher_id=?'}`,
   admin ? [id] : [id, account.id]);
@@ -86,6 +86,28 @@ router.get('/:id', endpoint(async (req, account, admin) => {
     note,voided_at,void_reason FROM teaching_payroll_entries WHERE payroll_id=? ORDER BY entry_date,id`, [id]);
   return { ...row, snapshot: typeof row.snapshot === 'string' ? JSON.parse(row.snapshot) : row.snapshot,
     entries, ...summarize(row.amount, entries) };
+}
+
+router.get('/:id', endpoint(async (req, account, admin) => detail(positiveId(req.params.id), account, admin)));
+
+router.get('/:id/export/:format', endpoint(async (req, account, admin, res) => {
+  const id = positiveId(req.params.id);
+  const format = req.params.format;
+  if (!['pdf', 'xlsx'].includes(format)) fail('Định dạng không hỗ trợ');
+  const row = await detail(id, account, admin);
+  const { payrollPdf, payrollExcel } = require('../utils/teachingPayrollExport');
+  const output = format === 'pdf' ? await payrollPdf(row) : await payrollExcel(row);
+  res.attachment(`luong-theo-tiet-${row.month}-${id}.${format}`).send(Buffer.from(output));
+}));
+
+router.get('/:id/entries/:entryId/receipt', endpoint(async (req, account, admin, res) => {
+  const id = positiveId(req.params.id);
+  const entryId = positiveId(req.params.entryId);
+  const row = await detail(id, account, admin);
+  const entry = row.entries.find((item) => item.id === entryId);
+  if (!entry) fail('Không tìm thấy giao dịch', 404);
+  const { payrollPdf } = require('../utils/teachingPayrollExport');
+  res.attachment(`phieu-giao-dich-${id}-${entryId}.pdf`).send(Buffer.from(await payrollPdf(row, entry)));
 }));
 
 router.post('/:id/entries', endpoint(async (req, account) => {

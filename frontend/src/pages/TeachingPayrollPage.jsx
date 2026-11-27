@@ -18,6 +18,7 @@ export default function TeachingPayrollPage() {
   const [feedback, setFeedback] = useState(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [exporting, setExporting] = useState('');
   const load = useCallback(async (signal) => {
     try {
       const { data: result } = await api.get(path, { params: { month }, signal });
@@ -37,6 +38,32 @@ export default function TeachingPayrollPage() {
     catch (err) { setFeedback({ error: true, text: errorText(err) }); }
   }
   function open(formValue) { setError(''); setForm(formValue); }
+  async function download(format, entryId) {
+    if (exporting || !detail) return;
+    const key = entryId ? 'receipt-' + entryId : format;
+    setExporting(key);
+    setFeedback(null);
+    try {
+      const base = path + '/' + detail.id;
+      const endpoint = entryId ? base + '/entries/' + entryId + '/receipt' : base + '/export/' + format;
+      const { data: blob } = await api.get(endpoint, { responseType: 'blob' });
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = entryId ? `phieu-giao-dich-${detail.id}-${entryId}.pdf` : `luong-theo-tiet-${detail.month}-${detail.id}.${format}`;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (err) {
+      const response = err.response?.data;
+      let text = 'Không tải được chứng từ. Vui lòng thử lại.';
+      if (response instanceof Blob) {
+        try { text = JSON.parse(await response.text()).message || text; } catch { /* dùng thông báo mặc định */ }
+      }
+      setFeedback({ error: true, text });
+    } finally { setExporting(''); }
+  }
   const field = (key) => (event) => setForm((old) => ({ ...old, [key]: event.target.value }));
   async function save(event) {
     event.preventDefault();
@@ -88,18 +115,24 @@ export default function TeachingPayrollPage() {
       {detail && <Modal.Body>
         {feedback && <Alert className="text-center" variant={feedback.error ? 'danger' : 'success'}>{feedback.text}</Alert>}
         <p>{detail.name} · {detail.code} · Kỳ {detail.month}</p>
+        <div className="d-flex gap-2 flex-wrap mb-3">
+          <Button variant="outline-primary" size="sm" disabled={Boolean(exporting)} onClick={() => download('pdf')}>{exporting === 'pdf' ? 'Đang xuất…' : 'Tải PDF để in'}</Button>
+          <Button variant="outline-success" size="sm" disabled={Boolean(exporting)} onClick={() => download('xlsx')}>{exporting === 'xlsx' ? 'Đang xuất…' : 'Tải Excel'}</Button>
+        </div>
         <Table responsive bordered size="sm"><thead><tr><th>Ngày</th><th>Lớp</th><th>Tiết</th><th>Đơn giá/tiết</th><th>Tiền công</th></tr></thead>
           <tbody>{detail.snapshot.map((row) => <tr key={row.id}><td>{row.date}</td><td>{row.className}</td><td>{row.periods}</td>
             <td>{format(row.rate)}</td><td>{format(row.amount)}</td></tr>)}</tbody></Table>
         <p><strong>{detail.periods} tiết · {format(detail.amount)}</strong><br />
           Đã ứng: {format(detail.advance)} · Đã trả: {format(detail.payment)} · Còn phải trả: {format(detail.remaining)}</p>
         <h3 className="h6">Giao dịch</h3>
-        <Table responsive size="sm"><thead><tr><th>Mã / Ngày</th><th>Loại / Phương thức</th><th>Số tiền</th><th>Ghi chú</th>{data?.admin && <th>Thao tác</th>}</tr></thead>
+        <Table responsive size="sm"><thead><tr><th>Mã / Ngày</th><th>Loại / Phương thức</th><th>Số tiền</th><th>Ghi chú</th><th>Thao tác</th></tr></thead>
           <tbody>{detail.entries.map((entry) => <tr key={entry.id}><td>#{entry.id} · {entry.date}</td>
             <td>{entry.kind === 'advance' ? 'Ứng lương' : 'Trả lương'} · {methods[entry.method]}</td><td>{format(entry.amount_vnd)}</td>
             <td>{entry.note}{entry.voided_at && <div>Đã hủy: {entry.void_reason}</div>}</td>
-            {data?.admin && <td>{!entry.voided_at && <Button variant="outline-danger" size="sm"
-              onClick={() => open({ mode: 'void', id: entry.id, reason: '' })}>Hủy</Button>}</td>}</tr>)}</tbody></Table>
+            <td><div className="d-flex gap-2 flex-wrap"><Button variant="outline-primary" size="sm" disabled={Boolean(exporting)}
+              onClick={() => download('pdf', entry.id)}>{exporting === 'receipt-' + entry.id ? 'Đang xuất…' : 'Tải phiếu'}</Button>
+              {data?.admin && !entry.voided_at && <Button variant="outline-danger" size="sm"
+                onClick={() => open({ mode: 'void', id: entry.id, reason: '' })}>Hủy</Button>}</div></td></tr>)}</tbody></Table>
         {data?.admin && detail.remaining > 0 && <Button onClick={() => open({
           mode: 'entry', kind: 'payment', method: 'transfer', date: dateVN(), amount: '', note: '', requestId: crypto.randomUUID(),
         })}>Ghi nhận ứng / trả lương</Button>}

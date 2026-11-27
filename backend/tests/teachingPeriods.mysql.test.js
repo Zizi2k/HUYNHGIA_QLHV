@@ -95,4 +95,17 @@ test('MySQL: duyệt công theo tiết, không xem chéo và không chấm trùn
     assert.equal(Number((await pay(a, '?month=2025-03'))[1].closed[0].payment), 150000);
     assert.equal((await pay(admin, id + '/entries/' + entry.id + '/void', { reason: 'Ghi nhầm' }))[0], 200);
     assert.equal((await pay(a, id))[1].remaining, 100000);
+    const exportFile = (account, suffix) => fetch(`http://127.0.0.1:${server.address().port}/teaching-payroll${id}${suffix}`, {
+      headers: { Authorization: 'Bearer ' + jwt.sign(account, secret) },
+    });
+    for (const suffix of ['/export/pdf', '/export/xlsx', '/entries/' + entry.id + '/receipt']) {
+      const forbidden = await exportFile(b, suffix);
+      assert.equal(forbidden.status, 404);
+      await forbidden.json();
+      const allowed = await exportFile(a, suffix);
+      assert.equal(allowed.status, 200);
+      assert.match(allowed.headers.get('Content-Disposition'), /attachment/);
+      const bytes = Buffer.from(await allowed.arrayBuffer());
+      assert.ok(bytes.subarray(0, 8).toString().startsWith(suffix.endsWith('xlsx') ? 'PK' : '%PDF-'));
+    }
   });

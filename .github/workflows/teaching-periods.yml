@@ -30,7 +30,7 @@ jobs:
           node-version: 24
       - run: npm ci --no-audit --no-fund
         working-directory: backend
-      - run: node --test tests/teachingPeriods.test.js tests/teachingPayroll.test.js tests/teachingPeriods.mysql.test.js
+      - run: node --test tests/teachingPeriods.test.js tests/teachingPayroll.test.js tests/teachingPayrollExport.test.js tests/teachingPeriods.mysql.test.js
         working-directory: backend
         env:
           TEACHING_PERIOD_MYSQL: '1'
