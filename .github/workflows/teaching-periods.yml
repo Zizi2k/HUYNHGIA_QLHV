@@ -1,0 +1,43 @@
+name: Teaching period integration
+on:
+  push:
+    branches: [feature/teaching-period-attendance]
+  pull_request:
+    paths: ['backend/**', 'frontend/**', '.github/workflows/teaching-periods.yml']
+permissions:
+  contents: read
+jobs:
+  integration:
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: fixture-root
+          MYSQL_DATABASE: teaching_period_test
+          MYSQL_USER: fixture
+          MYSQL_PASSWORD: fixture-password
+        ports: ['3306/tcp']
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: npm ci --no-audit --no-fund
+        working-directory: backend
+      - run: node --test tests/teachingPeriods.test.js tests/teachingPayroll.test.js tests/teachingPayrollExport.test.js tests/staffClock.test.js tests/staffClockImport.test.js tests/staffRota.test.js tests/staffEmail.test.js tests/teachingPeriods.mysql.test.js
+        working-directory: backend
+        env:
+          TEACHING_PERIOD_MYSQL: '1'
+          DB_HOST: 127.0.0.1
+          DB_PORT: ${{ job.services.mysql.ports[3306] }}
+          DB_NAME: teaching_period_test
+          DB_USER: fixture
+          DB_PASSWORD: fixture-password
+      - run: npm ci --no-audit --no-fund && npm run build
+        working-directory: frontend

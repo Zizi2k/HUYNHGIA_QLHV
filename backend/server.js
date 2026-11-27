@@ -45,6 +45,23 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/classes', classRoutes);
+app.use('/api/teaching-payroll', require('./routes/teachingPayrollRoutes'));
+app.use('/api/staff-departments', require('./routes/staffDepartmentRoutes'));
+app.use('/api/staff-rota', require('./routes/staffRotaRoutes'));
+const { tickStaffEmail } = require('./services/staffEmail');
+let emailTickRunning = false;
+setInterval(async () => {
+  if (emailTickRunning) return;
+  emailTickRunning = true;
+  try { await tickStaffEmail(); }
+  catch (err) { console.error('Staff email worker error:', err.code || 'unknown'); }
+  finally { emailTickRunning = false; }
+}, 60000).unref();
+const staffClock = require('./routes/staffClockRoutes');
+app.use('/api/staff-clock', staffClock);
+setInterval(() => staffClock.purgeExpiredClockPhotos().catch((err) => {
+  console.warn('Không thể dọn ảnh chấm công:', err.message);
+}), 3600000).unref();
 app.use('/api/lessons', lessonRoutes);
 app.use('/api/quizzes', quizRoutes);
 app.use('/api/assignments', assignmentRoutes);
