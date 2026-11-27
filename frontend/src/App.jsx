@@ -11,6 +11,7 @@ import UsersPage from './pages/UsersPage';
 import HonorPage from './pages/HonorPage';
 import AttendancePage from './pages/AttendancePage';
 import TeachingPayrollPage from './pages/TeachingPayrollPage';
+import StaffClockPage from './pages/StaffClockPage';
 import TuitionPage from './pages/TuitionPage';
 import FeeDebtPage from './pages/FeeDebtPage';
 import StudentsPage from './pages/StudentsPage';
@@ -39,6 +40,7 @@ function App() {
             <Route path="/honor" element={<HonorPage />} />
             <Route path="/attendance" element={<AttendancePage />} />
             <Route path="/teaching-payroll" element={<TeachingPayrollPage />} />
+            <Route path="/staff-clock" element={<StaffClockPage />} />
             <Route path="/tuition" element={<TuitionPage />} />
             <Route path="/fee-debts" element={<FeeDebtPage />} />
             <Route path="/students" element={<StudentsPage />} />

@@ -8,6 +8,7 @@ const { authenticate } = require('../middleware/auth');
 const { requireClassMember } = require('../middleware/classAccess');
 const routes = require('../routes/teachingPeriodRoutes');
 const payroll = require('../routes/teachingPayrollRoutes');
+const staffClock = require('../routes/staffClockRoutes');
 
 test('MySQL: duyệt công theo tiết, không xem chéo và không chấm trùng giữa hai lớp',
   { skip: process.env.TEACHING_PERIOD_MYSQL !== '1' }, async (t) => {
@@ -33,6 +34,7 @@ test('MySQL: duyệt công theo tiết, không xem chéo và không chấm trùn
     app.use(express.json());
     app.use('/classes/:id/teaching-periods', authenticate, requireClassMember('id'), routes);
     app.use('/teaching-payroll', payroll);
+    app.use('/staff-clock', staffClock);
     const server = app.listen(0, '127.0.0.1');
     await once(server, 'listening');
     t.after(() => new Promise((resolve) => server.close(resolve)));
@@ -123,4 +125,32 @@ test('MySQL: duyệt công theo tiết, không xem chéo và không chấm trùn
       const bytes = Buffer.from(await allowed.arrayBuffer());
       assert.ok(bytes.subarray(0, 8).toString().startsWith(suffix.endsWith('xlsx') ? 'PK' : '%PDF-'));
     }
+    const clock = (account, suffix = '', form) => fetch(`http://127.0.0.1:${server.address().port}/staff-clock${suffix}`, {
+      method: form ? 'POST' : 'GET', headers: { Authorization: 'Bearer ' + jwt.sign(account, secret) }, body: form,
+    });
+    const photo = () => new Blob([Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+j8pUAAAAASUVORK5CYII=', 'base64')], { type: 'image/png' });
+    const form = (requestId, includePhoto = true) => {
+      const f = new FormData();
+      for (const [key, value] of Object.entries({ requestId, lat: '10', lng: '106', accuracy: '12', rest: '0' })) f.append(key, value);
+      if (includePhoto) f.append('photo', photo(), 'fixture.png');
+      return f;
+    };
+    const key = '6bc3935b-40a4-4a1e-bb6c-535428e43a52';
+    assert.equal((await clock(a, '/in', form(key, false))).status, 400);
+    assert.equal((await clock(a, '/in', form(key))).status, 200);
+    assert.equal((await (await clock(a, '/in', form(key))).json()).repeated, true);
+    const key2 = '7bc3935b-40a4-4a1e-bb6c-535428e43a52';
+    assert.equal((await clock(a, '/in', form(key2))).status, 409);
+    const { open: shift } = await (await clock(a)).json();
+    await pool.query('UPDATE staff_clock_shifts SET started_ms=? WHERE id=?', [Date.now() - 3600000, shift.id]);
+    assert.equal((await clock(a, '/out', form(key2))).status, 200);
+    const { shifts } = await (await clock(a)).json();
+    const saved = shifts.find((item) => item.id === shift.id);
+    assert.ok(saved.ended_ms);
+    assert.equal((await clock(b, '/evidence/' + saved.inPhoto)).status, 404);
+    assert.equal((await clock(admin, '/evidence/' + saved.inPhoto)).status, 200);
+    await pool.query('UPDATE staff_clock_events SET expires_ms=? WHERE id=?', [Date.now() - 1000, saved.inPhoto]);
+    assert.equal((await clock(a, '/evidence/' + saved.inPhoto)).status, 404);
+    await staffClock.purgeExpiredClockPhotos();
+    assert.equal((await pool.query('SELECT photo FROM staff_clock_events WHERE id=?', [saved.inPhoto]))[0][0].photo, null);
   });
