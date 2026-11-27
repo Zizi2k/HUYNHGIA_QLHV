@@ -186,6 +186,14 @@ test('MySQL: duyệt công theo tiết, không xem chéo và không chấm trùn
     assert.equal((await shiftRate(b, hourlyShift))[0], 403);
     assert.equal((await shiftRate(admin, hourlyShift))[0], 200);
     assert.equal(Number((await pay(admin, '?month=2025-03'))[1].drafts.find((r) => r.teacherId === b.id).amount), 300000);
+    assert.equal((await shiftRate(admin, { ...hourlyShift, minutes: 75 }))[0], 400);
+    assert.equal((await shiftRate(admin, { ...hourlyShift, minutes: 30 }))[0], 200);
+    assert.equal(Number((await pay(admin, '?month=2025-03'))[1].drafts.find((r) => r.teacherId === b.id).amount), 210000);
+    const [splitStatus, splitRecord] = await pay(admin, '/close', { teacherId: b.id, month: '2025-03' });
+    assert.equal(splitStatus, 200, JSON.stringify(splitRecord));
+    const [, splitDetail] = await pay(b, '/' + splitRecord.id);
+    assert.deepEqual(splitDetail.snapshot.map((line) => [line.quantity,line.amount]), [[45,90000],[30,120000]]);
+    assert.equal((await pay(admin, '/' + splitRecord.id + '/reopen', { reason: 'Chuyển sang ca khoán' }))[0], 200);
     assert.equal((await shiftRate(admin, { mode: 'fixed', rate: 150000, note: 'Ca khoán' }))[0], 200);
     const [hourStatus, hourRecord] = await pay(admin, '/close', { teacherId: b.id, month: '2025-03' });
     assert.equal(hourStatus, 200, JSON.stringify(hourRecord));

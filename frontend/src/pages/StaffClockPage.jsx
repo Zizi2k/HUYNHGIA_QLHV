@@ -95,7 +95,8 @@ export default function StaffClockPage() {
     setBusy(true);
     setError('');
     try {
-      await api.put(`${path}/shifts/${rateEdit.id}/rate`, { ...rateEdit, rate: Number(rateEdit.rate) });
+      await api.put(`${path}/shifts/${rateEdit.id}/rate`, { mode: rateEdit.mode, note: rateEdit.note, rate: Number(rateEdit.rate),
+        minutes: rateEdit.mode === 'hour' && rateEdit.minutes !== '' ? Number(rateEdit.minutes) : null });
       setRateEdit(null);
       setNotice({ text: 'Đã lưu đơn giá ca.' });
       await load();
@@ -131,7 +132,8 @@ export default function StaffClockPage() {
               onClick={() => setPhotoEvent(item)}>Yêu cầu thay {item.label}</Button>)}
             {row.teacher_id === data.viewerId && <Button size="sm" variant="outline-secondary" onClick={() => setCorrectionShift(row)}>Đề nghị sửa</Button>}
             {data.admin && row.ended_ms != null && <Button size="sm" variant="outline-primary" onClick={() => {
-              setError(''); setRateEdit({ id: row.id, mode: row.rateMode || 'default', rate: row.rateOverride ?? '', note: row.rateNote || '' });
+              setError(''); setRateEdit({ id: row.id, mode: row.rateMode || 'default', rate: row.rateOverride ?? '', note: row.rateNote || '',
+                minutes: row.rateMinutes ?? '', payableMinutes: row.payable_minutes });
             }}>Đơn giá ca</Button>}
             {row.source === 'excel' ? <span>Excel · {row.work_type}{row.class_label ? ` · ${row.class_label}` : ''}<br />{row.import_note}</span>
               : !row.inPhoto && !row.outPhoto && <span>Không còn ảnh</span>}</div></td></tr>)}</tbody>
@@ -184,6 +186,12 @@ export default function StaffClockPage() {
               <Form.Label>{rateEdit.mode === 'hour' ? 'VND mỗi giờ' : 'VND mỗi ca'}</Form.Label>
               <Form.Control required type="number" step={1} min={0} max={1000000000} value={rateEdit.rate}
                 onChange={(e) => setRateEdit({ ...rateEdit, rate: e.target.value })} /></Form.Group>}
+            {rateEdit.mode === 'hour' && rateEdit.payableMinutes > 1 && <Form.Group controlId="shift-rate-minutes" className="mt-2">
+              <Form.Label>Số phút dùng đơn giá riêng</Form.Label>
+              <Form.Control type="number" step={1} min={1} max={rateEdit.payableMinutes - 1} value={rateEdit.minutes}
+                onChange={(e) => setRateEdit({ ...rateEdit, minutes: e.target.value })} />
+              <Form.Text>Để trống nếu áp dụng cho cả ca. Nếu nhập số phút, phần còn lại dùng đơn giá giờ của kỳ.</Form.Text>
+            </Form.Group>}
             <Form.Group controlId="shift-rate-note" className="mt-2"><Form.Label>Lý do đặt đơn giá</Form.Label>
               <Form.Control required as="textarea" maxLength={500} value={rateEdit.note}
                 onChange={(e) => setRateEdit({ ...rateEdit, note: e.target.value })} /></Form.Group>

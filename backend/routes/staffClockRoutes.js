@@ -4,7 +4,7 @@ const pool = require('../config/db');
 const { authenticate } = require('../middleware/auth');
 const { isSuperAdmin } = require('../utils/adminScope');
 const { fail, vietnamClock } = require('../services/teachingPeriods');
-const { transaction, ensurePayroll, assertUnclosed, isClosedPayroll } = require('../services/teachingPayroll');
+const { transaction, ensurePayroll, assertUnclosed, isClosedPayroll, clockPaySql } = require('../services/teachingPayroll');
 const { MAX_IMAGE, imageType, inputs, calculateClock, expiry, correctionFields } = require('../services/staffClock');
 const { ensureDepartments, managedBy, visibleTo, managerStatus, notifyClockReviewers } = require('../services/staffDepartments');
 const { createNotification } = require('../utils/notificationDb');
@@ -54,6 +54,10 @@ function ensureClock() {
       note VARCHAR(500) NOT NULL,actor_id INT NOT NULL,changed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
       FOREIGN KEY (shift_id) REFERENCES staff_clock_shifts(id)
     ) ENGINE=InnoDB`);
+    await pool.query(`CREATE TABLE IF NOT EXISTS staff_clock_rate_minutes (
+      shift_id INT PRIMARY KEY,minutes INT UNSIGNED NOT NULL,
+      FOREIGN KEY (shift_id) REFERENCES staff_clock_rates(shift_id)
+    ) ENGINE=InnoDB`);
   })().catch((err) => { schema = undefined; throw err; });
   return schema;
 }
@@ -93,12 +97,13 @@ router.get('/', handle(async (req, res) => {
   const [shifts] = await pool.query(`SELECT s.id,s.teacher_id,u.fullname AS teacher,s.started_ms,s.ended_ms,s.rest_minutes,s.payable_minutes,
     CASE WHEN im.shift_id IS NULL THEN 'self' ELSE 'excel' END AS source,
     im.work_type,im.class_label,im.note AS import_note,ci.id AS inEvent,co.id AS outEvent,
-    r.mode AS rateMode,r.rate_vnd AS rateOverride,r.note AS rateNote,
+    r.mode AS rateMode,r.rate_vnd AS rateOverride,r.note AS rateNote,m.minutes AS rateMinutes,
     CASE WHEN ci.expires_ms>? AND ci.photo IS NOT NULL THEN ci.id ELSE NULL END AS inPhoto,
     CASE WHEN co.expires_ms>? AND co.photo IS NOT NULL THEN co.id ELSE NULL END AS outPhoto
     FROM staff_clock_shifts s JOIN users u ON u.id=s.teacher_id
     LEFT JOIN staff_clock_import_details im ON im.shift_id=s.id
     LEFT JOIN staff_clock_rates r ON r.shift_id=s.id
+    LEFT JOIN staff_clock_rate_minutes m ON m.shift_id=s.id
     LEFT JOIN staff_clock_events ci ON ci.shift_id=s.id AND ci.direction='in'
     LEFT JOIN staff_clock_events co ON co.shift_id=s.id AND co.direction='out'
     WHERE s.vn_date>=CONCAT(?,'-01') AND s.vn_date<DATE_ADD(CONCAT(?,'-01'),INTERVAL 1 MONTH)
@@ -116,26 +121,31 @@ const positive = (raw) => {
 router.put('/shifts/:id/rate', handle(async (req, res) => {
   const actor = req.clockAccount, id = positive(req.params.id);
   if (!actor.admin) fail('Chỉ quản trị viên tổng được chỉnh đơn giá từng ca', 403);
-  const { mode, rate } = req.body || {};
+  const { mode, rate, minutes } = req.body || {};
   const note = typeof req.body?.note === 'string' ? req.body.note.trim() : '';
   if (!['default','hour','fixed'].includes(mode) || (mode !== 'default' && (!Number.isSafeInteger(rate) || rate < 0 || rate > 1000000000))
-    || !note || note.length > 500) fail('Đơn giá hoặc lý do chỉnh đơn giá không hợp lệ');
+    || (minutes != null && (mode !== 'hour' || !Number.isSafeInteger(minutes) || minutes < 1))
+    || !note || note.length > 500) fail('Đơn giá, số phút hoặc lý do chỉnh đơn giá không hợp lệ');
   await ensurePayroll();
   const [[target]] = await pool.query('SELECT teacher_id FROM staff_clock_shifts WHERE id=?', [id]);
   if (!target) fail('Không tìm thấy ca chấm công', 404);
   await transaction(async (conn) => {
     await conn.query('SELECT id FROM users WHERE id=? FOR UPDATE', [target.teacher_id]);
-    const [[shift]] = await conn.query("SELECT ended_ms,DATE_FORMAT(vn_date,'%Y-%m') AS month FROM staff_clock_shifts WHERE id=? FOR UPDATE", [id]);
+    const [[shift]] = await conn.query("SELECT ended_ms,payable_minutes,DATE_FORMAT(vn_date,'%Y-%m') AS month FROM staff_clock_shifts WHERE id=? FOR UPDATE", [id]);
     if (shift.ended_ms == null) fail('Ca chưa chấm ra', 409);
+    if (minutes != null && minutes >= Number(shift.payable_minutes)) fail('Số phút đơn giá riêng phải ít hơn số phút tính công của ca');
     await assertUnclosed(conn, target.teacher_id, shift.month);
     const [[plan]] = await conn.query('SELECT basis,rate_vnd FROM teaching_payroll_basis WHERE teacher_id=? AND pay_month=?', [target.teacher_id, shift.month]);
     if (plan?.basis !== 'hour') fail('Chỉ áp dụng đơn giá riêng cho kỳ lương theo giờ', 409);
     const value = mode === 'default' ? 0 : rate;
     await conn.query(`INSERT INTO staff_clock_rates (shift_id,mode,rate_vnd,note,actor_id) VALUES (?,?,?,?,?)
       ON DUPLICATE KEY UPDATE mode=?,rate_vnd=?,note=?,actor_id=?`, [id, mode, value, note, actor.id, mode, value, note, actor.id]);
-    const [[subtotal]] = await conn.query(`SELECT COALESCE(SUM(CASE WHEN r.mode='fixed' THEN r.rate_vnd
-      ELSE ROUND(s.payable_minutes*IF(r.mode='hour',r.rate_vnd,?)/60) END),0) AS amount
-      FROM staff_clock_shifts s LEFT JOIN staff_clock_rates r ON r.shift_id=s.id WHERE s.ended_ms IS NOT NULL
+    if (minutes == null) await conn.query('DELETE FROM staff_clock_rate_minutes WHERE shift_id=?', [id]);
+    else await conn.query('INSERT INTO staff_clock_rate_minutes (shift_id,minutes) VALUES (?,?) ON DUPLICATE KEY UPDATE minutes=?', [id, minutes, minutes]);
+    const [[subtotal]] = await conn.query(`SELECT COALESCE(SUM(${clockPaySql('p.rate_vnd')}),0) AS amount
+      FROM staff_clock_shifts s LEFT JOIN staff_clock_rates r ON r.shift_id=s.id
+      LEFT JOIN staff_clock_rate_minutes m ON m.shift_id=s.id CROSS JOIN (SELECT ? AS rate_vnd) p
+      WHERE s.ended_ms IS NOT NULL
       AND s.teacher_id=? AND s.vn_date>=CONCAT(?,'-01') AND s.vn_date<DATE_ADD(CONCAT(?,'-01'),INTERVAL 1 MONTH)`,
     [plan.rate_vnd, target.teacher_id, shift.month, shift.month]);
     const [[advances]] = await conn.query(`SELECT COALESCE(SUM(amount_vnd),0) AS amount FROM teaching_payroll_open_advances
@@ -209,6 +219,8 @@ router.post('/corrections/:id/apply', handle(async (req, res) => {
       AND started_ms<? AND (ended_ms IS NULL OR ended_ms>?) LIMIT 1 FOR UPDATE`, [teacher, row.shift_id, row.after_end, row.after_start]);
     if (conflicts.length) fail('Giờ đề nghị trùng một ca khác', 409);
     const { payableMinutes } = calculateClock(Number(row.after_start), Number(row.after_end), row.after_rest);
+    const [[split]] = await conn.query('SELECT minutes FROM staff_clock_rate_minutes WHERE shift_id=?', [row.shift_id]);
+    if (split && payableMinutes <= split.minutes) fail('Cần điều chỉnh số phút dùng đơn giá riêng trước khi giảm giờ công.', 409);
     if (row.payable_minutes != null && payableMinutes < row.payable_minutes) {
       const [[advance]] = await conn.query(`SELECT 1 AS held FROM teaching_payroll_open_advances o
         JOIN teaching_payroll_basis b ON b.teacher_id=o.teacher_id AND b.pay_month=o.pay_month

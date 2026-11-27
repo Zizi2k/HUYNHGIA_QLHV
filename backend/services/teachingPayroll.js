@@ -85,8 +85,17 @@ function salaryLines(plan, periods, clocks, month) {
   if (plan.basis === 'month') {
     return [{ id: 'month', date: month + '-01', className: plan.note, unit: 'month', quantity: 1, periods: 0, rate, amount: rate, status: 'approved' }];
   }
-  return clocks.map((shift) => {
+  return clocks.flatMap((shift) => {
     const minutes = Number(shift.minutes ?? 0);
+    const split = Number(shift.override_minutes ?? 0);
+    if (shift.ended_ms != null && shift.override_mode === 'hour' && split > 0) {
+      return [
+        { ...shift, id: 'hour-' + shift.id, className: 'Ca chấm công · giờ thường', unit: 'hour', quantity: minutes - split,
+          periods: 0, rate, amount: Math.round((minutes - split) * rate / 60), override_note: null, status: 'approved' },
+        { ...shift, id: 'hour-special-' + shift.id, className: 'Ca chấm công · giờ đơn giá riêng', unit: 'hour', quantity: split,
+          periods: 0, rate: Number(shift.override_rate), amount: Math.round(split * Number(shift.override_rate) / 60), status: 'approved' },
+      ];
+    }
     const fixed = shift.override_mode === 'fixed';
     const appliedRate = shift.override_mode === 'hour' || fixed ? Number(shift.override_rate) : rate;
     return { ...shift, id: 'hour-' + shift.id, className: 'Ca chấm công',
@@ -115,4 +124,10 @@ async function assertUnclosed(conn, teacherId, month) {
 const isClosedPayroll = (alias) => `NOT EXISTS (SELECT 1 FROM teaching_payroll_reopen_history h
   WHERE h.payroll_id=${alias}.id AND h.reclosed_at IS NULL)`;
 
-module.exports = { ensurePayroll, monthField, entryFields, summarize, transaction, assertUnclosed, basisFields, salaryLines, isClosedPayroll };
+// Used by the draft list and the advance validation; matches the per-line rounding above.
+const clockPaySql = (defaultRate) => `CASE WHEN r.mode='fixed' THEN r.rate_vnd
+  WHEN r.mode='hour' AND m.minutes IS NOT NULL THEN
+    ROUND((s.payable_minutes-m.minutes)*${defaultRate}/60)+ROUND(m.minutes*r.rate_vnd/60)
+  ELSE ROUND(s.payable_minutes*IF(r.mode='hour',r.rate_vnd,${defaultRate})/60) END`;
+
+module.exports = { ensurePayroll, monthField, entryFields, summarize, transaction, assertUnclosed, basisFields, salaryLines, isClosedPayroll, clockPaySql };
