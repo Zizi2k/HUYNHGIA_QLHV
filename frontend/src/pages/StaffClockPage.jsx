@@ -23,6 +23,7 @@ export default function StaffClockPage() {
   const [photo, setPhoto] = useState('');
   const [correctionShift, setCorrectionShift] = useState(null);
   const [photoEvent, setPhotoEvent] = useState(null);
+  const [rateEdit, setRateEdit] = useState(null);
   const [limit, setLimit] = useState(10);
   const load = useCallback(async (signal) => {
     try {
@@ -88,6 +89,19 @@ export default function StaffClockPage() {
       setPhoto(URL.createObjectURL(blob));
     } catch { setNotice({ failure: true, text: 'Không mở được ảnh. Ảnh có thể đã hết hạn hoặc bạn không có quyền xem.' }); }
   }
+  async function saveRate(event) {
+    event.preventDefault();
+    if (busy) return;
+    setBusy(true);
+    setError('');
+    try {
+      await api.put(`${path}/shifts/${rateEdit.id}/rate`, { ...rateEdit, rate: Number(rateEdit.rate) });
+      setRateEdit(null);
+      setNotice({ text: 'Đã lưu đơn giá ca.' });
+      await load();
+    } catch (err) { setError(msg(err)); }
+    finally { setBusy(false); }
+  }
 
   return <section>
     <h1 className="h3">Chấm công giáo viên</h1>
@@ -116,6 +130,9 @@ export default function StaffClockPage() {
             ].filter((item) => item.id).map((item) => <Button key={item.id} size="sm" variant="outline-secondary"
               onClick={() => setPhotoEvent(item)}>Yêu cầu thay {item.label}</Button>)}
             {row.teacher_id === data.viewerId && <Button size="sm" variant="outline-secondary" onClick={() => setCorrectionShift(row)}>Đề nghị sửa</Button>}
+            {data.admin && row.ended_ms != null && <Button size="sm" variant="outline-primary" onClick={() => {
+              setError(''); setRateEdit({ id: row.id, mode: row.rateMode || 'default', rate: row.rateOverride ?? '', note: row.rateNote || '' });
+            }}>Đơn giá ca</Button>}
             {row.source === 'excel' ? <span>Excel · {row.work_type}{row.class_label ? ` · ${row.class_label}` : ''}<br />{row.import_note}</span>
               : !row.inPhoto && !row.outPhoto && <span>Không còn ảnh</span>}</div></td></tr>)}</tbody>
       </Table>
@@ -151,6 +168,29 @@ export default function StaffClockPage() {
     <Modal centered show={Boolean(photo)} onHide={() => setPhoto('')}>
       <Modal.Header closeButton><Modal.Title>Ảnh minh chứng</Modal.Title></Modal.Header>
       <Modal.Body>{photo && <img className="img-fluid" src={photo} alt="Ảnh minh chứng chấm công" />}</Modal.Body>
+    </Modal>
+    <Modal centered show={Boolean(rateEdit)} onHide={() => { if (!busy) setRateEdit(null); }}>
+      <Form onSubmit={saveRate}>
+        <Modal.Header closeButton={!busy}><Modal.Title>Đơn giá ca #{rateEdit?.id}</Modal.Title></Modal.Header>
+        <Modal.Body>
+          {error && <Alert variant="danger">{error}</Alert>}
+          {rateEdit && <>
+            <p>Chỉ áp dụng cho ca đã chấm ra thuộc kỳ chưa chốt tính theo giờ.</p>
+            <Form.Group controlId="shift-rate-mode"><Form.Label>Cách tính ca</Form.Label>
+              <Form.Select value={rateEdit.mode} onChange={(e) => setRateEdit({ ...rateEdit, mode: e.target.value })}>
+                <option value="default">Đơn giá giờ của kỳ</option><option value="hour">Đơn giá giờ riêng</option><option value="fixed">Tiền cố định cho ca</option>
+              </Form.Select></Form.Group>
+            {rateEdit.mode !== 'default' && <Form.Group controlId="shift-rate-value" className="mt-2">
+              <Form.Label>{rateEdit.mode === 'hour' ? 'VND mỗi giờ' : 'VND mỗi ca'}</Form.Label>
+              <Form.Control required type="number" step={1} min={0} max={1000000000} value={rateEdit.rate}
+                onChange={(e) => setRateEdit({ ...rateEdit, rate: e.target.value })} /></Form.Group>}
+            <Form.Group controlId="shift-rate-note" className="mt-2"><Form.Label>Lý do đặt đơn giá</Form.Label>
+              <Form.Control required as="textarea" maxLength={500} value={rateEdit.note}
+                onChange={(e) => setRateEdit({ ...rateEdit, note: e.target.value })} /></Form.Group>
+          </>}
+        </Modal.Body>
+        <Modal.Footer><Button type="submit" disabled={busy}>{busy ? 'Đang lưu…' : 'Lưu đơn giá'}</Button></Modal.Footer>
+      </Form>
     </Modal>
   </section>;
 }

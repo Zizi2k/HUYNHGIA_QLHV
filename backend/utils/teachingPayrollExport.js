@@ -18,8 +18,9 @@ const summary = (row) => [
 const periodHeaders = ['Ngày', 'Nội dung', 'Bắt đầu', 'Kết thúc', 'Khối lượng', 'Đơn giá', 'Tiền công', 'Đơn vị tính'];
 const entryHeaders = ['Mã', 'Ngày', 'Loại', 'Phương thức', 'Số tiền', 'Nội dung', 'Trạng thái'];
 const periodRows = (row) => row.snapshot.map((s) => [
-  s.date, s.className, s.startTime ?? '', s.endTime ?? '', Number(s.quantity ?? s.periods), Number(s.rate), Number(s.amount),
-  s.unit === 'hour' ? 'Phút công / VND mỗi giờ' : s.unit === 'month' ? 'Tháng' : 'Tiết',
+  s.date, s.override_note ? s.className + ' · ' + s.override_note : s.className,
+  s.startTime ?? '', s.endTime ?? '', Number(s.quantity ?? s.periods), Number(s.rate), Number(s.amount),
+  s.unit === 'hour' ? 'Phút công / VND mỗi giờ' : s.unit === 'month' ? 'Tháng' : s.unit === 'shift' ? 'Ca' : 'Tiết',
 ]);
 const entryRows = (row) => row.entries.map((e) => [
   String(e.id), e.date, kindName[e.kind], methodName[e.method], Number(e.amount_vnd),
@@ -45,7 +46,7 @@ async function payrollExcel(row) {
   const info = workbook.addWorksheet('Tổng hợp');
   info.columns = [{ width: 25 }, { width: 42 }];
   const unit = row.snapshot[0]?.unit || 'period';
-  const basis = unit === 'hour' ? 'Theo giờ' : unit === 'month' ? 'Lương tháng' : 'Theo tiết';
+  const basis = unit === 'hour' || unit === 'shift' ? 'Theo giờ / ca' : unit === 'month' ? 'Lương tháng' : 'Theo tiết';
   info.addRows([[org], ['Phiếu lương giáo viên', String(row.id)], ['Kỳ', row.month],
     ['Giáo viên', row.name], ['Mã giáo viên', row.code], ['Cách tính', basis], ...summary(row)]);
   info.getRow(1).font = { bold: true };

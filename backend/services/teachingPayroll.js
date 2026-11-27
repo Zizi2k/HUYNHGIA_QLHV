@@ -87,8 +87,11 @@ function salaryLines(plan, periods, clocks, month) {
   }
   return clocks.map((shift) => {
     const minutes = Number(shift.minutes ?? 0);
+    const fixed = shift.override_mode === 'fixed';
+    const appliedRate = shift.override_mode === 'hour' || fixed ? Number(shift.override_rate) : rate;
     return { ...shift, id: 'hour-' + shift.id, className: 'Ca chấm công',
-      unit: 'hour', quantity: minutes, periods: 0, rate, amount: Math.round(minutes * rate / 60),
+      unit: fixed ? 'shift' : 'hour', quantity: fixed ? 1 : minutes, periods: 0, rate: appliedRate,
+      amount: shift.ended_ms == null ? 0 : fixed ? appliedRate : Math.round(minutes * appliedRate / 60),
       status: shift.ended_ms == null ? 'pending' : 'approved' };
   });
 }

@@ -176,11 +176,23 @@ test('MySQL: duyệt công theo tiết, không xem chéo và không chấm trùn
     await pool.query('UPDATE staff_clock_shifts SET ended_ms=?,payable_minutes=75 WHERE id=?', [startMs + 4500000, fixtureShift.insertId]);
     const [, preview] = await pay(admin, '?month=2025-03');
     assert.equal(Number(preview.drafts.find((draft) => draft.teacherId === b.id).amount), 150000);
+    async function shiftRate(account, data) {
+      const res = await fetch(`http://127.0.0.1:${server.address().port}/staff-clock/shifts/${fixtureShift.insertId}/rate`, {
+        method: 'PUT', headers: { Authorization: 'Bearer ' + jwt.sign(account, secret), 'Content-Type': 'application/json' }, body: JSON.stringify(data),
+      });
+      return [res.status, await res.json()];
+    }
+    const hourlyShift = { mode: 'hour', rate: 240000, note: 'Ca riêng' };
+    assert.equal((await shiftRate(b, hourlyShift))[0], 403);
+    assert.equal((await shiftRate(admin, hourlyShift))[0], 200);
+    assert.equal(Number((await pay(admin, '?month=2025-03'))[1].drafts.find((r) => r.teacherId === b.id).amount), 300000);
+    assert.equal((await shiftRate(admin, { mode: 'fixed', rate: 150000, note: 'Ca khoán' }))[0], 200);
     const [hourStatus, hourRecord] = await pay(admin, '/close', { teacherId: b.id, month: '2025-03' });
     assert.equal(hourStatus, 200, JSON.stringify(hourRecord));
     const [, hourDetail] = await pay(b, '/' + hourRecord.id);
     assert.equal(Number(hourDetail.amount), 150000);
-    assert.deepEqual(hourDetail.snapshot.map((line) => line.unit), ['hour']);
+    assert.deepEqual(hourDetail.snapshot.map((line) => line.unit), ['shift']);
+    assert.equal((await shiftRate(admin, hourlyShift))[0], 409);
     assert.equal((await pay(admin, hourPath, hourly, 'PUT'))[0], 409);
     assert.equal((await pay(admin, '/draft/3/2025-04/basis',
       { basis: 'month', rate: 4500000, note: 'Mức cố định tháng 4' }, 'PUT'))[0], 200);

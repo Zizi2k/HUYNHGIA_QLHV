@@ -11,7 +11,7 @@ const remaining = (row) => Number(row.amount) - Number(row.advance) - Number(row
 const errorText = (error) => error.response?.data?.message || 'Không thể xử lý yêu cầu';
 const methods = { cash: 'Tiền mặt', transfer: 'Chuyển khoản', other: 'Khác' };
 const bases = { period: 'Theo tiết', hour: 'Theo giờ', month: 'Lương tháng' };
-const units = { period: 'tiết', hour: 'giờ', month: 'tháng' };
+const units = { period: 'tiết', hour: 'giờ', month: 'tháng', shift: 'ca' };
 const quantity = (row) => row.unit === 'hour' ? `${row.quantity} phút` : `${row.quantity ?? row.periods} ${units[row.unit || 'period']}`;
 
 export default function TeachingPayrollPage() {
@@ -190,7 +190,7 @@ export default function TeachingPayrollPage() {
             </tr>)}</tbody></Table>}
         </div>}
         <Table responsive bordered size="sm"><thead><tr><th>Ngày</th><th>Nội dung</th><th>Khối lượng</th><th>Đơn giá</th><th>Tiền công</th></tr></thead>
-          <tbody>{detail.snapshot.map((row) => <tr key={row.id}><td>{row.date}</td><td>{row.className}</td><td>{quantity(row)}</td>
+          <tbody>{detail.snapshot.map((row) => <tr key={row.id}><td>{row.date}</td><td>{row.className}{row.override_note && <div className="small text-body-secondary">{row.override_note}</div>}</td><td>{quantity(row)}</td>
             <td>{format(row.rate)}/{units[row.unit || 'period']}</td><td>{format(row.amount)}</td></tr>)}</tbody></Table>
         <p><strong>Phải trả: {format(detail.amount)}</strong><br />
           Đã ứng: {format(detail.advance)} · Đã trả: {format(detail.payment)} · Còn phải trả: {format(detail.remaining)}</p>

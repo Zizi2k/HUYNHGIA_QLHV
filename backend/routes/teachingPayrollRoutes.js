@@ -40,7 +40,8 @@ const shiftFilter = "a.work_date>=CONCAT(?,'-01') AND a.work_date < DATE_ADD(CON
 const clockFilter = "s.vn_date>=CONCAT(?,'-01') AND s.vn_date<DATE_ADD(CONCAT(?,'-01'),INTERVAL 1 MONTH)";
 async function clocksFor(db, teacher, month) {
   const [rows] = await db.query(`SELECT s.id,DATE_FORMAT(s.vn_date,'%Y-%m-%d') AS date,s.ended_ms,
-    s.payable_minutes AS minutes,s.started_ms FROM staff_clock_shifts s WHERE s.teacher_id=? AND ${clockFilter}
+    s.payable_minutes AS minutes,s.started_ms,r.mode AS override_mode,r.rate_vnd AS override_rate,r.note AS override_note
+    FROM staff_clock_shifts s LEFT JOIN staff_clock_rates r ON r.shift_id=s.id WHERE s.teacher_id=? AND ${clockFilter}
     ORDER BY s.started_ms,s.id`, [teacher, month, month]);
   return rows.map((row) => ({ ...row,
     startTime: vietnamClock(Number(row.started_ms)).slice(11), endTime: row.ended_ms == null ? null : vietnamClock(Number(row.ended_ms)).slice(11) }));
@@ -80,13 +81,15 @@ router.get('/', endpoint(async (req, account, admin) => {
     AND NOT EXISTS (SELECT 1 FROM teaching_payroll p WHERE p.teacher_id=a.teacher_id AND p.pay_month=? AND ${isClosedPayroll('p')})
     GROUP BY a.teacher_id,u.fullname,u.code ORDER BY u.fullname,a.teacher_id`, [month, month, month, month]);
   const [plans] = await pool.query(`SELECT b.teacher_id AS teacherId,u.fullname AS name,u.code,b.basis,b.rate_vnd AS rate,b.note,
-    COALESCE(SUM(CASE WHEN s.ended_ms IS NOT NULL THEN ROUND(s.payable_minutes*b.rate_vnd/60) ELSE 0 END),0) AS hourlyAmount,
+    COALESCE(SUM(CASE WHEN s.ended_ms IS NOT NULL THEN CASE WHEN r.mode='fixed' THEN r.rate_vnd
+      ELSE ROUND(s.payable_minutes*IF(r.mode='hour',r.rate_vnd,b.rate_vnd)/60) END ELSE 0 END),0) AS hourlyAmount,
     COALESCE(SUM(CASE WHEN s.ended_ms IS NOT NULL THEN s.payable_minutes ELSE 0 END),0) AS minutes,
     SUM(s.id IS NOT NULL AND s.ended_ms IS NULL) AS openShifts,
     (SELECT COALESCE(SUM(o.amount_vnd),0) FROM teaching_payroll_open_advances o
      WHERE o.teacher_id=b.teacher_id AND o.pay_month=b.pay_month AND o.voided_at IS NULL) AS advance
     FROM teaching_payroll_basis b JOIN users u ON u.id=b.teacher_id
     LEFT JOIN staff_clock_shifts s ON s.teacher_id=b.teacher_id AND ${clockFilter}
+    LEFT JOIN staff_clock_rates r ON r.shift_id=s.id
     WHERE b.pay_month=? AND NOT EXISTS (SELECT 1 FROM teaching_payroll p WHERE p.teacher_id=b.teacher_id AND p.pay_month=b.pay_month AND ${isClosedPayroll('p')})
     GROUP BY b.teacher_id,b.pay_month,u.fullname,u.code,b.basis,b.rate_vnd,b.note`, [month, month, month]);
   const [teachers] = await pool.query("SELECT id,fullname AS name,code FROM users WHERE role='teacher' AND status=1 ORDER BY fullname,id");
