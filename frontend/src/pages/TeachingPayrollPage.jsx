@@ -138,7 +138,8 @@ export default function TeachingPayrollPage() {
       <Button variant="outline-primary" disabled={!data || debtLoading} onClick={viewDebts}>
         {debtLoading ? 'Đang tải…' : 'Xem công nợ lương'}
       </Button>
-      {(data?.admin || data?.manager) && <TeachingPayrollReport admin={data.admin} month={month} />}
+      {(data?.admin || data?.manager) && <TeachingPayrollReport admin={data.admin} month={month}
+        onOpenPayslip={data.admin ? view : undefined} />}
     </div>
     {!data && !feedback?.error && <p role="status">Đang tải…</p>}
     {data?.admin && <><div className="d-flex gap-2 align-items-center flex-wrap mb-2">
