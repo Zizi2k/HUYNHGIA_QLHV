@@ -58,6 +58,12 @@ function ensureClock() {
       shift_id INT PRIMARY KEY,minutes INT UNSIGNED NOT NULL,
       FOREIGN KEY (shift_id) REFERENCES staff_clock_rates(shift_id)
     ) ENGINE=InnoDB`);
+    await pool.query(`CREATE TABLE IF NOT EXISTS staff_clock_admin_changes (
+      id INT AUTO_INCREMENT PRIMARY KEY, shift_id INT NOT NULL, actor_id INT NOT NULL,
+      action ENUM('add','edit') NOT NULL, reason VARCHAR(500) NOT NULL,
+      before_data JSON NULL, after_data JSON NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      INDEX (shift_id,action,id), FOREIGN KEY (shift_id) REFERENCES staff_clock_shifts(id)
+    ) ENGINE=InnoDB`);
   })().catch((err) => { schema = undefined; throw err; });
   return schema;
 }
@@ -95,7 +101,8 @@ router.get('/', handle(async (req, res) => {
   if (typeof month !== 'string' || !/^20\d{2}-(0[1-9]|1[0-2])$/.test(month)) fail('Tháng không hợp lệ');
   const current = Date.now();
   const [shifts] = await pool.query(`SELECT s.id,s.teacher_id,u.fullname AS teacher,s.started_ms,s.ended_ms,s.rest_minutes,s.payable_minutes,
-    CASE WHEN im.shift_id IS NULL THEN 'self' ELSE 'excel' END AS source,
+    CASE WHEN EXISTS (SELECT 1 FROM staff_clock_admin_changes a WHERE a.shift_id=s.id AND a.action='add') THEN 'manual'
+      WHEN im.shift_id IS NULL THEN 'self' ELSE 'excel' END AS source,
     im.work_type,im.class_label,im.note AS import_note,ci.id AS inEvent,co.id AS outEvent,
     r.mode AS rateMode,r.rate_vnd AS rateOverride,r.note AS rateNote,m.minutes AS rateMinutes,
     CASE WHEN ci.expires_ms>? AND ci.photo IS NOT NULL THEN ci.id ELSE NULL END AS inPhoto,
@@ -110,7 +117,8 @@ router.get('/', handle(async (req, res) => {
     ${visibleTo('s.teacher_id', admin)} ORDER BY s.started_ms DESC LIMIT 200`,
   [current, current, month, month, ...(admin ? [] : [id, id])]);
   const [[open]] = !teacher ? [[]] : await pool.query('SELECT id,started_ms FROM staff_clock_shifts WHERE open_teacher=?', [id]);
-  res.json({ shifts, open: open ?? null, admin, manager, teacher, viewerId: id, month });
+  const [teachers] = admin ? await pool.query("SELECT id,fullname,code FROM users WHERE role='teacher' AND status=1 ORDER BY fullname,id") : [[]];
+  res.json({ shifts, teachers, open: open ?? null, admin, manager, teacher, viewerId: id, month });
 }));
 
 const positive = (raw) => {
@@ -118,6 +126,54 @@ const positive = (raw) => {
   if (!Number.isSafeInteger(id) || id < 1) fail('Mã bản ghi không hợp lệ');
   return id;
 };
+const saveAdminShift = handle(async (req, res) => {
+  const actor = req.clockAccount;
+  if (!actor.admin) fail('Chỉ quản trị viên tổng được chấm công bổ sung hoặc sửa trực tiếp', 403);
+  const shiftId = req.params.id ? positive(req.params.id) : null;
+  const next = correctionFields(req.body || {});
+  const target = shiftId ? (await pool.query('SELECT teacher_id FROM staff_clock_shifts WHERE id=?', [shiftId]))[0][0] : null;
+  if (shiftId && !target) fail('Không tìm thấy ca chấm công', 404);
+  const teacher = shiftId ? target.teacher_id : positive(req.body.teacherId);
+  const month = next.date.slice(0, 7);
+  await ensurePayroll();
+  const id = await transaction(async (conn) => {
+    const [[person]] = await conn.query("SELECT status FROM users WHERE id=? AND role='teacher' FOR UPDATE", [teacher]);
+    if (!person || (!shiftId && !person.status)) fail('Không tìm thấy giáo viên đang hoạt động', 404);
+    const [rows] = shiftId ? await conn.query(`SELECT started_ms,ended_ms,rest_minutes,payable_minutes,
+      DATE_FORMAT(vn_date,'%Y-%m') AS month FROM staff_clock_shifts WHERE id=? FOR UPDATE`, [shiftId]) : [[]];
+    const before = rows[0];
+    if (shiftId && !before) fail('Không tìm thấy ca chấm công', 404);
+    if (before && before.month !== month) fail('Không thể chuyển ca sang kỳ lương khác', 409);
+    await assertUnclosed(conn, teacher, month);
+    const [conflict] = await conn.query(`SELECT id FROM staff_clock_shifts WHERE teacher_id=? AND id<>?
+      AND started_ms<? AND (ended_ms IS NULL OR ended_ms>?) LIMIT 1 FOR UPDATE`, [teacher, shiftId || 0, next.end, next.start]);
+    if (conflict.length) fail('Giờ nhập trùng với một ca chấm công khác', 409);
+    const values = [next.date, next.start, next.end, next.rest, next.payableMinutes];
+    let id = shiftId;
+    if (before) {
+      const [[split]] = await conn.query('SELECT minutes FROM staff_clock_rate_minutes WHERE shift_id=?', [shiftId]);
+      if (split && next.payableMinutes <= split.minutes) fail('Cần điều chỉnh số phút dùng đơn giá riêng trước khi giảm giờ công', 409);
+      if (before.payable_minutes != null && next.payableMinutes < before.payable_minutes) {
+        const [[advance]] = await conn.query(`SELECT 1 AS held FROM teaching_payroll_open_advances o
+          JOIN teaching_payroll_basis b ON b.teacher_id=o.teacher_id AND b.pay_month=o.pay_month
+          WHERE o.teacher_id=? AND o.pay_month=? AND o.voided_at IS NULL AND b.basis='hour' LIMIT 1`, [teacher, month]);
+        if (advance) fail('Cần xử lý khoản ứng đang hiệu lực trước khi giảm giờ công', 409);
+      }
+      await conn.query(`UPDATE staff_clock_shifts SET vn_date=?,started_ms=?,ended_ms=?,rest_minutes=?,payable_minutes=? WHERE id=?`, [...values, id]);
+    } else {
+      const [shift] = await conn.query(`INSERT INTO staff_clock_shifts (teacher_id,vn_date,started_ms,ended_ms,rest_minutes,payable_minutes)
+        VALUES (?,?,?,?,?,?)`, [teacher, ...values]);
+      id = shift.insertId;
+    }
+    await conn.query(`INSERT INTO staff_clock_admin_changes (shift_id,actor_id,action,reason,before_data,after_data)
+      VALUES (?,?,?,?,?,?)`, [id, actor.id, before ? 'edit' : 'add', next.reason, before ? JSON.stringify(before) : null, JSON.stringify(next)]);
+    return id;
+  });
+  res.json({ id, minutes: next.payableMinutes });
+});
+router.post('/shifts/manual', saveAdminShift);
+router.put('/shifts/:id/manual', saveAdminShift);
+
 router.put('/shifts/:id/rate', handle(async (req, res) => {
   const actor = req.clockAccount, id = positive(req.params.id);
   if (!actor.admin) fail('Chỉ quản trị viên tổng được chỉnh đơn giá từng ca', 403);
