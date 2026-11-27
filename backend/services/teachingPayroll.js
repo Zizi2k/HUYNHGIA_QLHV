@@ -37,6 +37,12 @@ function ensurePayroll() {
       changed_by INT NOT NULL, changed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
       PRIMARY KEY (teacher_id,pay_month), FOREIGN KEY (teacher_id) REFERENCES users(id)
     ) ENGINE=InnoDB`);
+    await pool.query(`CREATE TABLE IF NOT EXISTS teaching_payroll_reopen_history (
+      id INT AUTO_INCREMENT PRIMARY KEY,payroll_id INT NOT NULL,actor_id INT NOT NULL,
+      reason VARCHAR(500) NOT NULL,previous JSON NOT NULL,
+      reopened_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,reclosed_at TIMESTAMP NULL,reclosed_by INT NULL,
+      INDEX (payroll_id,reclosed_at),FOREIGN KEY (payroll_id) REFERENCES teaching_payroll(id)
+    ) ENGINE=InnoDB`);
   })().catch((err) => { schema = undefined; throw err; });
   return schema;
 }
@@ -100,8 +106,10 @@ async function transaction(run) {
 }
 async function assertUnclosed(conn, teacherId, month) {
   // All callers first lock the same teacher row in users, so no gap lock is needed.
-  const [closed] = await conn.query('SELECT id FROM teaching_payroll WHERE teacher_id=? AND pay_month=?', [teacherId, month]);
+  const [closed] = await conn.query(`SELECT p.id FROM teaching_payroll p WHERE p.teacher_id=? AND p.pay_month=? AND ${isClosedPayroll('p')}`, [teacherId, month]);
   if (closed.length) fail('Kỳ lương đã chốt, không thể thay đổi công của tháng này', 409);
 }
+const isClosedPayroll = (alias) => `NOT EXISTS (SELECT 1 FROM teaching_payroll_reopen_history h
+  WHERE h.payroll_id=${alias}.id AND h.reclosed_at IS NULL)`;
 
-module.exports = { ensurePayroll, monthField, entryFields, summarize, transaction, assertUnclosed, basisFields, salaryLines };
+module.exports = { ensurePayroll, monthField, entryFields, summarize, transaction, assertUnclosed, basisFields, salaryLines, isClosedPayroll };

@@ -18,6 +18,7 @@ export default function TeachingPayrollPage() {
   const [month, setMonth] = useState(dateVN().slice(0, 7));
   const [data, setData] = useState(null);
   const [detail, setDetail] = useState(null);
+  const [reopenLog, setReopenLog] = useState(null);
   const [debts, setDebts] = useState(null);
   const [debtLoading, setDebtLoading] = useState(false);
   const [draftDetail, setDraftDetail] = useState(null);
@@ -41,7 +42,12 @@ export default function TeachingPayrollPage() {
   }, [load]);
   async function view(id) {
     setFeedback(null);
+    setReopenLog(null);
     try { setDetail((await api.get(path + '/' + id)).data); }
+    catch (err) { setFeedback({ error: true, text: errorText(err) }); }
+  }
+  async function viewReopenLog() {
+    try { setReopenLog((await api.get(path + '/' + detail.id + '/reopen-history')).data); }
     catch (err) { setFeedback({ error: true, text: errorText(err) }); }
   }
   async function viewDebts() {
@@ -91,6 +97,9 @@ export default function TeachingPayrollPage() {
     try {
       if (form.mode === 'close') {
         await api.post(path + '/close', { teacherId: form.teacher.teacherId, month });
+      } else if (form.mode === 'reopen') {
+        await api.post(path + '/' + detail.id + '/reopen', { reason: form.reason });
+        setDetail(null);
       } else if (form.mode === 'basis') {
         await api.put(path + '/draft/' + form.teacherId + '/' + month + '/basis',
           { basis: form.basis, rate: Number(form.rate), note: form.note });
@@ -104,9 +113,10 @@ export default function TeachingPayrollPage() {
         await api.post(path + '/' + detail.id + '/entries/' + form.id + '/void', { reason: form.reason });
       }
       setForm(null);
-      setFeedback({ text: form.mode === 'close' ? 'Đã chốt kỳ lương.' : form.mode === 'basis' ? 'Đã lưu cách tính lương.' : 'Đã cập nhật giao dịch.' });
+      setFeedback({ text: form.mode === 'close' ? 'Đã chốt kỳ lương.' : form.mode === 'reopen' ? 'Đã mở lại kỳ lương.'
+        : form.mode === 'basis' ? 'Đã lưu cách tính lương.' : 'Đã cập nhật giao dịch.' });
       await load();
-      if (detail) setDetail((await api.get(path + '/' + detail.id)).data);
+      if (detail && form.mode !== 'reopen') setDetail((await api.get(path + '/' + detail.id)).data);
       if (draftDetail) await viewDraft(draftDetail.teacher);
     } catch (err) { setError(errorText(err)); }
     finally { setBusy(false); }
@@ -167,7 +177,18 @@ export default function TeachingPayrollPage() {
         <div className="d-flex gap-2 flex-wrap mb-3">
           <Button variant="outline-primary" size="sm" disabled={Boolean(exporting)} onClick={() => download('pdf')}>{exporting === 'pdf' ? 'Đang xuất…' : 'Tải PDF để in'}</Button>
           <Button variant="outline-success" size="sm" disabled={Boolean(exporting)} onClick={() => download('xlsx')}>{exporting === 'xlsx' ? 'Đang xuất…' : 'Tải Excel'}</Button>
+          {data?.admin && <Button variant="outline-secondary" size="sm" onClick={viewReopenLog}>Lịch sử mở lại</Button>}
+          {data?.admin && detail.entries.length === 0 && <Button variant="outline-warning" size="sm"
+            onClick={() => open({ mode: 'reopen', reason: '' })}>Mở lại kỳ</Button>}
         </div>
+        {reopenLog && <div className="mb-3">
+          {reopenLog.length === 0 ? <p>Chưa từng mở lại kỳ này.</p> : <Table responsive bordered size="sm">
+            <thead><tr><th>Lần mở lại</th><th>Người thực hiện</th><th>Lý do</th><th>Phải trả trong bản chốt cũ</th></tr></thead>
+            <tbody>{reopenLog.map((item) => <tr key={item.id}>
+              <td>{new Date(item.reopened_at).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' })}</td>
+              <td>#{item.actor_id}</td><td>{item.reason}</td><td>{format(item.previous.amount)}</td>
+            </tr>)}</tbody></Table>}
+        </div>}
         <Table responsive bordered size="sm"><thead><tr><th>Ngày</th><th>Nội dung</th><th>Khối lượng</th><th>Đơn giá</th><th>Tiền công</th></tr></thead>
           <tbody>{detail.snapshot.map((row) => <tr key={row.id}><td>{row.date}</td><td>{row.className}</td><td>{quantity(row)}</td>
             <td>{format(row.rate)}/{units[row.unit || 'period']}</td><td>{format(row.amount)}</td></tr>)}</tbody></Table>
@@ -203,11 +224,16 @@ export default function TeachingPayrollPage() {
     </Modal>
     <Modal centered show={Boolean(form)} onHide={() => { if (!busy) setForm(null); }}>
       <Form onSubmit={save}>
-        <Modal.Header closeButton={!busy}><Modal.Title>{{ close: 'Chốt kỳ lương', basis: 'Cách tính lương theo tháng', entry: 'Ghi nhận ứng / trả lương', void: 'Hủy giao dịch',
+        <Modal.Header closeButton={!busy}><Modal.Title>{{ close: 'Chốt kỳ lương', reopen: 'Mở lại kỳ lương', basis: 'Cách tính lương theo tháng', entry: 'Ghi nhận ứng / trả lương', void: 'Hủy giao dịch',
           'draft-entry': 'Ghi nhận ứng trước kỳ', 'draft-void': 'Hủy khoản ứng trước kỳ' }[form?.mode]}</Modal.Title></Modal.Header>
         <Modal.Body>
           {error && <Alert variant="danger" className="text-center">{error}</Alert>}
           {form?.mode === 'close' && <p>Chốt lương <strong>{bases[form.teacher.basis]?.toLowerCase()}</strong> cho <strong>{form.teacher.name}</strong> tháng {month} với số tiền <strong>{format(form.teacher.amount)}</strong>? Cách tính và dữ liệu nguồn của kỳ sẽ được giữ nguyên.</p>}
+          {form?.mode === 'reopen' && <Form.Group controlId="pay-reopen-reason">
+            <p>Phiếu #{detail?.id} được tạm ẩn khỏi báo cáo cho tới khi chốt lại. Bản chốt cũ vẫn được lưu.</p>
+            <Form.Label>Lý do mở lại</Form.Label>
+            <Form.Control as="textarea" required maxLength={500} value={form.reason} onChange={field('reason')} />
+          </Form.Group>}
           {form?.mode === 'basis' && <>
             <Form.Group controlId="pay-basis-teacher" className="mb-2"><Form.Label>Giáo viên</Form.Label>
               <Form.Select required value={form.teacherId} onChange={(event) => {

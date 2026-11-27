@@ -4,7 +4,7 @@ const pool = require('../config/db');
 const { authenticate } = require('../middleware/auth');
 const { isSuperAdmin } = require('../utils/adminScope');
 const { fail, vietnamClock } = require('../services/teachingPeriods');
-const { transaction, ensurePayroll, assertUnclosed } = require('../services/teachingPayroll');
+const { transaction, ensurePayroll, assertUnclosed, isClosedPayroll } = require('../services/teachingPayroll');
 const { MAX_IMAGE, imageType, inputs, calculateClock, expiry, correctionFields } = require('../services/staffClock');
 const { ensureDepartments, managedBy, visibleTo, managerStatus, notifyClockReviewers } = require('../services/staffDepartments');
 const { createNotification } = require('../utils/notificationDb');
@@ -218,7 +218,7 @@ async function validateImport(db, records, lock) {
       result.push({ ...base, status: 'error', error: 'Mã và họ tên không khớp một tài khoản giáo viên đang hoạt động' });
       continue;
     }
-    const [[closed]] = await db.query(`SELECT id FROM teaching_payroll WHERE teacher_id=? AND pay_month=?${lock ? ' FOR UPDATE' : ''}`, [person.id, row.date.slice(0, 7)]);
+    const [[closed]] = await db.query(`SELECT p.id FROM teaching_payroll p WHERE p.teacher_id=? AND p.pay_month=? AND ${isClosedPayroll('p')}${lock ? ' FOR UPDATE' : ''}`, [person.id, row.date.slice(0, 7)]);
     const [overlap] = await db.query(`SELECT started_ms,ended_ms,rest_minutes FROM staff_clock_shifts
       WHERE teacher_id=? AND started_ms<? AND (ended_ms IS NULL OR ended_ms>?)${lock ? ' FOR UPDATE' : ''}`,
     [person.id, row.ended, row.started]);

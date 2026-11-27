@@ -3,7 +3,7 @@ const pool = require('../config/db');
 const { authenticate } = require('../middleware/auth');
 const { isSuperAdmin } = require('../utils/adminScope');
 const { fail, vietnamClock } = require('../services/teachingPeriods');
-const { ensurePayroll, monthField, entryFields, summarize, transaction, assertUnclosed, basisFields, salaryLines } = require('../services/teachingPayroll');
+const { ensurePayroll, monthField, entryFields, summarize, transaction, assertUnclosed, basisFields, salaryLines, isClosedPayroll } = require('../services/teachingPayroll');
 const { ensureTeachingPeriodSchema } = require('./teachingPeriodRoutes');
 const { ensureClock } = require('./staffClockRoutes');
 const { ensureDepartments, visibleTo, managerStatus } = require('../services/staffDepartments');
@@ -66,7 +66,7 @@ router.get('/', endpoint(async (req, account, admin) => {
     p.periods,p.amount_vnd AS amount,COALESCE(SUM(CASE WHEN e.voided_at IS NULL AND e.kind='advance' THEN e.amount_vnd ELSE 0 END),0) AS advance,
     COALESCE(SUM(CASE WHEN e.voided_at IS NULL AND e.kind='payment' THEN e.amount_vnd ELSE 0 END),0) AS payment
     FROM teaching_payroll p LEFT JOIN teaching_payroll_entries e ON e.payroll_id=p.id
-    WHERE p.pay_month=? ${visibleTo('p.teacher_id', admin)} GROUP BY p.id ORDER BY p.teacher_name,p.id`,
+    WHERE p.pay_month=? AND ${isClosedPayroll('p')} ${visibleTo('p.teacher_id', admin)} GROUP BY p.id ORDER BY p.teacher_name,p.id`,
   admin ? [month] : [month, account.id, account.id]);
   if (!admin) return { month, closed, drafts: [], admin, manager: await managerStatus(pool, account.id) };
   const [drafts] = await pool.query(`SELECT a.teacher_id AS teacherId,u.fullname AS name,u.code,
@@ -77,7 +77,7 @@ router.get('/', endpoint(async (req, account, admin) => {
      WHERE o.teacher_id=a.teacher_id AND o.pay_month=? AND o.voided_at IS NULL) AS advance
     FROM teaching_period_attendance a JOIN users u ON u.id=a.teacher_id
     WHERE ${shiftFilter} AND a.status IN ('approved','pending')
-    AND NOT EXISTS (SELECT 1 FROM teaching_payroll p WHERE p.teacher_id=a.teacher_id AND p.pay_month=?)
+    AND NOT EXISTS (SELECT 1 FROM teaching_payroll p WHERE p.teacher_id=a.teacher_id AND p.pay_month=? AND ${isClosedPayroll('p')})
     GROUP BY a.teacher_id,u.fullname,u.code ORDER BY u.fullname,a.teacher_id`, [month, month, month, month]);
   const [plans] = await pool.query(`SELECT b.teacher_id AS teacherId,u.fullname AS name,u.code,b.basis,b.rate_vnd AS rate,b.note,
     COALESCE(SUM(CASE WHEN s.ended_ms IS NOT NULL THEN ROUND(s.payable_minutes*b.rate_vnd/60) ELSE 0 END),0) AS hourlyAmount,
@@ -87,7 +87,7 @@ router.get('/', endpoint(async (req, account, admin) => {
      WHERE o.teacher_id=b.teacher_id AND o.pay_month=b.pay_month AND o.voided_at IS NULL) AS advance
     FROM teaching_payroll_basis b JOIN users u ON u.id=b.teacher_id
     LEFT JOIN staff_clock_shifts s ON s.teacher_id=b.teacher_id AND ${clockFilter}
-    WHERE b.pay_month=? AND NOT EXISTS (SELECT 1 FROM teaching_payroll p WHERE p.teacher_id=b.teacher_id AND p.pay_month=b.pay_month)
+    WHERE b.pay_month=? AND NOT EXISTS (SELECT 1 FROM teaching_payroll p WHERE p.teacher_id=b.teacher_id AND p.pay_month=b.pay_month AND ${isClosedPayroll('p')})
     GROUP BY b.teacher_id,b.pay_month,u.fullname,u.code,b.basis,b.rate_vnd,b.note`, [month, month, month]);
   const [teachers] = await pool.query("SELECT id,fullname AS name,code FROM users WHERE role='teacher' AND status=1 ORDER BY fullname,id");
   const rows = new Map(drafts.map((row) => [row.teacherId, { ...row, basis: 'period' }]));
@@ -141,16 +141,26 @@ router.post('/close', endpoint(async (req, account) => {
     if (!shifts.length) fail('Chưa có dữ liệu công hợp lệ để chốt');
     const periods = shifts.reduce((sum, s) => sum + s.periods, 0);
     const amount = shifts.reduce((sum, s) => sum + Number(s.amount), 0);
-    const [record] = await conn.query(`INSERT INTO teaching_payroll
+    const [[existing]] = await conn.query('SELECT id FROM teaching_payroll WHERE teacher_id=? AND pay_month=? FOR UPDATE', [teacher, month]);
+    let payrollId = existing?.id;
+    if (existing) {
+      await conn.query(`UPDATE teaching_payroll SET teacher_name=?,teacher_code=?,periods=?,amount_vnd=?,snapshot=?,closed_by=?,
+        closed_at=CURRENT_TIMESTAMP WHERE id=?`, [person.fullname, person.code, periods, amount, JSON.stringify(shifts), account.id, payrollId]);
+      await conn.query(`UPDATE teaching_payroll_reopen_history SET reclosed_at=CURRENT_TIMESTAMP,reclosed_by=?
+        WHERE payroll_id=? AND reclosed_at IS NULL`, [account.id, payrollId]);
+    } else {
+      const [record] = await conn.query(`INSERT INTO teaching_payroll
       (teacher_id,pay_month,teacher_name,teacher_code,periods,amount_vnd,snapshot,closed_by)
       VALUES (?,?,?,?,?,?,?,?)`, [teacher, month, person.fullname, person.code, periods, amount, JSON.stringify(shifts), account.id]);
+      payrollId = record.insertId;
+    }
     await conn.query(`INSERT INTO teaching_payroll_entries
       (payroll_id,request_id,kind,method,amount_vnd,entry_date,note,created_by,created_at,voided_by,voided_at,void_reason)
       SELECT ?,request_id,'advance',method,amount_vnd,entry_date,note,created_by,created_at,voided_by,voided_at,void_reason
-      FROM teaching_payroll_open_advances WHERE teacher_id=? AND pay_month=?`, [record.insertId, teacher, month]);
+      FROM teaching_payroll_open_advances WHERE teacher_id=? AND pay_month=?`, [payrollId, teacher, month]);
     await createNotification(conn, { userId: teacher, type: 'staff_payroll', title: 'Kỳ lương đã được chốt',
       body: `Kỳ ${month} đã chốt. Đăng nhập để xem phiếu lương.`, linkPath: '/teaching-payroll', sentBy: account.id });
-    return { id: record.insertId };
+    return { id: payrollId };
   });
 }, true));
 
@@ -206,7 +216,7 @@ router.post('/draft/:teacherId/:month/advances/:entryId/void', endpoint(async (r
 
 async function detail(id, account, admin) {
   const [[row]] = await pool.query(`SELECT id,pay_month AS month,teacher_name AS name,teacher_code AS code,
-    periods,amount_vnd AS amount,snapshot,closed_at FROM teaching_payroll p WHERE id=? ${visibleTo('p.teacher_id', admin)}`,
+    periods,amount_vnd AS amount,snapshot,closed_at FROM teaching_payroll p WHERE id=? AND ${isClosedPayroll('p')} ${visibleTo('p.teacher_id', admin)}`,
   admin ? [id] : [id, account.id, account.id]);
   if (!row) fail('Không tìm thấy kỳ lương', 404);
   const [entries] = await pool.query(`SELECT id,kind,method,amount_vnd,DATE_FORMAT(entry_date,'%Y-%m-%d') AS date,
@@ -240,7 +250,7 @@ async function loadReport(req, account, admin) {
     COALESCE(SUM(CASE WHEN e.voided_at IS NULL AND e.kind='advance' THEN e.amount_vnd ELSE 0 END),0) AS advance,
     COALESCE(SUM(CASE WHEN e.voided_at IS NULL AND e.kind='payment' THEN e.amount_vnd ELSE 0 END),0) AS payment
     FROM teaching_payroll p LEFT JOIN teaching_payroll_entries e ON e.payroll_id=p.id
-    WHERE p.pay_month LIKE ? ${departmentId ? `AND EXISTS (SELECT 1 FROM staff_department_assignments m JOIN staff_departments d ON d.id=m.department_id AND d.active=1
+    WHERE p.pay_month LIKE ? AND ${isClosedPayroll('p')} ${departmentId ? `AND EXISTS (SELECT 1 FROM staff_department_assignments m JOIN staff_departments d ON d.id=m.department_id AND d.active=1
       WHERE m.department_id=? AND m.membership='member' AND m.user_id=p.teacher_id
       ${admin ? '' : "AND EXISTS (SELECT 1 FROM staff_department_assignments a WHERE a.department_id=d.id AND a.user_id=? AND a.membership='manager')"})` : ''}
     GROUP BY p.id ORDER BY p.pay_month,p.teacher_name,p.id`,
@@ -272,7 +282,7 @@ router.get('/debts', endpoint(async (_req, account, admin) => {
     COALESCE(SUM(CASE WHEN e.voided_at IS NULL AND e.kind='advance' THEN e.amount_vnd ELSE 0 END),0) AS advance,
     COALESCE(SUM(CASE WHEN e.voided_at IS NULL AND e.kind='payment' THEN e.amount_vnd ELSE 0 END),0) AS payment
     FROM teaching_payroll p LEFT JOIN teaching_payroll_entries e ON e.payroll_id=p.id
-    WHERE 1=1 ${visibleTo('p.teacher_id', admin)} GROUP BY p.id ORDER BY p.teacher_name,p.pay_month,p.id`, admin ? [] : [account.id, account.id]);
+    WHERE ${isClosedPayroll('p')} ${visibleTo('p.teacher_id', admin)} GROUP BY p.id ORDER BY p.teacher_name,p.pay_month,p.id`, admin ? [] : [account.id, account.id]);
   const groups = new Map();
   for (const row of rows) {
     const remaining = Number(row.amount) - Number(row.advance) - Number(row.payment);
@@ -287,6 +297,35 @@ router.get('/debts', endpoint(async (_req, account, admin) => {
   return [...groups.values()];
 }));
 router.get('/:id', endpoint(async (req, account, admin) => detail(positiveId(req.params.id), account, admin)));
+router.get('/:id/reopen-history', endpoint(async (req) => {
+  const id = positiveId(req.params.id);
+  const [rows] = await pool.query(`SELECT id,actor_id,reason,previous,reopened_at,reclosed_at,reclosed_by
+    FROM teaching_payroll_reopen_history WHERE payroll_id=? ORDER BY id DESC`, [id]);
+  return rows.map((row) => ({ ...row, previous: typeof row.previous === 'string' ? JSON.parse(row.previous) : row.previous }));
+}, true));
+router.post('/:id/reopen', endpoint(async (req, account) => {
+  const id = positiveId(req.params.id);
+  const reason = typeof req.body?.reason === 'string' ? req.body.reason.trim() : '';
+  if (!reason || reason.length > 500) fail('Nhập lý do mở lại kỳ (tối đa 500 ký tự)');
+  const [[target]] = await pool.query('SELECT teacher_id FROM teaching_payroll WHERE id=?', [id]);
+  if (!target) fail('Không tìm thấy kỳ lương', 404);
+  return transaction(async (conn) => {
+    await conn.query('SELECT id FROM users WHERE id=? FOR UPDATE', [target.teacher_id]);
+    const [[row]] = await conn.query('SELECT * FROM teaching_payroll WHERE id=? FOR UPDATE', [id]);
+    const [[open]] = await conn.query('SELECT id FROM teaching_payroll_reopen_history WHERE payroll_id=? AND reclosed_at IS NULL', [id]);
+    if (open) fail('Kỳ lương này đã được mở lại', 409);
+    const [[entry]] = await conn.query('SELECT id FROM teaching_payroll_entries WHERE payroll_id=? LIMIT 1', [id]);
+    if (entry) fail('Kỳ đã có lịch sử ứng hoặc trả lương, không thể mở lại', 409);
+    const archived = { month: row.pay_month, name: row.teacher_name, code: row.teacher_code, periods: row.periods,
+      amount: row.amount_vnd, closedBy: row.closed_by, closedAt: row.closed_at,
+      snapshot: typeof row.snapshot === 'string' ? JSON.parse(row.snapshot) : row.snapshot };
+    const [change] = await conn.query('INSERT INTO teaching_payroll_reopen_history (payroll_id,actor_id,reason,previous) VALUES (?,?,?,?)',
+      [id, account.id, reason, JSON.stringify(archived)]);
+    await createNotification(conn, { userId: row.teacher_id, type: 'staff_payroll', title: 'Kỳ lương được mở lại',
+      body: `Kỳ ${row.pay_month} đang được rà soát lại.`, linkPath: '/teaching-payroll', sentBy: account.id });
+    return { id, historyId: change.insertId };
+  });
+}, true));
 
 router.get('/:id/export/:format', endpoint(async (req, account, admin, res) => {
   const id = positiveId(req.params.id);
@@ -314,6 +353,8 @@ router.post('/:id/entries', endpoint(async (req, account) => {
   return transaction(async (conn) => {
     const [[payroll]] = await conn.query('SELECT teacher_id,pay_month,amount_vnd FROM teaching_payroll WHERE id=? FOR UPDATE', [id]);
     if (!payroll) fail('Không tìm thấy kỳ lương', 404);
+    const [[open]] = await conn.query('SELECT id FROM teaching_payroll_reopen_history WHERE payroll_id=? AND reclosed_at IS NULL', [id]);
+    if (open) fail('Kỳ đã mở lại, hãy chốt trước khi ghi giao dịch', 409);
     const [entries] = await conn.query(`SELECT id,request_id,kind,method,amount_vnd,DATE_FORMAT(entry_date,'%Y-%m-%d') AS date,
       note,voided_at FROM teaching_payroll_entries WHERE payroll_id=? FOR UPDATE`, [id]);
     const prior = entries.find((e) => e.request_id === entry.requestId);

@@ -189,8 +189,24 @@ test('MySQL: duyệt công theo tiết, không xem chéo và không chấm trùn
     const [, monthDetail] = await pay(b, '/' + monthRecord.id);
     assert.equal(Number(monthDetail.amount), 4500000);
     assert.deepEqual(monthDetail.snapshot.map((line) => line.unit), ['month']);
+    const reopen = '/' + monthRecord.id + '/reopen';
+    assert.equal((await pay(b, reopen, { reason: 'Sửa kỳ' }))[0], 403);
+    assert.equal((await pay(admin, reopen, { reason: '' }))[0], 400);
+    assert.equal((await pay(admin, id + '/reopen', { reason: 'Đã có giao dịch' }))[0], 409);
+    assert.equal((await pay(admin, reopen, { reason: 'Soát lương tháng 4' }))[0], 200);
+    assert.equal((await pay(admin, reopen, { reason: 'Gửi lại' }))[0], 409);
+    assert.equal((await pay(b, '/' + monthRecord.id))[0], 404);
+    assert.equal((await pay(admin, '/' + monthRecord.id + '/entries', payment))[0], 409);
+    assert.equal((await pay(admin, '/reports/preview?period=2025-04'))[1].rows.length, 0);
+    assert.equal((await pay(admin, '/draft/3/2025-04/basis',
+      { basis: 'month', rate: 4600000, note: 'Điều chỉnh tháng 4' }, 'PUT'))[0], 200);
+    assert.equal((await pay(admin, '/close', { teacherId: b.id, month: '2025-04' }))[1].id, monthRecord.id);
+    const [, historical] = await pay(admin, '/' + monthRecord.id + '/reopen-history');
+    assert.equal(Number(historical[0].previous.amount), 4500000);
+    assert.ok(historical[0].reclosed_at);
+    assert.equal(Number((await pay(b, '/' + monthRecord.id))[1].amount), 4600000);
     const [, debtsB] = await pay(b, '/debts');
-    assert.deepEqual(debtsB.map((item) => [item.teacherId, item.total]), [[b.id, 4650000]]);
+    assert.deepEqual(debtsB.map((item) => [item.teacherId, item.total]), [[b.id, 4750000]]);
     assert.deepEqual(debtsB[0].months.map((item) => item.month), ['2025-03', '2025-04']);
     const [, debtsAdmin] = await pay(admin, '/debts');
     assert.equal(debtsAdmin.find((item) => item.teacherId === a.id).total, 100000);
