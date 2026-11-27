@@ -3,7 +3,7 @@ const pool = require('../config/db');
 const { authenticate } = require('../middleware/auth');
 const { isSuperAdmin } = require('../utils/adminScope');
 const { fail, vietnamClock } = require('../services/teachingPeriods');
-const { ensurePayroll, monthField, entryFields, summarize, transaction, assertUnclosed, basisFields, salaryLines, isClosedPayroll, clockPaySql } = require('../services/teachingPayroll');
+const { ensurePayroll, monthField, entryFields, summarize, transaction, assertUnclosed, basisFields, salaryLines, isClosedPayroll, clockPaySql, extraWorkTotal } = require('../services/teachingPayroll');
 const { ensureTeachingPeriodSchema } = require('./teachingPeriodRoutes');
 const { ensureClock } = require('./staffClockRoutes');
 const { ensureDepartments, visibleTo, managerStatus } = require('../services/staffDepartments');
@@ -52,6 +52,9 @@ async function planFor(db, teacher, month) {
   return plan;
 }
 async function amountFor(db, teacher, month, plan) {
+  return await baseAmountFor(db, teacher, month, plan) + await extraWorkTotal(db, teacher, month);
+}
+async function baseAmountFor(db, teacher, month, plan) {
   if (plan?.basis === 'month') return Number(plan.rate_vnd);
   if (plan?.basis === 'hour') {
     return salaryLines(plan, [], await clocksFor(db, teacher, month), month).filter((row) => row.status === 'approved')
@@ -103,8 +106,63 @@ router.get('/', endpoint(async (req, account, admin) => {
     rows.set(plan.teacherId, { ...plan, periods: 0, pending: plan.basis === 'hour' ? plan.openShifts : 0,
       amount: plan.basis === 'hour' ? plan.hourlyAmount : plan.rate });
   }
+  const [extras] = await pool.query(`SELECT e.teacher_id AS teacherId,u.fullname AS name,u.code,
+    SUM(e.amount_vnd) AS extraAmount,
+    (SELECT COALESCE(SUM(o.amount_vnd),0) FROM teaching_payroll_open_advances o
+      WHERE o.teacher_id=e.teacher_id AND o.pay_month=e.pay_month AND o.voided_at IS NULL) AS advance
+    FROM teaching_payroll_extra_work e JOIN users u ON u.id=e.teacher_id
+    WHERE e.pay_month=? AND e.voided_at IS NULL AND NOT EXISTS (
+      SELECT 1 FROM teaching_payroll p WHERE p.teacher_id=e.teacher_id AND p.pay_month=e.pay_month AND ${isClosedPayroll('p')})
+    GROUP BY e.teacher_id,e.pay_month,u.fullname,u.code`, [month]);
+  for (const extra of extras) {
+    const row = rows.get(extra.teacherId) ?? { ...extra, basis: 'period', periods: 0, pending: 0, amount: 0 };
+    rows.set(extra.teacherId, { ...row, extraAmount: extra.extraAmount, amount: Number(row.amount) + Number(extra.extraAmount) });
+  }
   return { month, closed, drafts: [...rows.values()], teachers, admin, canClose: month < vietnamClock().slice(0, 7) };
 }));
+
+const extraPath = '/draft/:teacherId/:month/extra-work';
+router.get(extraPath, endpoint(async (req) => {
+  const [rows] = await pool.query(`SELECT id,DATE_FORMAT(work_date,'%Y-%m-%d') AS date,amount_vnd,note,voided_at,void_reason
+    FROM teaching_payroll_extra_work WHERE teacher_id=? AND pay_month=? ORDER BY work_date,id`,
+  [positiveId(req.params.teacherId), monthField(req.params.month)]);
+  return rows;
+}, true));
+router.post(extraPath, endpoint(async (req, account) => {
+  const teacher = positiveId(req.params.teacherId), month = monthField(req.params.month);
+  const { requestId, amount, date, note } = entryFields({ ...req.body, kind: 'advance', method: 'other' });
+  if (!note || date.slice(0, 7) !== month || amount > 1000000000) fail('Nhập công việc, số tiền tối đa 1 tỷ VND và ngày thuộc kỳ lương');
+  return transaction(async (conn) => {
+    const [[person]] = await conn.query("SELECT id FROM users WHERE id=? AND role='teacher' FOR UPDATE", [teacher]);
+    if (!person) fail('Không tìm thấy giáo viên', 404);
+    await assertUnclosed(conn, teacher, month);
+    const [[existing]] = await conn.query('SELECT id,amount_vnd,note,DATE_FORMAT(work_date,\'%Y-%m-%d\') AS date FROM teaching_payroll_extra_work WHERE teacher_id=? AND pay_month=? AND request_id=?', [teacher, month, requestId]);
+    if (existing) {
+      if (Number(existing.amount_vnd) !== amount || existing.note !== note || existing.date !== date) fail('Mã yêu cầu đã dùng cho khoản khác', 409);
+      return { id: existing.id };
+    }
+    const [row] = await conn.query(`INSERT INTO teaching_payroll_extra_work
+      (teacher_id,pay_month,request_id,work_date,amount_vnd,note,created_by) VALUES (?,?,?,?,?,?,?)`,
+    [teacher, month, requestId, date, amount, note, account.id]);
+    return { id: row.insertId };
+  });
+}, true));
+router.post(extraPath + '/:id/void', endpoint(async (req, account) => {
+  const teacher = positiveId(req.params.teacherId), month = monthField(req.params.month), id = positiveId(req.params.id);
+  const reason = typeof req.body?.reason === 'string' ? req.body.reason.trim() : '';
+  if (!reason || reason.length > 500) fail('Nhập lý do hủy, tối đa 500 ký tự');
+  return transaction(async (conn) => {
+    await conn.query('SELECT id FROM users WHERE id=? FOR UPDATE', [teacher]);
+    await assertUnclosed(conn, teacher, month);
+    const [result] = await conn.query(`UPDATE teaching_payroll_extra_work SET voided_by=?,voided_at=CURRENT_TIMESTAMP,void_reason=?
+      WHERE id=? AND teacher_id=? AND pay_month=? AND voided_at IS NULL`, [account.id, reason, id, teacher, month]);
+    if (!result.affectedRows) fail('Không tìm thấy khoản còn hiệu lực', 404);
+    const [[row]] = await conn.query(`SELECT COALESCE(SUM(amount_vnd),0) AS advances FROM teaching_payroll_open_advances
+      WHERE teacher_id=? AND pay_month=? AND voided_at IS NULL`, [teacher, month]);
+    if (Number(row.advances) > await amountFor(conn, teacher, month, await planFor(conn, teacher, month))) fail('Tiền công còn lại thấp hơn số đã ứng', 409);
+    return { id };
+  });
+}, true));
 
 router.put('/draft/:teacherId/:month/basis', endpoint(async (req, account) => {
   const teacher = positiveId(req.params.teacherId), month = monthField(req.params.month);
@@ -141,6 +199,10 @@ router.post('/close', endpoint(async (req, account) => {
       WHERE a.teacher_id=? AND ${shiftFilter} AND a.status IN ('approved','pending')
       ORDER BY a.work_date,a.start_time,a.id FOR UPDATE`, [teacher, month, month]) : [[]];
     const shifts = salaryLines(plan, periodRows, plan?.basis === 'hour' ? await clocksFor(conn, teacher, month) : [], month);
+    const [extras] = await conn.query(`SELECT id,DATE_FORMAT(work_date,'%Y-%m-%d') AS date,amount_vnd,note
+      FROM teaching_payroll_extra_work WHERE teacher_id=? AND pay_month=? AND voided_at IS NULL ORDER BY work_date,id`, [teacher, month]);
+    for (const row of extras) shifts.push({ id: 'extra-' + row.id, date: row.date, className: 'Công ngoài ca',
+      override_note: row.note, unit: 'job', quantity: 1, periods: 0, rate: Number(row.amount_vnd), amount: Number(row.amount_vnd), status: 'approved' });
     if (shifts.some((s) => s.status === 'pending')) fail('Còn công chờ duyệt hoặc ca chưa chấm ra', 409);
     if (!shifts.length) fail('Chưa có dữ liệu công hợp lệ để chốt');
     const periods = shifts.reduce((sum, s) => sum + s.periods, 0);

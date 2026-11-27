@@ -195,11 +195,24 @@ test('MySQL: duyệt công theo tiết, không xem chéo và không chấm trùn
     assert.deepEqual(splitDetail.snapshot.map((line) => [line.quantity,line.amount]), [[45,90000],[30,120000]]);
     assert.equal((await pay(admin, '/' + splitRecord.id + '/reopen', { reason: 'Chuyển sang ca khoán' }))[0], 200);
     assert.equal((await shiftRate(admin, { mode: 'fixed', rate: 150000, note: 'Ca khoán' }))[0], 200);
+    const extras = '/draft/3/2025-03/extra-work';
+    const work = { date: '2025-03-02', amount: 25000, note: 'Soạn tài liệu ngoài ca', requestId: '5e8c26f2-5bba-48ef-92e5-b043446671f3' };
+    assert.equal((await pay(b, extras, work))[0], 403);
+    assert.equal((await pay(admin, extras, { ...work, date: '2025-04-01' }))[0], 400);
+    const [extraStatus, extra] = await pay(admin, extras, work);
+    assert.equal(extraStatus, 200, JSON.stringify(extra));
+    assert.equal((await pay(admin, extras, work))[1].id, extra.id);
+    const [otherStatus, other] = await pay(admin, extras, { ...work, requestId: 'ae14b823-f848-4ad3-ae7e-e84c5a8a5b8e' });
+    assert.equal(otherStatus, 200);
+    assert.equal((await pay(admin, extras + '/' + other.id + '/void', { reason: 'Nhập nhầm' }))[0], 200);
+    assert.equal(Number((await pay(admin, '?month=2025-03'))[1].drafts.find((r) => r.teacherId === b.id).amount), 175000);
     const [hourStatus, hourRecord] = await pay(admin, '/close', { teacherId: b.id, month: '2025-03' });
     assert.equal(hourStatus, 200, JSON.stringify(hourRecord));
     const [, hourDetail] = await pay(b, '/' + hourRecord.id);
-    assert.equal(Number(hourDetail.amount), 150000);
-    assert.deepEqual(hourDetail.snapshot.map((line) => line.unit), ['shift']);
+    assert.equal(Number(hourDetail.amount), 175000);
+    assert.deepEqual(hourDetail.snapshot.map((line) => line.unit), ['shift', 'job']);
+    assert.equal(hourDetail.snapshot[1].override_note, work.note);
+    assert.equal((await pay(admin, extras + '/' + extra.id + '/void', { reason: 'Kỳ đã chốt' }))[0], 409);
     assert.equal((await shiftRate(admin, hourlyShift))[0], 409);
     assert.equal((await pay(admin, hourPath, hourly, 'PUT'))[0], 409);
     assert.equal((await pay(admin, '/draft/3/2025-04/basis',

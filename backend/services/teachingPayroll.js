@@ -37,6 +37,14 @@ function ensurePayroll() {
       changed_by INT NOT NULL, changed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
       PRIMARY KEY (teacher_id,pay_month), FOREIGN KEY (teacher_id) REFERENCES users(id)
     ) ENGINE=InnoDB`);
+    await pool.query(`CREATE TABLE IF NOT EXISTS teaching_payroll_extra_work (
+      id INT AUTO_INCREMENT PRIMARY KEY, teacher_id INT NOT NULL, pay_month CHAR(7) NOT NULL,
+      request_id CHAR(36) NOT NULL, work_date DATE NOT NULL, amount_vnd BIGINT UNSIGNED NOT NULL,
+      note VARCHAR(500) NOT NULL, created_by INT NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      voided_by INT NULL, voided_at TIMESTAMP NULL, void_reason VARCHAR(500) NULL,
+      UNIQUE KEY (teacher_id,pay_month,request_id), INDEX (pay_month),
+      FOREIGN KEY (teacher_id) REFERENCES users(id)
+    ) ENGINE=InnoDB`);
     await pool.query(`CREATE TABLE IF NOT EXISTS teaching_payroll_reopen_history (
       id INT AUTO_INCREMENT PRIMARY KEY,payroll_id INT NOT NULL,actor_id INT NOT NULL,
       reason VARCHAR(500) NOT NULL,previous JSON NOT NULL,
@@ -130,4 +138,9 @@ const clockPaySql = (defaultRate) => `CASE WHEN r.mode='fixed' THEN r.rate_vnd
     ROUND((s.payable_minutes-m.minutes)*${defaultRate}/60)+ROUND(m.minutes*r.rate_vnd/60)
   ELSE ROUND(s.payable_minutes*IF(r.mode='hour',r.rate_vnd,${defaultRate})/60) END`;
 
-module.exports = { ensurePayroll, monthField, entryFields, summarize, transaction, assertUnclosed, basisFields, salaryLines, isClosedPayroll, clockPaySql };
+async function extraWorkTotal(db, teacher, month) {
+  const [[row]] = await db.query(`SELECT COALESCE(SUM(amount_vnd),0) AS amount FROM teaching_payroll_extra_work
+    WHERE teacher_id=? AND pay_month=? AND voided_at IS NULL`, [teacher, month]);
+  return Number(row.amount);
+}
+module.exports = { ensurePayroll, monthField, entryFields, summarize, transaction, assertUnclosed, basisFields, salaryLines, isClosedPayroll, clockPaySql, extraWorkTotal };

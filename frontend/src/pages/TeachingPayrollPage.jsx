@@ -11,7 +11,7 @@ const remaining = (row) => Number(row.amount) - Number(row.advance) - Number(row
 const errorText = (error) => error.response?.data?.message || 'Không thể xử lý yêu cầu';
 const methods = { cash: 'Tiền mặt', transfer: 'Chuyển khoản', other: 'Khác' };
 const bases = { period: 'Theo tiết', hour: 'Theo giờ', month: 'Lương tháng' };
-const units = { period: 'tiết', hour: 'giờ', month: 'tháng', shift: 'ca' };
+const units = { period: 'tiết', hour: 'giờ', month: 'tháng', shift: 'ca', job: 'việc' };
 const quantity = (row) => row.unit === 'hour' ? `${row.quantity} phút` : `${row.quantity ?? row.periods} ${units[row.unit || 'period']}`;
 
 export default function TeachingPayrollPage() {
@@ -57,8 +57,9 @@ export default function TeachingPayrollPage() {
     finally { setDebtLoading(false); }
   }
   const draftPath = (teacher) => `${path}/draft/${teacher.teacherId}/${month}/advances`;
-  async function viewDraft(teacher) {
-    try { setDraftDetail({ teacher, entries: (await api.get(draftPath(teacher))).data }); }
+  async function viewDraft(teacher, extra = false) {
+    const url = extra ? draftPath(teacher).replace(/advances$/, 'extra-work') : draftPath(teacher);
+    try { setDraftDetail({ teacher, extra, url, entries: (await api.get(url)).data }); }
     catch (err) { setFeedback({ error: true, text: errorText(err) }); }
   }
   function open(formValue) { setError(''); setForm(formValue); }
@@ -105,6 +106,10 @@ export default function TeachingPayrollPage() {
           { basis: form.basis, rate: Number(form.rate), note: form.note });
       } else if (form.mode === 'entry') {
         await api.post(path + '/' + detail.id + '/entries', { ...form, amount: Number(form.amount) });
+      } else if (form.mode === 'extra-entry') {
+        await api.post(draftDetail.url, { ...form, amount: Number(form.amount) });
+      } else if (form.mode === 'extra-void') {
+        await api.post(draftDetail.url + '/' + form.id + '/void', { reason: form.reason });
       } else if (form.mode === 'draft-entry') {
         await api.post(draftPath(draftDetail.teacher), { ...form, amount: Number(form.amount) });
       } else if (form.mode === 'draft-void') {
@@ -114,10 +119,10 @@ export default function TeachingPayrollPage() {
       }
       setForm(null);
       setFeedback({ text: form.mode === 'close' ? 'Đã chốt kỳ lương.' : form.mode === 'reopen' ? 'Đã mở lại kỳ lương.'
-        : form.mode === 'basis' ? 'Đã lưu cách tính lương.' : 'Đã cập nhật giao dịch.' });
+        : form.mode === 'basis' ? 'Đã lưu cách tính lương.' : form.mode.startsWith('extra-') ? 'Đã cập nhật công ngoài ca.' : 'Đã cập nhật giao dịch.' });
       await load();
       if (detail && form.mode !== 'reopen') setDetail((await api.get(path + '/' + detail.id)).data);
-      if (draftDetail) await viewDraft(draftDetail.teacher);
+      if (draftDetail) await viewDraft(draftDetail.teacher, draftDetail.extra);
     } catch (err) { setError(errorText(err)); }
     finally { setBusy(false); }
   }
@@ -138,11 +143,16 @@ export default function TeachingPayrollPage() {
     {data?.admin && <><div className="d-flex gap-2 align-items-center flex-wrap mb-2">
       <h2 className="h5 mb-0">Chưa chốt</h2>
       <Button variant="outline-primary" size="sm" onClick={() => open({ mode: 'basis', teacherId: '', basis: 'period', rate: '', note: '' })}>Chọn cách tính lương</Button>
+      <Form.Select size="sm" aria-label="Công ngoài ca: chọn giáo viên" className="w-auto" value="" onChange={(e) => {
+        const teacher = data.teachers.find((row) => String(row.id) === e.target.value);
+        if (teacher) viewDraft({ ...teacher, teacherId: teacher.id }, true);
+      }}><option value="">Công ngoài ca · Chọn giáo viên</option>
+        {data.teachers.map((row) => <option key={row.id} value={row.id}>{row.name} · {row.code}</option>)}</Form.Select>
     </div>
       <Table responsive bordered><thead><tr><th>Giáo viên</th><th>Cách tính / Công</th><th>Công chưa hoàn tất</th><th>Tiền công tạm tính</th><th>Đã ứng</th><th>Thao tác</th></tr></thead>
         <tbody>{data.drafts.map((row) => <tr key={row.teacherId}><td>{row.name} · {row.code}</td>
           <td>{bases[row.basis]}{row.basis === 'period' ? ` · ${row.periods} tiết` : row.basis === 'hour' ? ` · ${row.minutes} phút` : ''}</td>
-          <td>{row.pending}</td><td>{format(row.amount)}</td><td>{format(row.advance)}</td><td><div className="d-flex flex-wrap gap-2"><Button size="sm"
+          <td>{row.pending}</td><td>{format(row.amount)}{Number(row.extraAmount) > 0 && <div className="small">Ngoài ca: {format(row.extraAmount)}</div>}</td><td>{format(row.advance)}</td><td><div className="d-flex flex-wrap gap-2"><Button size="sm"
             disabled={!data.canClose || Number(row.pending) > 0}
             onClick={() => open({ mode: 'close', teacher: row })}>Chốt tháng</Button>
             <Button size="sm" variant="outline-primary" onClick={() => viewDraft(row)}>Ứng trước kỳ</Button></div></td></tr>)}</tbody></Table>
@@ -209,23 +219,25 @@ export default function TeachingPayrollPage() {
       </Modal.Body>}
     </Modal>
     <Modal centered size="lg" show={Boolean(draftDetail) && !form} onHide={() => setDraftDetail(null)}>
-      <Modal.Header closeButton><Modal.Title>Ứng trước kỳ · {draftDetail?.teacher.name}</Modal.Title></Modal.Header>
+      <Modal.Header closeButton><Modal.Title>{draftDetail?.extra ? 'Công ngoài ca' : 'Ứng trước kỳ'} · {draftDetail?.teacher.name}</Modal.Title></Modal.Header>
       {draftDetail && <Modal.Body>
         {feedback && <Alert className="text-center" variant={feedback.error ? 'danger' : 'success'}>{feedback.text}</Alert>}
-        <p>Chỉ ứng trong phạm vi công đã duyệt. Khi chốt, các giao dịch sẽ được đưa vào kỳ lương.</p>
-        <Table responsive size="sm"><thead><tr><th>Ngày</th><th>Số tiền</th><th>Phương thức</th><th>Ghi chú</th><th>Thao tác</th></tr></thead>
+        <p>{draftDetail.extra ? 'Chỉ ghi công việc chưa tính trong ca hoặc tiết dạy.' : 'Chỉ ứng trong phạm vi công đã duyệt. Khi chốt, các giao dịch sẽ được đưa vào kỳ lương.'}</p>
+        <Table responsive size="sm"><thead><tr><th>Ngày</th><th>Số tiền</th>{!draftDetail.extra && <th>Phương thức</th>}<th>Ghi chú</th><th>Thao tác</th></tr></thead>
           <tbody>{draftDetail.entries.map((entry) => <tr key={entry.id}><td>{entry.date}</td><td>{format(entry.amount_vnd)}</td>
-            <td>{methods[entry.method]}</td><td>{entry.note}{entry.voided_at && <div>Đã hủy: {entry.void_reason}</div>}</td>
+            {!draftDetail.extra && <td>{methods[entry.method]}</td>}<td>{entry.note}{entry.voided_at && <div>Đã hủy: {entry.void_reason}</div>}</td>
             <td>{!entry.voided_at && <Button size="sm" variant="outline-danger"
-              onClick={() => open({ mode: 'draft-void', id: entry.id, reason: '' })}>Hủy</Button>}</td></tr>)}</tbody>
+              onClick={() => open({ mode: draftDetail.extra ? 'extra-void' : 'draft-void', id: entry.id, reason: '' })}>Hủy</Button>}</td></tr>)}</tbody>
         </Table>
-        <Button onClick={() => open({ mode: 'draft-entry', method: 'transfer', date: dateVN(), amount: '', note: '', requestId: crypto.randomUUID() })}>Ghi nhận khoản ứng</Button>
+        <Button onClick={() => open({ mode: draftDetail.extra ? 'extra-entry' : 'draft-entry', method: 'transfer',
+          date: draftDetail.extra && !dateVN().startsWith(month) ? month + '-01' : dateVN(),
+          amount: '', note: '', requestId: crypto.randomUUID() })}>{draftDetail.extra ? 'Ghi nhận công ngoài ca' : 'Ghi nhận khoản ứng'}</Button>
       </Modal.Body>}
     </Modal>
     <Modal centered show={Boolean(form)} onHide={() => { if (!busy) setForm(null); }}>
       <Form onSubmit={save}>
         <Modal.Header closeButton={!busy}><Modal.Title>{{ close: 'Chốt kỳ lương', reopen: 'Mở lại kỳ lương', basis: 'Cách tính lương theo tháng', entry: 'Ghi nhận ứng / trả lương', void: 'Hủy giao dịch',
-          'draft-entry': 'Ghi nhận ứng trước kỳ', 'draft-void': 'Hủy khoản ứng trước kỳ' }[form?.mode]}</Modal.Title></Modal.Header>
+          'draft-entry': 'Ghi nhận ứng trước kỳ', 'draft-void': 'Hủy khoản ứng trước kỳ', 'extra-entry': 'Ghi nhận công ngoài ca', 'extra-void': 'Hủy công ngoài ca' }[form?.mode]}</Modal.Title></Modal.Header>
         <Modal.Body>
           {error && <Alert variant="danger" className="text-center">{error}</Alert>}
           {form?.mode === 'close' && <p>Chốt lương <strong>{bases[form.teacher.basis]?.toLowerCase()}</strong> cho <strong>{form.teacher.name}</strong> tháng {month} với số tiền <strong>{format(form.teacher.amount)}</strong>? Cách tính và dữ liệu nguồn của kỳ sẽ được giữ nguyên.</p>}
@@ -270,9 +282,14 @@ export default function TeachingPayrollPage() {
             <Form.Group className="mb-2" controlId="pay-date"><Form.Label>Ngày giao dịch</Form.Label><Form.Control required type="date" max={dateVN()} value={form.date} onChange={field('date')} /></Form.Group>
             <Form.Group controlId="pay-note"><Form.Label>Nội dung</Form.Label><Form.Control as="textarea" maxLength={500} value={form.note} onChange={field('note')} /></Form.Group>
           </>}
-          {['void', 'draft-void'].includes(form?.mode) && <Form.Group controlId="pay-void"><Form.Label>Lý do hủy giao dịch #{form.id}</Form.Label>
+          {form?.mode === 'extra-entry' && <>
+            <Form.Group className="mb-2" controlId="extra-date"><Form.Label>Ngày làm</Form.Label><Form.Control required type="date" min={month + '-01'} max={dateVN()} value={form.date} onChange={field('date')} /></Form.Group>
+            <Form.Group className="mb-2" controlId="extra-amount"><Form.Label>Tiền công (VND)</Form.Label><Form.Control required type="number" min={1} max={1000000000} step={1} value={form.amount} onChange={field('amount')} /></Form.Group>
+            <Form.Group controlId="extra-note"><Form.Label>Nội dung công việc</Form.Label><Form.Control required as="textarea" maxLength={500} value={form.note} onChange={field('note')} /></Form.Group>
+          </>}
+          {['void', 'draft-void', 'extra-void'].includes(form?.mode) && <Form.Group controlId="pay-void"><Form.Label>Lý do hủy #{form.id}</Form.Label>
             <Form.Control required as="textarea" maxLength={500} value={form.reason} onChange={field('reason')} />
-            <Form.Text>Giao dịch gốc vẫn được lưu. Hủy ghi nhận không hoàn tiền tự động.</Form.Text></Form.Group>}
+            <Form.Text>{form.mode === 'extra-void' ? 'Khoản gốc được lưu để đối chiếu và không còn tính vào lương.' : 'Giao dịch gốc vẫn được lưu. Hủy ghi nhận không hoàn tiền tự động.'}</Form.Text></Form.Group>}
         </Modal.Body>
         <Modal.Footer><Button variant="secondary" disabled={busy} onClick={() => setForm(null)}>Đóng</Button><Button type="submit" disabled={busy}>{busy ? 'Đang lưu…' : 'Xác nhận'}</Button></Modal.Footer>
       </Form>

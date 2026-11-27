@@ -4,7 +4,7 @@ const pool = require('../config/db');
 const { authenticate } = require('../middleware/auth');
 const { isSuperAdmin } = require('../utils/adminScope');
 const { fail, vietnamClock } = require('../services/teachingPeriods');
-const { transaction, ensurePayroll, assertUnclosed, isClosedPayroll, clockPaySql } = require('../services/teachingPayroll');
+const { transaction, ensurePayroll, assertUnclosed, isClosedPayroll, clockPaySql, extraWorkTotal } = require('../services/teachingPayroll');
 const { MAX_IMAGE, imageType, inputs, calculateClock, expiry, correctionFields } = require('../services/staffClock');
 const { ensureDepartments, managedBy, visibleTo, managerStatus, notifyClockReviewers } = require('../services/staffDepartments');
 const { createNotification } = require('../utils/notificationDb');
@@ -150,7 +150,7 @@ router.put('/shifts/:id/rate', handle(async (req, res) => {
     [plan.rate_vnd, target.teacher_id, shift.month, shift.month]);
     const [[advances]] = await conn.query(`SELECT COALESCE(SUM(amount_vnd),0) AS amount FROM teaching_payroll_open_advances
       WHERE teacher_id=? AND pay_month=? AND voided_at IS NULL`, [target.teacher_id, shift.month]);
-    if (Number(subtotal.amount) < Number(advances.amount)) fail('Tiền công kỳ này sẽ thấp hơn số đã ứng', 409);
+    if (Number(subtotal.amount) + await extraWorkTotal(conn, target.teacher_id, shift.month) < Number(advances.amount)) fail('Tiền công kỳ này sẽ thấp hơn số đã ứng', 409);
   });
   res.json({ id, mode });
 }));
