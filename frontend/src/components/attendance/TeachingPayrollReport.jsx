@@ -7,7 +7,7 @@ const currency = new Intl.NumberFormat('vi-VN', { style: 'currency', currency: '
 const fields = ['amount', 'advance', 'payment', 'remaining'];
 const errText = (err) => err.response?.data?.message || 'Không tạo được báo cáo.';
 
-export default function TeachingPayrollReport({ admin, month }) {
+export default function TeachingPayrollReport({ admin, month, onOpenPayslip }) {
   const [show, setShow] = useState(false);
   const [departments, setDepartments] = useState([]);
   const [filters, setFilters] = useState({ period: month, department: '', debt: false });
@@ -96,11 +96,16 @@ export default function TeachingPayrollReport({ admin, month }) {
               <span className="text-body-secondary">{data.department}{data.debtOnly ? ' · Chỉ kỳ còn công nợ' : ''}</span>
             </div>
           </div>
-          <Table responsive bordered striped size="sm"><thead><tr><th>STT</th><th>Kỳ lương</th><th>Mã GV</th><th>Họ và tên</th><th>Số tiết</th><th>Tổng lương</th><th>Đã ứng</th><th>Đã trả</th><th>Còn phải trả</th></tr></thead>
+          <Table responsive bordered striped size="sm"><thead><tr><th>STT</th><th>Kỳ lương</th><th>Mã GV</th><th>Họ và tên</th><th>Số tiết</th><th>Tổng lương</th><th>Đã ứng</th><th>Đã trả</th><th>Còn phải trả</th>
+            {onOpenPayslip && <th>Phiếu lương</th>}</tr></thead>
             <tbody>{data.rows.map((r, i) => <tr key={r.id}><td>{i + 1}</td><td>{r.month}</td><td>{r.code}</td><td>{r.name}</td><td>{r.periods}</td>
-              {fields.map((field) => <td key={field} className="text-nowrap">{currency.format(r[field])}</td>)}</tr>)}</tbody>
+              {fields.map((field) => <td key={field} className="text-nowrap">{currency.format(r[field])}</td>)}
+              {onOpenPayslip && <td><Button size="sm" variant="outline-primary" className="text-nowrap" disabled={Boolean(busy)}
+                aria-label={`Xem phiếu lương của ${r.name}, kỳ ${r.month}`} onClick={() => { setShow(false); void onOpenPayslip(r.id); }}>
+                Xem phiếu</Button></td>}</tr>)}</tbody>
             <tfoot><tr><th colSpan={4}>Tổng cộng</th><th>{data.rows.reduce((sum, row) => sum + Number(row.periods ?? 0), 0)}</th>
-              {fields.map((field) => <th key={field} className="text-nowrap">{currency.format(data.totals[field])}</th>)}</tr></tfoot>
+              {fields.map((field) => <th key={field} className="text-nowrap">{currency.format(data.totals[field])}</th>)}
+              {onOpenPayslip && <td />}</tr></tfoot>
           </Table>
           {!data.rows.length && <p>Không có kỳ lương phù hợp.</p>}
           <Stack direction="horizontal" gap={2} className="flex-wrap">
