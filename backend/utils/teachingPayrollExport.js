@@ -1,6 +1,9 @@
 const ExcelJS = require('exceljs');
 const pdfmake = require('pdfmake');
 const fonts = require('pdfmake/build/vfs_fonts.js');
+const fs = require('node:fs');
+const path = require('node:path');
+const logo = fs.readFileSync(path.join(__dirname, '../assets/payroll-logo.base64'), 'ascii').trim();
 
 for (const [file, base64] of Object.entries(fonts)) pdfmake.virtualfs.writeFileSync(file, Buffer.from(base64, 'base64'));
 pdfmake.setFonts({ Roboto: {
@@ -12,6 +15,18 @@ const vnd = (value) => new Intl.NumberFormat('vi-VN').format(Number(value)) + ' 
 const methodName = { cash: 'Tiền mặt', transfer: 'Chuyển khoản', other: 'Khác' };
 const kindName = { advance: 'Ứng lương', payment: 'Trả lương' };
 const org = 'TRUNG TÂM NGOẠI NGỮ – TIN HỌC HUỲNH GIA';
+const term = (period) => period.length === 4 ? `NĂM ${period}` : `THÁNG ${period.slice(5)}/${period.slice(0, 4)}`;
+const reportTitle = (period) => `BẢNG LƯƠNG GIÁO VIÊN ${term(period)}`;
+function pdfBrand(title) {
+  return { columns: [{ image: 'data:image/png;base64,' + logo, fit: [74, 44], width: 74 },
+    { width: '*', stack: [{ text: org, bold: true, color: '#174B70', alignment: 'center' },
+      { text: title, bold: true, fontSize: 18, alignment: 'center', margin: [0, 6, 0, 0] }] },
+    { text: '', width: 74 }], margin: [0, 0, 0, 14] };
+}
+function excelLogo(book, page, column = 0) {
+  const image = book.addImage({ base64: 'data:image/png;base64,' + logo, extension: 'png' });
+  page.addImage(image, { tl: { col: column + 0.15, row: 0.15 }, ext: { width: 76, height: 44 }, editAs: 'oneCell' });
+}
 const summary = (row) => [
   ['Phải trả', Number(row.amount)], ['Đã ứng', row.advance], ['Đã trả', row.payment], ['Còn phải trả', row.remaining],
 ];
@@ -47,9 +62,13 @@ async function payrollExcel(row) {
   info.columns = [{ width: 25 }, { width: 42 }];
   const unit = row.snapshot[0]?.unit || 'period';
   const basis = unit === 'hour' || unit === 'shift' ? 'Theo giờ / ca' : unit === 'month' ? 'Lương tháng' : unit === 'job' ? 'Công ngoài ca' : 'Theo tiết';
-  info.addRows([[org], ['Phiếu lương giáo viên', String(row.id)], ['Kỳ', row.month],
+  info.addRows([[org], [`PHIẾU LƯƠNG GIÁO VIÊN ${term(row.month)}`, String(row.id)], ['Kỳ', row.month],
     ['Giáo viên', row.name], ['Mã giáo viên', row.code], ['Cách tính', basis], ...summary(row)]);
+  info.mergeCells('A1:B1');
   info.getRow(1).font = { bold: true };
+  info.getColumn(1).width = 50;
+  info.getColumn(3).width = 16;
+  excelLogo(workbook, info, 2);
   for (let index = 7; index <= 10; index++) info.getCell(index, 2).numFmt = '#,##0" ₫"';
   sheet(workbook, 'Tiết dạy', periodHeaders, periodRows(row).map((r) => [new Date(r[0] + 'T00:00:00Z'), ...r.slice(1)]),
     [14, 30, 12, 12, 12, 17, 18, 24], [6, 7]);
@@ -70,10 +89,9 @@ function pdfTable(headers, rows, widths, monetary) {
 }
 
 function payrollPdf(row, entry) {
-  const title = entry ? 'PHIẾU GHI NHẬN ' + kindName[entry.kind].toLocaleUpperCase('vi') : 'PHIẾU LƯƠNG GIÁO VIÊN';
+  const title = entry ? 'PHIẾU GHI NHẬN ' + kindName[entry.kind].toLocaleUpperCase('vi') : `PHIẾU LƯƠNG GIÁO VIÊN ${term(row.month)}`;
   const content = [
-    { text: org, bold: true, alignment: 'center' },
-    { text: title, bold: true, fontSize: 19, alignment: 'center', margin: [0, 12, 0, 14] },
+    pdfBrand(title),
     { text: `Kỳ: ${row.month}   |   Mã phiếu: LHG-${row.id}` },
     { text: `Giáo viên: ${row.name}   |   Mã giáo viên: ${row.code}`, margin: [0, 5, 0, 10] },
   ];
@@ -97,19 +115,37 @@ function payrollPdf(row, entry) {
   }).getBuffer();
 }
 
-const reportHeaders = ['Kỳ', 'Mã GV', 'Giáo viên', 'Phải trả', 'Đã ứng', 'Đã trả', 'Còn phải trả'];
-const reportTotals = (data) => ['Tổng', '', '', data.totals.amount, data.totals.advance, data.totals.payment, data.totals.remaining];
-const reportLines = (data) => data.rows.map((r) => [r.month, r.code, r.name, r.amount, r.advance, r.payment, r.remaining]);
+const reportHeaders = ['STT', 'Kỳ lương', 'Mã GV', 'Họ và tên', 'Số tiết', 'Tổng lương', 'Đã ứng', 'Đã trả', 'Còn phải trả'];
+const reportTotals = (data) => ['', '', '', 'TỔNG CỘNG', data.rows.reduce((sum, row) => sum + Number(row.periods ?? 0), 0),
+  data.totals.amount, data.totals.advance, data.totals.payment, data.totals.remaining];
+const reportLines = (data) => data.rows.map((r, i) => [i + 1, r.month, r.code, r.name, Number(r.periods ?? 0), r.amount, r.advance, r.payment, r.remaining]);
 function payrollReportExcel(data) {
   const book = new ExcelJS.Workbook();
   book.creator = 'Huỳnh Gia';
-  const info = book.addWorksheet('Tổng hợp');
-  info.columns = [{ width: 45 }, { width: 30 }];
-  info.addRows([[org], ['Báo cáo lương đã chốt'], ['Đơn vị', data.department], ['Kỳ', data.period],
-    ['Phạm vi', data.debtOnly ? 'Còn công nợ' : 'Tất cả kỳ đã chốt'], ...summary(data.totals)]);
-  info.getRow(1).font = { bold: true };
-  for (let row = 6; row <= 9; row++) info.getCell(row, 2).numFmt = '#,##0" ₫"';
-  sheet(book, 'Chi tiết kỳ lương', reportHeaders, reportLines(data), [12, 14, 31, 19, 19, 19, 19], [4, 5, 6, 7]);
+  const page = book.addWorksheet('Bảng lương', { views: [{ state: 'frozen', ySplit: 5, showGridLines: false }],
+    pageSetup: { paperSize: 9, orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 0, printTitlesRow: '1:5' } });
+  page.columns = [7, 13, 15, 34, 10, 19, 19, 19, 19].map((width) => ({ width }));
+  for (const [index, value] of [org, reportTitle(data.period), `Phạm vi: ${data.department}${data.debtOnly ? ' · Chỉ kỳ còn công nợ' : ''}`].entries()) {
+    const rowNumber = index + 1;
+    page.mergeCells(rowNumber, 2, rowNumber, 9);
+    const cell = page.getCell(rowNumber, 2);
+    cell.value = value;
+    cell.font = { bold: index < 2, size: index === 1 ? 17 : 11, color: { argb: 'FF174B70' } };
+    cell.alignment = { horizontal: 'center', vertical: 'middle' };
+    page.getRow(rowNumber).height = index === 1 ? 26 : 20;
+  }
+  excelLogo(book, page);
+  page.getRow(5).values = reportHeaders;
+  page.getRow(5).height = 22;
+  page.getRow(5).font = { bold: true, color: { argb: 'FFFFFFFF' } };
+  page.getRow(5).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF174B70' } };
+  page.addRows(reportLines(data));
+  const total = page.addRow(reportTotals(data));
+  total.font = { bold: true, color: { argb: 'FF174B70' } };
+  total.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFEAF3FA' } };
+  for (let i = 6; i <= 9; i++) page.getColumn(i).numFmt = '#,##0" ₫"';
+  for (let i = 6; i < total.number; i++) if (i % 2 === 0) page.getRow(i).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF4F8FC' } };
+  if (data.rows.length) page.autoFilter = `A5:I${total.number - 1}`;
   return book.xlsx.writeBuffer();
 }
 function payrollReportPdf(data) {
@@ -118,10 +154,9 @@ function payrollReportPdf(data) {
     defaultStyle: { font: 'Roboto', fontSize: 10 },
     footer: (page, count) => ({ text: `${page}/${count}`, alignment: 'right', margin: [0, 4, 32, 0] }),
     content: [
-      { text: org, alignment: 'center', bold: true },
-      { text: 'BÁO CÁO LƯƠNG ĐÃ CHỐT', alignment: 'center', fontSize: 18, bold: true, margin: [0, 8, 0, 12] },
-      { text: `Phạm vi: ${data.department} · Kỳ: ${data.period}${data.debtOnly ? ' · Chỉ kỳ còn nợ' : ''}`, margin: [0, 0, 0, 8] },
-      pdfTable(reportHeaders, [...reportLines(data), reportTotals(data)], [44, 58, '*', 100, 100, 100, 100], [3, 4, 5, 6]),
+      pdfBrand(reportTitle(data.period)),
+      { text: `Phạm vi: ${data.department}${data.debtOnly ? ' · Chỉ kỳ còn nợ' : ''} · Đơn vị tiền: VND`, margin: [0, 0, 0, 8] },
+      pdfTable(reportHeaders, [...reportLines(data), reportTotals(data)], [25, 53, 58, '*', 38, 89, 89, 89, 89], [5, 6, 7, 8]),
     ],
   }).getBuffer();
 }

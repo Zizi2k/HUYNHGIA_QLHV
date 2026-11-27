@@ -335,7 +335,7 @@ async function loadReport(req, account, admin) {
     if (!dept) fail('Không có quyền xem báo cáo phòng ban này', 403);
     department = dept.name;
   }
-  const [rows] = await pool.query(`SELECT p.id,p.pay_month AS month,p.teacher_name AS name,p.teacher_code AS code,p.amount_vnd AS amount,
+  const [rows] = await pool.query(`SELECT p.id,p.pay_month AS month,p.teacher_name AS name,p.teacher_code AS code,p.periods,p.amount_vnd AS amount,
     COALESCE(SUM(CASE WHEN e.voided_at IS NULL AND e.kind='advance' THEN e.amount_vnd ELSE 0 END),0) AS advance,
     COALESCE(SUM(CASE WHEN e.voided_at IS NULL AND e.kind='payment' THEN e.amount_vnd ELSE 0 END),0) AS payment
     FROM teaching_payroll p LEFT JOIN teaching_payroll_entries e ON e.payroll_id=p.id

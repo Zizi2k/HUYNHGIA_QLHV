@@ -61,7 +61,7 @@ export default function TeachingPayrollReport({ admin, month }) {
     } finally { setBusy(''); }
   }
   return <>
-    <Button variant="outline-primary" onClick={open}>Báo cáo tổng hợp</Button>
+    <Button variant="outline-primary" onClick={open}>Xem và xuất bảng lương</Button>
     <Modal centered size="xl" show={show} onHide={() => { if (!busy) setShow(false); }}>
       <Modal.Header closeButton={!busy}><Modal.Title>Báo cáo lương đã chốt</Modal.Title></Modal.Header>
       <Modal.Body>
@@ -88,11 +88,19 @@ export default function TeachingPayrollReport({ admin, month }) {
           <Form.Check id="payroll-report-debt" label="Chỉ kỳ còn công nợ" checked={filters.debt} disabled={Boolean(busy)} onChange={(e) => change({ debt: e.target.checked })} />
         </Form>
         {data && <>
-          <h3 className="h6 mt-3">{data.department} · {data.period}</h3>
-          <Table responsive bordered size="sm"><thead><tr><th>Kỳ</th><th>Giáo viên</th><th>Phải trả</th><th>Đã ứng</th><th>Đã trả</th><th>Còn phải trả</th></tr></thead>
-            <tbody>{data.rows.map((r) => <tr key={r.id}><td>{r.month}</td><td>{r.name} · {r.code}</td>
+          <div className="d-flex align-items-center justify-content-center gap-3 mt-4 mb-3">
+            <img src="/logo-navbar.png" alt="Logo Huỳnh Gia" width="72" style={{ objectFit: 'contain' }} />
+            <div className="text-center">
+              <div className="fw-semibold">TRUNG TÂM NGOẠI NGỮ – TIN HỌC HUỲNH GIA</div>
+              <h3 className="h5 mb-1">BẢNG LƯƠNG GIÁO VIÊN {data.period.length === 4 ? 'NĂM ' + data.period : 'THÁNG ' + data.period.slice(5) + '/' + data.period.slice(0, 4)}</h3>
+              <span className="text-body-secondary">{data.department}{data.debtOnly ? ' · Chỉ kỳ còn công nợ' : ''}</span>
+            </div>
+          </div>
+          <Table responsive bordered striped size="sm"><thead><tr><th>STT</th><th>Kỳ lương</th><th>Mã GV</th><th>Họ và tên</th><th>Số tiết</th><th>Tổng lương</th><th>Đã ứng</th><th>Đã trả</th><th>Còn phải trả</th></tr></thead>
+            <tbody>{data.rows.map((r, i) => <tr key={r.id}><td>{i + 1}</td><td>{r.month}</td><td>{r.code}</td><td>{r.name}</td><td>{r.periods}</td>
               {fields.map((field) => <td key={field} className="text-nowrap">{currency.format(r[field])}</td>)}</tr>)}</tbody>
-            <tfoot><tr><th colSpan={2}>Tổng</th>{fields.map((field) => <th key={field} className="text-nowrap">{currency.format(data.totals[field])}</th>)}</tr></tfoot>
+            <tfoot><tr><th colSpan={4}>Tổng cộng</th><th>{data.rows.reduce((sum, row) => sum + Number(row.periods ?? 0), 0)}</th>
+              {fields.map((field) => <th key={field} className="text-nowrap">{currency.format(data.totals[field])}</th>)}</tr></tfoot>
           </Table>
           {!data.rows.length && <p>Không có kỳ lương phù hợp.</p>}
           <Stack direction="horizontal" gap={2} className="flex-wrap">
