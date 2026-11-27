@@ -55,6 +55,7 @@ export default function Sidebar({ collapsed, mobileOpen, onNavigate }) {
             <NavItem to="/attendance" icon="calendar-check" label="Điểm danh" />
             <NavItem to="/teaching-payroll" icon="cash-stack" label="Lương giáo viên" />
             <NavItem to="/staff-clock" icon="clock-history" label="Chấm công giáo viên" />
+            <NavItem to="/staff-rota" icon="calendar-week" label="Lịch làm theo tuần" />
           </div>
         )}
 

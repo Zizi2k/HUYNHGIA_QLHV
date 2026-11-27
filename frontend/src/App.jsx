@@ -13,6 +13,7 @@ import AttendancePage from './pages/AttendancePage';
 import TeachingPayrollPage from './pages/TeachingPayrollPage';
 import StaffClockPage from './pages/StaffClockPage';
 import StaffDepartmentPage from './pages/StaffDepartmentPage';
+import StaffRotaPage from './pages/StaffRotaPage';
 import TuitionPage from './pages/TuitionPage';
 import FeeDebtPage from './pages/FeeDebtPage';
 import StudentsPage from './pages/StudentsPage';
@@ -43,6 +44,7 @@ function App() {
             <Route path="/teaching-payroll" element={<TeachingPayrollPage />} />
             <Route path="/staff-clock" element={<StaffClockPage />} />
             <Route path="/staff-departments" element={<StaffDepartmentPage />} />
+            <Route path="/staff-rota" element={<StaffRotaPage />} />
             <Route path="/tuition" element={<TuitionPage />} />
             <Route path="/fee-debts" element={<FeeDebtPage />} />
             <Route path="/students" element={<StudentsPage />} />
