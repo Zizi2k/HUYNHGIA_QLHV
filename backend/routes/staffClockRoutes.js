@@ -130,3 +130,4 @@ router.use((err, _req, res, _next) => {
 });
 module.exports = router;
 module.exports.purgeExpiredClockPhotos = purgeExpiredClockPhotos;
+module.exports.ensureClock = ensureClock;

@@ -15,9 +15,12 @@ const org = 'TRUNG TÂM NGOẠI NGỮ – TIN HỌC HUỲNH GIA';
 const summary = (row) => [
   ['Phải trả', Number(row.amount)], ['Đã ứng', row.advance], ['Đã trả', row.payment], ['Còn phải trả', row.remaining],
 ];
-const periodHeaders = ['Ngày', 'Lớp', 'Bắt đầu', 'Kết thúc', 'Số tiết', 'Đơn giá/tiết', 'Tiền công'];
+const periodHeaders = ['Ngày', 'Nội dung', 'Bắt đầu', 'Kết thúc', 'Khối lượng', 'Đơn giá', 'Tiền công', 'Đơn vị tính'];
 const entryHeaders = ['Mã', 'Ngày', 'Loại', 'Phương thức', 'Số tiền', 'Nội dung', 'Trạng thái'];
-const periodRows = (row) => row.snapshot.map((s) => [s.date, s.className, s.startTime, s.endTime, Number(s.periods), Number(s.rate), Number(s.amount)]);
+const periodRows = (row) => row.snapshot.map((s) => [
+  s.date, s.className, s.startTime ?? '', s.endTime ?? '', Number(s.quantity ?? s.periods), Number(s.rate), Number(s.amount),
+  s.unit === 'hour' ? 'Phút công / VND mỗi giờ' : s.unit === 'month' ? 'Tháng' : 'Tiết',
+]);
 const entryRows = (row) => row.entries.map((e) => [
   String(e.id), e.date, kindName[e.kind], methodName[e.method], Number(e.amount_vnd),
   e.note || '', e.voided_at ? 'Đã hủy: ' + e.void_reason : 'Đã ghi nhận',
@@ -41,12 +44,14 @@ async function payrollExcel(row) {
   workbook.creator = 'Huỳnh Gia';
   const info = workbook.addWorksheet('Tổng hợp');
   info.columns = [{ width: 25 }, { width: 42 }];
-  info.addRows([[org], ['Phiếu công dạy', String(row.id)], ['Kỳ', row.month],
-    ['Giáo viên', row.name], ['Mã giáo viên', row.code], ['Số tiết', Number(row.periods)], ...summary(row)]);
+  const unit = row.snapshot[0]?.unit || 'period';
+  const basis = unit === 'hour' ? 'Theo giờ' : unit === 'month' ? 'Lương tháng' : 'Theo tiết';
+  info.addRows([[org], ['Phiếu lương giáo viên', String(row.id)], ['Kỳ', row.month],
+    ['Giáo viên', row.name], ['Mã giáo viên', row.code], ['Cách tính', basis], ...summary(row)]);
   info.getRow(1).font = { bold: true };
   for (let index = 7; index <= 10; index++) info.getCell(index, 2).numFmt = '#,##0" ₫"';
   sheet(workbook, 'Tiết dạy', periodHeaders, periodRows(row).map((r) => [new Date(r[0] + 'T00:00:00Z'), ...r.slice(1)]),
-    [14, 30, 12, 12, 10, 17, 18], [6, 7]);
+    [14, 30, 12, 12, 12, 17, 18, 24], [6, 7]);
   workbook.getWorksheet('Tiết dạy').getColumn(1).numFmt = 'dd/mm/yyyy';
   sheet(workbook, 'Giao dịch', entryHeaders, entryRows(row).map((r) => [r[0], new Date(r[1] + 'T00:00:00Z'), ...r.slice(2)]),
     [11, 14, 15, 17, 17, 30, 30], [5]);
@@ -64,7 +69,7 @@ function pdfTable(headers, rows, widths, monetary) {
 }
 
 function payrollPdf(row, entry) {
-  const title = entry ? 'PHIẾU GHI NHẬN ' + kindName[entry.kind].toLocaleUpperCase('vi') : 'PHIẾU LƯƠNG THEO TIẾT';
+  const title = entry ? 'PHIẾU GHI NHẬN ' + kindName[entry.kind].toLocaleUpperCase('vi') : 'PHIẾU LƯƠNG GIÁO VIÊN';
   const content = [
     { text: org, bold: true, alignment: 'center' },
     { text: title, bold: true, fontSize: 19, alignment: 'center', margin: [0, 12, 0, 14] },
@@ -74,8 +79,8 @@ function payrollPdf(row, entry) {
   if (entry) {
     content.push(pdfTable(entryHeaders, entryRows({ entries: [entry] }), [30, 65, 63, 75, 85, '*', '*'], [4]));
   } else {
-    content.push({ text: 'Công dạy đã chốt', bold: true });
-    content.push(pdfTable(periodHeaders, periodRows(row), [65, '*', 55, 55, 45, 90, 90], [5, 6]));
+    content.push({ text: 'Chi tiết tiền công đã chốt', bold: true });
+    content.push(pdfTable(periodHeaders, periodRows(row), [65, '*', 47, 47, 61, 80, 80, 85], [5, 6]));
     content.push({ text: summary(row).map(([k, v]) => k + ': ' + vnd(v)).join('   |   '), bold: true, margin: [0, 4, 0, 10] });
     if (row.entries.length) {
       content.push({ text: 'Lịch sử giao dịch', bold: true });

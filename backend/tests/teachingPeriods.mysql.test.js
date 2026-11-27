@@ -40,9 +40,9 @@ test('MySQL: duyệt công theo tiết, không xem chéo và không chấm trùn
     t.after(() => new Promise((resolve) => server.close(resolve)));
     const user = (id, role, admin_scope = null) => ({ id, role, admin_scope });
     const admin = user(1, 'admin', 'all'), a = user(2, 'teacher'), b = user(3, 'teacher');
-    async function pay(account, route, payload) {
+    async function pay(account, route, payload, method) {
       const response = await fetch(`http://127.0.0.1:${server.address().port}/teaching-payroll${route}`, {
-        method: payload ? 'POST' : 'GET',
+        method: method || (payload ? 'POST' : 'GET'),
         headers: { Authorization: 'Bearer ' + jwt.sign(account, secret), 'Content-Type': 'application/json' },
         body: payload && JSON.stringify(payload),
       });
@@ -153,4 +153,30 @@ test('MySQL: duyệt công theo tiết, không xem chéo và không chấm trùn
     assert.equal((await clock(a, '/evidence/' + saved.inPhoto)).status, 404);
     await staffClock.purgeExpiredClockPhotos();
     assert.equal((await pool.query('SELECT photo FROM staff_clock_events WHERE id=?', [saved.inPhoto]))[0][0].photo, null);
+    const hourPath = '/draft/3/2025-03/basis';
+    const hourly = { basis: 'hour', rate: 120000, note: 'Đơn giá giờ kỳ này' };
+    assert.equal((await pay(b, hourPath, hourly, 'PUT'))[0], 403);
+    assert.equal((await pay(admin, hourPath, hourly, 'PUT'))[0], 200);
+    await pool.query(`INSERT INTO teaching_period_attendance
+      (class_id,teacher_id,work_date,start_time,end_time,period_count,note,status,rate_vnd,amount_vnd)
+      VALUES (7,3,'2025-03-02','10:00:00','11:00:00',2,'Không cộng trùng','approved',125000,250000)`);
+    const startMs = Date.parse('2025-03-02T10:00:00+07:00');
+    const [fixtureShift] = await pool.query("INSERT INTO staff_clock_shifts (teacher_id,vn_date,started_ms) VALUES(3,'2025-03-02',?)", [startMs]);
+    assert.equal((await pay(admin, '/close', { teacherId: b.id, month: '2025-03' }))[0], 409);
+    await pool.query('UPDATE staff_clock_shifts SET ended_ms=?,payable_minutes=75 WHERE id=?', [startMs + 4500000, fixtureShift.insertId]);
+    const [, preview] = await pay(admin, '?month=2025-03');
+    assert.equal(Number(preview.drafts.find((draft) => draft.teacherId === b.id).amount), 150000);
+    const [hourStatus, hourRecord] = await pay(admin, '/close', { teacherId: b.id, month: '2025-03' });
+    assert.equal(hourStatus, 200, JSON.stringify(hourRecord));
+    const [, hourDetail] = await pay(b, '/' + hourRecord.id);
+    assert.equal(Number(hourDetail.amount), 150000);
+    assert.deepEqual(hourDetail.snapshot.map((line) => line.unit), ['hour']);
+    assert.equal((await pay(admin, hourPath, hourly, 'PUT'))[0], 409);
+    assert.equal((await pay(admin, '/draft/3/2025-04/basis',
+      { basis: 'month', rate: 4500000, note: 'Mức cố định tháng 4' }, 'PUT'))[0], 200);
+    const [monthStatus, monthRecord] = await pay(admin, '/close', { teacherId: b.id, month: '2025-04' });
+    assert.equal(monthStatus, 200, JSON.stringify(monthRecord));
+    const [, monthDetail] = await pay(b, '/' + monthRecord.id);
+    assert.equal(Number(monthDetail.amount), 4500000);
+    assert.deepEqual(monthDetail.snapshot.map((line) => line.unit), ['month']);
   });

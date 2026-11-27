@@ -9,6 +9,9 @@ const format = (value) => money.format(Number(value || 0));
 const remaining = (row) => Number(row.amount) - Number(row.advance) - Number(row.payment);
 const errorText = (error) => error.response?.data?.message || 'Không thể xử lý yêu cầu';
 const methods = { cash: 'Tiền mặt', transfer: 'Chuyển khoản', other: 'Khác' };
+const bases = { period: 'Theo tiết', hour: 'Theo giờ', month: 'Lương tháng' };
+const units = { period: 'tiết', hour: 'giờ', month: 'tháng' };
+const quantity = (row) => row.unit === 'hour' ? `${row.quantity} phút` : `${row.quantity ?? row.periods} ${units[row.unit || 'period']}`;
 
 export default function TeachingPayrollPage() {
   const [month, setMonth] = useState(dateVN().slice(0, 7));
@@ -56,7 +59,7 @@ export default function TeachingPayrollPage() {
       const url = URL.createObjectURL(blob);
       const anchor = document.createElement('a');
       anchor.href = url;
-      anchor.download = entryId ? `phieu-giao-dich-${detail.id}-${entryId}.pdf` : `luong-theo-tiet-${detail.month}-${detail.id}.${format}`;
+      anchor.download = entryId ? `phieu-giao-dich-${detail.id}-${entryId}.pdf` : `luong-giao-vien-${detail.month}-${detail.id}.${format}`;
       document.body.appendChild(anchor);
       anchor.click();
       anchor.remove();
@@ -79,6 +82,9 @@ export default function TeachingPayrollPage() {
     try {
       if (form.mode === 'close') {
         await api.post(path + '/close', { teacherId: form.teacher.teacherId, month });
+      } else if (form.mode === 'basis') {
+        await api.put(path + '/draft/' + form.teacherId + '/' + month + '/basis',
+          { basis: form.basis, rate: Number(form.rate), note: form.note });
       } else if (form.mode === 'entry') {
         await api.post(path + '/' + detail.id + '/entries', { ...form, amount: Number(form.amount) });
       } else if (form.mode === 'draft-entry') {
@@ -89,7 +95,7 @@ export default function TeachingPayrollPage() {
         await api.post(path + '/' + detail.id + '/entries/' + form.id + '/void', { reason: form.reason });
       }
       setForm(null);
-      setFeedback({ text: form.mode === 'close' ? 'Đã chốt kỳ lương.' : 'Đã cập nhật giao dịch.' });
+      setFeedback({ text: form.mode === 'close' ? 'Đã chốt kỳ lương.' : form.mode === 'basis' ? 'Đã lưu cách tính lương.' : 'Đã cập nhật giao dịch.' });
       await load();
       if (detail) setDetail((await api.get(path + '/' + detail.id)).data);
       if (draftDetail) await viewDraft(draftDetail.teacher);
@@ -97,17 +103,21 @@ export default function TeachingPayrollPage() {
     finally { setBusy(false); }
   }
   return <section>
-    <h1 className="h3">Lương theo tiết dạy</h1>
-    <p className="text-body-secondary">Tổng hợp công đã duyệt. Ghi nhận ứng và trả lương không thực hiện chuyển tiền.</p>
+    <h1 className="h3">Lương giáo viên</h1>
+    <p className="text-body-secondary">Mỗi kỳ chọn một cách tính chính: theo tiết, theo giờ hoặc lương tháng. Ghi nhận ứng và trả lương không thực hiện chuyển tiền.</p>
     {feedback && <Alert className="text-center" variant={feedback.error ? 'danger' : 'success'}>{feedback.text}</Alert>}
     <Form.Group className="mb-3" controlId="teaching-pay-month">
       <Form.Label>Tháng</Form.Label>
       <Form.Control className="w-auto" type="month" value={month} onChange={(e) => { if (e.target.value) setMonth(e.target.value); }} />
     </Form.Group>
     {!data && !feedback?.error && <p role="status">Đang tải…</p>}
-    {data?.admin && <><h2 className="h5">Chưa chốt</h2>
-      <Table responsive bordered><thead><tr><th>Giáo viên</th><th>Tiết đã duyệt</th><th>Công chờ duyệt</th><th>Tiền công tạm tính</th><th>Đã ứng</th><th>Thao tác</th></tr></thead>
-        <tbody>{data.drafts.map((row) => <tr key={row.teacherId}><td>{row.name} · {row.code}</td><td>{row.periods}</td>
+    {data?.admin && <><div className="d-flex gap-2 align-items-center flex-wrap mb-2">
+      <h2 className="h5 mb-0">Chưa chốt</h2>
+      <Button variant="outline-primary" size="sm" onClick={() => open({ mode: 'basis', teacherId: '', basis: 'period', rate: '', note: '' })}>Chọn cách tính lương</Button>
+    </div>
+      <Table responsive bordered><thead><tr><th>Giáo viên</th><th>Cách tính / Công</th><th>Công chưa hoàn tất</th><th>Tiền công tạm tính</th><th>Đã ứng</th><th>Thao tác</th></tr></thead>
+        <tbody>{data.drafts.map((row) => <tr key={row.teacherId}><td>{row.name} · {row.code}</td>
+          <td>{bases[row.basis]}{row.basis === 'period' ? ` · ${row.periods} tiết` : row.basis === 'hour' ? ` · ${row.minutes} phút` : ''}</td>
           <td>{row.pending}</td><td>{format(row.amount)}</td><td>{format(row.advance)}</td><td><div className="d-flex flex-wrap gap-2"><Button size="sm"
             disabled={!data.canClose || Number(row.pending) > 0}
             onClick={() => open({ mode: 'close', teacher: row })}>Chốt tháng</Button>
@@ -123,7 +133,7 @@ export default function TeachingPayrollPage() {
       {!data.closed.length && <p>Chưa có kỳ lương được chốt trong tháng này.</p>}
     </>}
     <Modal centered size="lg" show={Boolean(detail) && !form} onHide={() => setDetail(null)}>
-      <Modal.Header closeButton><Modal.Title>Phiếu công dạy #{detail?.id}</Modal.Title></Modal.Header>
+      <Modal.Header closeButton><Modal.Title>Phiếu lương #{detail?.id}</Modal.Title></Modal.Header>
       {detail && <Modal.Body>
         {feedback && <Alert className="text-center" variant={feedback.error ? 'danger' : 'success'}>{feedback.text}</Alert>}
         <p>{detail.name} · {detail.code} · Kỳ {detail.month}</p>
@@ -131,10 +141,10 @@ export default function TeachingPayrollPage() {
           <Button variant="outline-primary" size="sm" disabled={Boolean(exporting)} onClick={() => download('pdf')}>{exporting === 'pdf' ? 'Đang xuất…' : 'Tải PDF để in'}</Button>
           <Button variant="outline-success" size="sm" disabled={Boolean(exporting)} onClick={() => download('xlsx')}>{exporting === 'xlsx' ? 'Đang xuất…' : 'Tải Excel'}</Button>
         </div>
-        <Table responsive bordered size="sm"><thead><tr><th>Ngày</th><th>Lớp</th><th>Tiết</th><th>Đơn giá/tiết</th><th>Tiền công</th></tr></thead>
-          <tbody>{detail.snapshot.map((row) => <tr key={row.id}><td>{row.date}</td><td>{row.className}</td><td>{row.periods}</td>
-            <td>{format(row.rate)}</td><td>{format(row.amount)}</td></tr>)}</tbody></Table>
-        <p><strong>{detail.periods} tiết · {format(detail.amount)}</strong><br />
+        <Table responsive bordered size="sm"><thead><tr><th>Ngày</th><th>Nội dung</th><th>Khối lượng</th><th>Đơn giá</th><th>Tiền công</th></tr></thead>
+          <tbody>{detail.snapshot.map((row) => <tr key={row.id}><td>{row.date}</td><td>{row.className}</td><td>{quantity(row)}</td>
+            <td>{format(row.rate)}/{units[row.unit || 'period']}</td><td>{format(row.amount)}</td></tr>)}</tbody></Table>
+        <p><strong>Phải trả: {format(detail.amount)}</strong><br />
           Đã ứng: {format(detail.advance)} · Đã trả: {format(detail.payment)} · Còn phải trả: {format(detail.remaining)}</p>
         <h3 className="h6">Giao dịch</h3>
         <Table responsive size="sm"><thead><tr><th>Mã / Ngày</th><th>Loại / Phương thức</th><th>Số tiền</th><th>Ghi chú</th><th>Thao tác</th></tr></thead>
@@ -166,11 +176,36 @@ export default function TeachingPayrollPage() {
     </Modal>
     <Modal centered show={Boolean(form)} onHide={() => { if (!busy) setForm(null); }}>
       <Form onSubmit={save}>
-        <Modal.Header closeButton={!busy}><Modal.Title>{{ close: 'Chốt kỳ lương', entry: 'Ghi nhận ứng / trả lương', void: 'Hủy giao dịch',
+        <Modal.Header closeButton={!busy}><Modal.Title>{{ close: 'Chốt kỳ lương', basis: 'Cách tính lương theo tháng', entry: 'Ghi nhận ứng / trả lương', void: 'Hủy giao dịch',
           'draft-entry': 'Ghi nhận ứng trước kỳ', 'draft-void': 'Hủy khoản ứng trước kỳ' }[form?.mode]}</Modal.Title></Modal.Header>
         <Modal.Body>
           {error && <Alert variant="danger" className="text-center">{error}</Alert>}
-          {form?.mode === 'close' && <p>Chốt {form.teacher.periods} tiết cho <strong>{form.teacher.name}</strong> tháng {month} với số tiền <strong>{format(form.teacher.amount)}</strong>? Công tháng này sẽ bị khóa.</p>}
+          {form?.mode === 'close' && <p>Chốt lương <strong>{bases[form.teacher.basis]?.toLowerCase()}</strong> cho <strong>{form.teacher.name}</strong> tháng {month} với số tiền <strong>{format(form.teacher.amount)}</strong>? Cách tính và dữ liệu nguồn của kỳ sẽ được giữ nguyên.</p>}
+          {form?.mode === 'basis' && <>
+            <Form.Group controlId="pay-basis-teacher" className="mb-2"><Form.Label>Giáo viên</Form.Label>
+              <Form.Select required value={form.teacherId} onChange={(event) => {
+                const teacherId = event.target.value;
+                const row = data?.drafts.find((item) => String(item.teacherId) === teacherId);
+                setForm((old) => ({ ...old, teacherId, basis: row?.basis || 'period', rate: row?.rate ?? '', note: row?.note || '' }));
+              }}><option value="">Chọn giáo viên</option>
+                {data?.teachers?.filter((teacher) => !data.closed.some((row) => row.teacherId === teacher.id)).map((teacher) =>
+                  <option key={teacher.id} value={teacher.id}>{teacher.name} · {teacher.code}</option>)}
+              </Form.Select></Form.Group>
+            <Form.Group controlId="pay-basis" className="mb-2"><Form.Label>Cách tính cho kỳ {month}</Form.Label>
+              <Form.Select value={form.basis} onChange={field('basis')}>
+                {Object.entries(bases).map(([key, label]) => <option key={key} value={key}>{label}</option>)}
+              </Form.Select>
+              <Form.Text>{form.basis === 'hour' ? 'Chốt dựa trên phút công của ca đã chấm ra. Không cộng thêm tiền theo tiết.'
+                : form.basis === 'month' ? 'Số tiền cố định do quản trị viên nhập; không tự khấu trừ nghỉ hoặc tính thuế.'
+                  : 'Chỉ lấy công theo tiết đã duyệt, không cộng giờ chấm công.'}</Form.Text>
+            </Form.Group>
+            {form.basis !== 'period' && <Form.Group controlId="pay-basis-rate" className="mb-2">
+              <Form.Label>{form.basis === 'hour' ? 'Đơn giá một giờ (VND)' : 'Lương cố định tháng này (VND)'}</Form.Label>
+              <Form.Control required type="number" min={1} max={1000000000} step={1} value={form.rate} onChange={field('rate')} />
+            </Form.Group>}
+            <Form.Group controlId="pay-basis-note"><Form.Label>Ghi chú chính sách</Form.Label>
+              <Form.Control required maxLength={500} value={form.note} onChange={field('note')} /></Form.Group>
+          </>}
           {['entry', 'draft-entry'].includes(form?.mode) && <>
             {form.mode === 'entry' && <Form.Group className="mb-2" controlId="pay-kind"><Form.Label>Loại giao dịch</Form.Label><Form.Select value={form.kind} onChange={field('kind')}>
               <option value="payment">Trả lương</option><option value="advance">Ứng lương</option>

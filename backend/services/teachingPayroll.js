@@ -30,6 +30,13 @@ function ensurePayroll() {
       UNIQUE KEY request_key (teacher_id,pay_month,request_id),
       FOREIGN KEY (teacher_id) REFERENCES users(id)
     ) ENGINE=InnoDB`);
+    await pool.query(`CREATE TABLE IF NOT EXISTS teaching_payroll_basis (
+      teacher_id INT NOT NULL, pay_month CHAR(7) NOT NULL,
+      basis ENUM('period','hour','month') NOT NULL DEFAULT 'period',
+      rate_vnd BIGINT UNSIGNED NOT NULL, note VARCHAR(500) NOT NULL,
+      changed_by INT NOT NULL, changed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      PRIMARY KEY (teacher_id,pay_month), FOREIGN KEY (teacher_id) REFERENCES users(id)
+    ) ENGINE=InnoDB`);
   })().catch((err) => { schema = undefined; throw err; });
   return schema;
 }
@@ -58,6 +65,27 @@ function summarize(amount, entries) {
   }
   return { advance, payment, remaining: Number(amount) - advance - payment };
 }
+function basisFields(input) {
+  const { basis, rate } = input;
+  if (!['period', 'hour', 'month'].includes(basis)) fail('Hình thức tính lương không hợp lệ');
+  if (basis !== 'period' && (!Number.isSafeInteger(rate) || rate <= 0 || rate > 1000000000)) fail('Đơn giá phải là số nguyên VND dương, tối đa 1 tỷ');
+  const note = typeof input.note === 'string' ? input.note.trim() : '';
+  if (!note || note.length > 500) fail('Nhập ghi chú chính sách lương (tối đa 500 ký tự)');
+  return { basis, rate: basis === 'period' ? 0 : rate, note };
+}
+function salaryLines(plan, periods, clocks, month) {
+  if (!plan || plan.basis === 'period') return periods.map((line) => ({ ...line, unit: 'period', quantity: line.periods }));
+  const rate = Number(plan.rate_vnd);
+  if (plan.basis === 'month') {
+    return [{ id: 'month', date: month + '-01', className: plan.note, unit: 'month', quantity: 1, periods: 0, rate, amount: rate, status: 'approved' }];
+  }
+  return clocks.map((shift) => {
+    const minutes = Number(shift.minutes ?? 0);
+    return { ...shift, id: 'hour-' + shift.id, className: 'Ca chấm công',
+      unit: 'hour', quantity: minutes, periods: 0, rate, amount: Math.round(minutes * rate / 60),
+      status: shift.ended_ms == null ? 'pending' : 'approved' };
+  });
+}
 async function transaction(run) {
   const conn = await pool.getConnection();
   try {
@@ -76,4 +104,4 @@ async function assertUnclosed(conn, teacherId, month) {
   if (closed.length) fail('Kỳ lương đã chốt, không thể thay đổi công của tháng này', 409);
 }
 
-module.exports = { ensurePayroll, monthField, entryFields, summarize, transaction, assertUnclosed };
+module.exports = { ensurePayroll, monthField, entryFields, summarize, transaction, assertUnclosed, basisFields, salaryLines };
