@@ -233,15 +233,24 @@ test('MySQL: duyệt công theo tiết, không xem chéo và không chấm trùn
     const manualShift = (account, method, suffix, data) => fetch(`http://127.0.0.1:${server.address().port}/staff-clock/shifts${suffix}`, {
       method, headers: { Authorization: 'Bearer ' + jwt.sign(account, secret), 'Content-Type': 'application/json' }, body: JSON.stringify(data),
     });
-    const manual = { teacherId: b.id, start: '2025-02-05T08:00', end: '2025-02-05T10:00', rest: 0, reason: 'Bổ sung ca quên chấm' };
+    const manual = { teacherId: b.id, start: '2025-02-05T08:00', end: '2025-02-05T10:00', rest: 0, reason: 'Bổ sung ca quên chấm',
+      payUnit: 'hour', payRate: 120000 };
     assert.equal((await manualShift(b, 'POST', '/manual', manual)).status, 403);
     const added = await manualShift(admin, 'POST', '/manual', manual);
     assert.equal(added.status, 200);
     const addedRow = await added.json();
+    assert.equal(addedRow.pay.amount, 240000);
     assert.equal((await manualShift(admin, 'POST', '/manual', manual)).status, 409);
-    const edited = await manualShift(admin, 'PUT', '/' + addedRow.id + '/manual', { ...manual, end: '2025-02-05T10:30', rest: 15 });
+    const edited = await manualShift(admin, 'PUT', '/' + addedRow.id + '/manual', {
+      ...manual, end: '2025-02-05T10:30', rest: 15, payUnit: 'period', payRate: 95000, payPeriods: 2,
+    });
     assert.equal(edited.status, 200);
-    assert.equal((await edited.json()).minutes, 135);
+    const updated = await edited.json();
+    assert.equal(updated.minutes, 135);
+    assert.equal(updated.pay.amount, 190000);
+    assert.equal((await pay(admin, '/draft/3/2025-02/basis', hourly, 'PUT'))[0], 200);
+    const [, manualDraft] = await pay(admin, '?month=2025-02');
+    assert.equal(manualDraft.drafts.find((row) => row.teacherId === b.id).amount, 190000);
     assert.equal((await pool.query('SELECT COUNT(*) AS n FROM staff_clock_admin_changes WHERE shift_id=?', [addedRow.id]))[0][0].n, 2);
     assert.equal((await manualShift(admin, 'PUT', '/' + fixtureShift.insertId + '/manual', {
       ...manual, start: '2025-03-02T10:00', end: '2025-03-02T11:30',
