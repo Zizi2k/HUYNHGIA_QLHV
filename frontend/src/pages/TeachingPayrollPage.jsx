@@ -17,6 +17,8 @@ export default function TeachingPayrollPage() {
   const [month, setMonth] = useState(dateVN().slice(0, 7));
   const [data, setData] = useState(null);
   const [detail, setDetail] = useState(null);
+  const [debts, setDebts] = useState(null);
+  const [debtLoading, setDebtLoading] = useState(false);
   const [draftDetail, setDraftDetail] = useState(null);
   const [form, setForm] = useState(null);
   const [feedback, setFeedback] = useState(null);
@@ -40,6 +42,12 @@ export default function TeachingPayrollPage() {
     setFeedback(null);
     try { setDetail((await api.get(path + '/' + id)).data); }
     catch (err) { setFeedback({ error: true, text: errorText(err) }); }
+  }
+  async function viewDebts() {
+    setDebtLoading(true);
+    try { setDebts((await api.get(path + '/debts')).data); }
+    catch (err) { setFeedback({ error: true, text: errorText(err) }); }
+    finally { setDebtLoading(false); }
   }
   const draftPath = (teacher) => `${path}/draft/${teacher.teacherId}/${month}/advances`;
   async function viewDraft(teacher) {
@@ -106,10 +114,14 @@ export default function TeachingPayrollPage() {
     <h1 className="h3">Lương giáo viên</h1>
     <p className="text-body-secondary">Mỗi kỳ chọn một cách tính chính: theo tiết, theo giờ hoặc lương tháng. Ghi nhận ứng và trả lương không thực hiện chuyển tiền.</p>
     {feedback && <Alert className="text-center" variant={feedback.error ? 'danger' : 'success'}>{feedback.text}</Alert>}
-    <Form.Group className="mb-3" controlId="teaching-pay-month">
+    <div className="d-flex gap-2 flex-wrap align-items-end mb-3"><Form.Group controlId="teaching-pay-month">
       <Form.Label>Tháng</Form.Label>
       <Form.Control className="w-auto" type="month" value={month} onChange={(e) => { if (e.target.value) setMonth(e.target.value); }} />
     </Form.Group>
+      <Button variant="outline-primary" disabled={!data || debtLoading} onClick={viewDebts}>
+        {debtLoading ? 'Đang tải…' : 'Xem công nợ lương'}
+      </Button>
+    </div>
     {!data && !feedback?.error && <p role="status">Đang tải…</p>}
     {data?.admin && <><div className="d-flex gap-2 align-items-center flex-wrap mb-2">
       <h2 className="h5 mb-0">Chưa chốt</h2>
@@ -132,6 +144,19 @@ export default function TeachingPayrollPage() {
           <td><Button variant="outline-primary" size="sm" onClick={() => view(row.id)}>Xem phiếu</Button></td></tr>)}</tbody></Table>
       {!data.closed.length && <p>Chưa có kỳ lương được chốt trong tháng này.</p>}
     </>}
+    <Modal centered size="lg" show={debts !== null} onHide={() => setDebts(null)}>
+      <Modal.Header closeButton><Modal.Title>Công nợ lương đã chốt</Modal.Title></Modal.Header>
+      <Modal.Body>
+        {debts?.length === 0 && <p>Không có khoản lương còn phải trả.</p>}
+        {debts?.map((group) => <section key={group.teacherId} className="mb-3">
+          <h3 className="h6">{group.name} · {group.code} · Tổng còn nợ: {format(group.total)}</h3>
+          <Table responsive size="sm"><thead><tr><th>Kỳ lương</th><th>Còn phải trả</th><th>Phiếu</th></tr></thead>
+            <tbody>{group.months.map((row) => <tr key={row.id}><td>{row.month}</td><td>{format(row.remaining)}</td>
+              <td><Button size="sm" variant="outline-primary" onClick={() => { setDebts(null); void view(row.id); }}>Xem phiếu</Button></td></tr>)}</tbody>
+          </Table>
+        </section>)}
+      </Modal.Body>
+    </Modal>
     <Modal centered size="lg" show={Boolean(detail) && !form} onHide={() => setDetail(null)}>
       <Modal.Header closeButton><Modal.Title>Phiếu lương #{detail?.id}</Modal.Title></Modal.Header>
       {detail && <Modal.Body>

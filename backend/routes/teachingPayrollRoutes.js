@@ -207,6 +207,26 @@ async function detail(id, account, admin) {
     entries, ...summarize(row.amount, entries) };
 }
 
+router.get('/debts', endpoint(async (_req, account, admin) => {
+  const [rows] = await pool.query(`SELECT p.id,p.teacher_id AS teacherId,p.teacher_name AS name,p.teacher_code AS code,
+    p.pay_month AS month,p.amount_vnd AS amount,
+    COALESCE(SUM(CASE WHEN e.voided_at IS NULL AND e.kind='advance' THEN e.amount_vnd ELSE 0 END),0) AS advance,
+    COALESCE(SUM(CASE WHEN e.voided_at IS NULL AND e.kind='payment' THEN e.amount_vnd ELSE 0 END),0) AS payment
+    FROM teaching_payroll p LEFT JOIN teaching_payroll_entries e ON e.payroll_id=p.id
+    ${admin ? '' : 'WHERE p.teacher_id=?'} GROUP BY p.id ORDER BY p.teacher_name,p.pay_month,p.id`, admin ? [] : [account.id]);
+  const groups = new Map();
+  for (const row of rows) {
+    const remaining = Number(row.amount) - Number(row.advance) - Number(row.payment);
+    if (remaining <= 0) continue;
+    if (!groups.has(row.teacherId)) groups.set(row.teacherId, {
+      teacherId: row.teacherId, name: row.name, code: row.code, total: 0, months: [],
+    });
+    const group = groups.get(row.teacherId);
+    group.total += remaining;
+    group.months.push({ id: row.id, month: row.month, remaining });
+  }
+  return [...groups.values()];
+}));
 router.get('/:id', endpoint(async (req, account, admin) => detail(positiveId(req.params.id), account, admin)));
 
 router.get('/:id/export/:format', endpoint(async (req, account, admin, res) => {
