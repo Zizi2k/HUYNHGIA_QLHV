@@ -240,6 +240,12 @@ test('MySQL: duyệt công theo tiết, không xem chéo và không chấm trùn
     assert.equal(added.status, 200);
     const addedRow = await added.json();
     assert.equal(addedRow.pay.amount, 240000);
+    const draftApi = '/draft/3/2025-02/preview';
+    assert.equal((await pay(b, draftApi))[0], 403);
+    const [draftStatus, draftPreview] = await pay(admin, draftApi);
+    assert.equal(draftStatus, 200);
+    assert.equal(draftPreview.amount, 240000);
+    assert.equal(draftPreview.snapshot[0].unit, 'hour');
     assert.equal((await manualShift(admin, 'POST', '/manual', manual)).status, 409);
     const edited = await manualShift(admin, 'PUT', '/' + addedRow.id + '/manual', {
       ...manual, end: '2025-02-05T10:30', rest: 15, payUnit: 'period', payRate: 95000, payPeriods: 2,

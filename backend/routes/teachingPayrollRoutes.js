@@ -192,12 +192,8 @@ router.put('/draft/:teacherId/:month/basis', endpoint(async (req, account) => {
   });
 }, true));
 
-router.post('/close', endpoint(async (req, account) => {
-  const month = monthField(req.body?.month);
-  const teacher = positiveId(req.body?.teacherId);
-  if (month >= vietnamClock().slice(0, 7)) fail('Chỉ được chốt ở tháng đã kết thúc');
-  return transaction(async (conn) => {
-    const [[person]] = await conn.query('SELECT fullname,code FROM users WHERE id=? FOR UPDATE', [teacher]);
+async function draftPayroll(conn, teacher, month, lock = false) {
+    const [[person]] = await conn.query('SELECT fullname,code FROM users WHERE id=?' + (lock ? ' FOR UPDATE' : ''), [teacher]);
     if (!person) fail('Không tìm thấy giáo viên', 404);
     await assertUnclosed(conn, teacher, month);
     const plan = await planFor(conn, teacher, month);
@@ -206,15 +202,16 @@ router.post('/close', endpoint(async (req, account) => {
       a.period_count AS periods,a.rate_vnd AS rate,a.amount_vnd AS amount,a.status
       FROM teaching_period_attendance a JOIN classes c ON c.id=a.class_id
       WHERE a.teacher_id=? AND ${shiftFilter} AND a.status IN ('approved','pending')
-      ORDER BY a.work_date,a.start_time,a.id FOR UPDATE`, [teacher, month, month]) : [[]];
+      ORDER BY a.work_date,a.start_time,a.id${lock ? ' FOR UPDATE' : ''}`, [teacher, month, month]) : [[]];
     const shifts = salaryLines(plan, periodRows, plan?.basis === 'hour' ? await clocksFor(conn, teacher, month) : [], month);
+    let conflict = false;
     const [manual] = await conn.query(`SELECT s.id,DATE_FORMAT(s.vn_date,'%Y-%m-%d') AS date,s.started_ms,s.ended_ms,s.payable_minutes,
       mp.unit,mp.rate_vnd,mp.period_count,mp.amount_vnd,mp.note FROM staff_clock_manual_pay mp
       JOIN staff_clock_shifts s ON s.id=mp.shift_id WHERE s.teacher_id=? AND ${clockFilter} ORDER BY s.started_ms,s.id`, [teacher, month, month]);
     for (const row of manual) {
       if (periodRows.some((p) => Date.parse(p.date + 'T' + p.startTime + ':00+07:00') < Number(row.ended_ms)
         && Date.parse(p.date + 'T' + p.endTime + ':00+07:00') > Number(row.started_ms))) {
-        fail('Có ca đặt đơn giá riêng trùng giờ với tiết dạy. Kiểm tra chấm công trước khi chốt.', 409);
+        conflict = true;
       }
       const periods = Number(row.period_count);
       shifts.push({ id: 'manual-' + row.id, date: row.date, className: 'Ca chấm công · đơn giá riêng',
@@ -226,6 +223,28 @@ router.post('/close', endpoint(async (req, account) => {
       FROM teaching_payroll_extra_work WHERE teacher_id=? AND pay_month=? AND voided_at IS NULL ORDER BY work_date,id`, [teacher, month]);
     for (const row of extras) shifts.push({ id: 'extra-' + row.id, date: row.date, className: 'Công ngoài ca',
       override_note: row.note, unit: 'job', quantity: 1, periods: 0, rate: Number(row.amount_vnd), amount: Number(row.amount_vnd), status: 'approved' });
+    return { person, shifts, conflict };
+}
+
+router.get('/draft/:teacherId/:month/preview', endpoint(async (req) => {
+  const teacher = positiveId(req.params.teacherId), month = monthField(req.params.month);
+  return transaction(async (conn) => {
+    const { person, shifts, conflict } = await draftPayroll(conn, teacher, month);
+    const [[row]] = await conn.query(`SELECT COALESCE(SUM(amount_vnd),0) AS amount FROM teaching_payroll_open_advances
+      WHERE teacher_id=? AND pay_month=? AND voided_at IS NULL`, [teacher, month]);
+    const amount = shifts.filter((s) => s.status === 'approved').reduce((sum, s) => sum + Number(s.amount), 0);
+    const advance = Number(row.amount);
+    return { name: person.fullname, code: person.code, month, snapshot: shifts, amount, advance, remaining: amount - advance, conflict };
+  });
+}, true));
+
+router.post('/close', endpoint(async (req, account) => {
+  const month = monthField(req.body?.month);
+  const teacher = positiveId(req.body?.teacherId);
+  if (month >= vietnamClock().slice(0, 7)) fail('Chỉ được chốt ở tháng đã kết thúc');
+  return transaction(async (conn) => {
+    const { person, shifts, conflict } = await draftPayroll(conn, teacher, month, true);
+    if (conflict) fail('Có ca đặt đơn giá riêng trùng giờ với tiết dạy. Kiểm tra chấm công trước khi chốt.', 409);
     if (shifts.some((s) => s.status === 'pending')) fail('Còn công chờ duyệt hoặc ca chưa chấm ra', 409);
     if (!shifts.length) fail('Chưa có dữ liệu công hợp lệ để chốt');
     const periods = shifts.reduce((sum, s) => sum + s.periods, 0);
