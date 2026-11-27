@@ -72,6 +72,15 @@ test('MySQL: duyệt công theo tiết, không xem chéo và không chấm trùn
     assert.equal((await call(admin, 'PATCH', 7, review, { status: 'approved', rate: 125000 }))[1].amount, 250000);
     assert.equal((await call(admin, 'PATCH', 7, review, { status: 'approved', rate: 1 }))[0], 409);
     assert.equal(Number((await call(a))[1].totals.amount), 250000);
+    const earlyPath = '/draft/2/2025-03/advances';
+    const early = { method: 'cash', amount: 20000, date: '2025-03-02', note: 'Ứng trước kỳ',
+      requestId: '5bc3935b-40a4-4a1e-bb6c-535428e43a52' };
+    assert.equal((await pay(a, earlyPath))[0], 403);
+    assert.equal((await pay(admin, earlyPath, { ...early, amount: 250001 }))[0], 409);
+    const [earlyStatus, earlyEntry] = await pay(admin, earlyPath, early);
+    assert.equal(earlyStatus, 200, JSON.stringify(earlyEntry));
+    assert.equal((await pay(admin, earlyPath, early))[1].id, earlyEntry.id);
+    assert.equal(Number((await pay(admin, '?month=2025-03'))[1].drafts[0].advance), 20000);
     const [closedStatus, closed] = await pay(admin, '/close', { teacherId: a.id, month: '2025-03' });
     assert.equal(closedStatus, 200, JSON.stringify(closed));
     const id = '/' + closed.id;
@@ -80,6 +89,12 @@ test('MySQL: duyệt công theo tiết, không xem chéo và không chấm trùn
     assert.equal((await pay(b, id))[0], 404);
     assert.equal((await pay(a, id))[1].snapshot[0].className, 'Toán 9');
     assert.equal(Number((await pay(a, id))[1].amount), 250000);
+    const [, initialPayroll] = await pay(a, id);
+    assert.equal(initialPayroll.advance, 20000);
+    assert.equal(initialPayroll.remaining, 230000);
+    assert.equal(initialPayroll.entries.length, 1);
+    assert.equal((await pay(admin, earlyPath, early))[0], 409);
+    assert.equal((await pay(admin, id + '/entries/' + initialPayroll.entries[0].id + '/void', { reason: 'Ghi nhầm khoản ứng trước' }))[0], 200);
     const advance = { kind: 'advance', method: 'cash', amount: 100000, date: '2025-03-03', note: 'Ứng',
       requestId: '0bc3935b-40a4-4a1e-bb6c-535428e43a52' };
     assert.equal((await pay(a, id + '/entries', advance))[0], 403);

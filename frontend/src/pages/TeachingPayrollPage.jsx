@@ -14,6 +14,7 @@ export default function TeachingPayrollPage() {
   const [month, setMonth] = useState(dateVN().slice(0, 7));
   const [data, setData] = useState(null);
   const [detail, setDetail] = useState(null);
+  const [draftDetail, setDraftDetail] = useState(null);
   const [form, setForm] = useState(null);
   const [feedback, setFeedback] = useState(null);
   const [error, setError] = useState('');
@@ -35,6 +36,11 @@ export default function TeachingPayrollPage() {
   async function view(id) {
     setFeedback(null);
     try { setDetail((await api.get(path + '/' + id)).data); }
+    catch (err) { setFeedback({ error: true, text: errorText(err) }); }
+  }
+  const draftPath = (teacher) => `${path}/draft/${teacher.teacherId}/${month}/advances`;
+  async function viewDraft(teacher) {
+    try { setDraftDetail({ teacher, entries: (await api.get(draftPath(teacher))).data }); }
     catch (err) { setFeedback({ error: true, text: errorText(err) }); }
   }
   function open(formValue) { setError(''); setForm(formValue); }
@@ -75,6 +81,10 @@ export default function TeachingPayrollPage() {
         await api.post(path + '/close', { teacherId: form.teacher.teacherId, month });
       } else if (form.mode === 'entry') {
         await api.post(path + '/' + detail.id + '/entries', { ...form, amount: Number(form.amount) });
+      } else if (form.mode === 'draft-entry') {
+        await api.post(draftPath(draftDetail.teacher), { ...form, amount: Number(form.amount) });
+      } else if (form.mode === 'draft-void') {
+        await api.post(draftPath(draftDetail.teacher) + '/' + form.id + '/void', { reason: form.reason });
       } else {
         await api.post(path + '/' + detail.id + '/entries/' + form.id + '/void', { reason: form.reason });
       }
@@ -82,6 +92,7 @@ export default function TeachingPayrollPage() {
       setFeedback({ text: form.mode === 'close' ? 'Đã chốt kỳ lương.' : 'Đã cập nhật giao dịch.' });
       await load();
       if (detail) setDetail((await api.get(path + '/' + detail.id)).data);
+      if (draftDetail) await viewDraft(draftDetail.teacher);
     } catch (err) { setError(errorText(err)); }
     finally { setBusy(false); }
   }
@@ -95,11 +106,12 @@ export default function TeachingPayrollPage() {
     </Form.Group>
     {!data && !feedback?.error && <p role="status">Đang tải…</p>}
     {data?.admin && <><h2 className="h5">Chưa chốt</h2>
-      <Table responsive bordered><thead><tr><th>Giáo viên</th><th>Tiết đã duyệt</th><th>Công chờ duyệt</th><th>Tiền công tạm tính</th><th>Thao tác</th></tr></thead>
+      <Table responsive bordered><thead><tr><th>Giáo viên</th><th>Tiết đã duyệt</th><th>Công chờ duyệt</th><th>Tiền công tạm tính</th><th>Đã ứng</th><th>Thao tác</th></tr></thead>
         <tbody>{data.drafts.map((row) => <tr key={row.teacherId}><td>{row.name} · {row.code}</td><td>{row.periods}</td>
-          <td>{row.pending}</td><td>{format(row.amount)}</td><td><Button size="sm"
+          <td>{row.pending}</td><td>{format(row.amount)}</td><td>{format(row.advance)}</td><td><div className="d-flex flex-wrap gap-2"><Button size="sm"
             disabled={!data.canClose || Number(row.pending) > 0}
-            onClick={() => open({ mode: 'close', teacher: row })}>Chốt tháng</Button></td></tr>)}</tbody></Table>
+            onClick={() => open({ mode: 'close', teacher: row })}>Chốt tháng</Button>
+            <Button size="sm" variant="outline-primary" onClick={() => viewDraft(row)}>Ứng trước kỳ</Button></div></td></tr>)}</tbody></Table>
       {!data.drafts.length && <p>Không có công đang chờ chốt trong tháng này.</p>}
       {!data.canClose && <p className="text-body-secondary">Chỉ chốt khi tháng đã kết thúc.</p>}
     </>}
@@ -138,16 +150,31 @@ export default function TeachingPayrollPage() {
         })}>Ghi nhận ứng / trả lương</Button>}
       </Modal.Body>}
     </Modal>
+    <Modal centered size="lg" show={Boolean(draftDetail) && !form} onHide={() => setDraftDetail(null)}>
+      <Modal.Header closeButton><Modal.Title>Ứng trước kỳ · {draftDetail?.teacher.name}</Modal.Title></Modal.Header>
+      {draftDetail && <Modal.Body>
+        {feedback && <Alert className="text-center" variant={feedback.error ? 'danger' : 'success'}>{feedback.text}</Alert>}
+        <p>Chỉ ứng trong phạm vi công đã duyệt. Khi chốt, các giao dịch sẽ được đưa vào kỳ lương.</p>
+        <Table responsive size="sm"><thead><tr><th>Ngày</th><th>Số tiền</th><th>Phương thức</th><th>Ghi chú</th><th>Thao tác</th></tr></thead>
+          <tbody>{draftDetail.entries.map((entry) => <tr key={entry.id}><td>{entry.date}</td><td>{format(entry.amount_vnd)}</td>
+            <td>{methods[entry.method]}</td><td>{entry.note}{entry.voided_at && <div>Đã hủy: {entry.void_reason}</div>}</td>
+            <td>{!entry.voided_at && <Button size="sm" variant="outline-danger"
+              onClick={() => open({ mode: 'draft-void', id: entry.id, reason: '' })}>Hủy</Button>}</td></tr>)}</tbody>
+        </Table>
+        <Button onClick={() => open({ mode: 'draft-entry', method: 'transfer', date: dateVN(), amount: '', note: '', requestId: crypto.randomUUID() })}>Ghi nhận khoản ứng</Button>
+      </Modal.Body>}
+    </Modal>
     <Modal centered show={Boolean(form)} onHide={() => { if (!busy) setForm(null); }}>
       <Form onSubmit={save}>
-        <Modal.Header closeButton={!busy}><Modal.Title>{{ close: 'Chốt kỳ lương', entry: 'Ghi nhận ứng / trả lương', void: 'Hủy giao dịch' }[form?.mode]}</Modal.Title></Modal.Header>
+        <Modal.Header closeButton={!busy}><Modal.Title>{{ close: 'Chốt kỳ lương', entry: 'Ghi nhận ứng / trả lương', void: 'Hủy giao dịch',
+          'draft-entry': 'Ghi nhận ứng trước kỳ', 'draft-void': 'Hủy khoản ứng trước kỳ' }[form?.mode]}</Modal.Title></Modal.Header>
         <Modal.Body>
           {error && <Alert variant="danger" className="text-center">{error}</Alert>}
           {form?.mode === 'close' && <p>Chốt {form.teacher.periods} tiết cho <strong>{form.teacher.name}</strong> tháng {month} với số tiền <strong>{format(form.teacher.amount)}</strong>? Công tháng này sẽ bị khóa.</p>}
-          {form?.mode === 'entry' && <>
-            <Form.Group className="mb-2" controlId="pay-kind"><Form.Label>Loại giao dịch</Form.Label><Form.Select value={form.kind} onChange={field('kind')}>
+          {['entry', 'draft-entry'].includes(form?.mode) && <>
+            {form.mode === 'entry' && <Form.Group className="mb-2" controlId="pay-kind"><Form.Label>Loại giao dịch</Form.Label><Form.Select value={form.kind} onChange={field('kind')}>
               <option value="payment">Trả lương</option><option value="advance">Ứng lương</option>
-            </Form.Select></Form.Group>
+            </Form.Select></Form.Group>}
             <Form.Group className="mb-2" controlId="pay-method"><Form.Label>Phương thức</Form.Label><Form.Select value={form.method} onChange={field('method')}>
               {Object.entries(methods).map(([key, label]) => <option key={key} value={key}>{label}</option>)}
             </Form.Select></Form.Group>
@@ -155,7 +182,7 @@ export default function TeachingPayrollPage() {
             <Form.Group className="mb-2" controlId="pay-date"><Form.Label>Ngày giao dịch</Form.Label><Form.Control required type="date" max={dateVN()} value={form.date} onChange={field('date')} /></Form.Group>
             <Form.Group controlId="pay-note"><Form.Label>Nội dung</Form.Label><Form.Control as="textarea" maxLength={500} value={form.note} onChange={field('note')} /></Form.Group>
           </>}
-          {form?.mode === 'void' && <Form.Group controlId="pay-void"><Form.Label>Lý do hủy giao dịch #{form.id}</Form.Label>
+          {['void', 'draft-void'].includes(form?.mode) && <Form.Group controlId="pay-void"><Form.Label>Lý do hủy giao dịch #{form.id}</Form.Label>
             <Form.Control required as="textarea" maxLength={500} value={form.reason} onChange={field('reason')} />
             <Form.Text>Giao dịch gốc vẫn được lưu. Hủy ghi nhận không hoàn tiền tự động.</Form.Text></Form.Group>}
         </Modal.Body>

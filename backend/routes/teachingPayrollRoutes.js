@@ -44,11 +44,13 @@ router.get('/', endpoint(async (req, account, admin) => {
   const [drafts] = await pool.query(`SELECT a.teacher_id AS teacherId,u.fullname AS name,u.code,
     SUM(CASE WHEN a.status='approved' THEN a.period_count ELSE 0 END) AS periods,
     SUM(CASE WHEN a.status='approved' THEN a.amount_vnd ELSE 0 END) AS amount,
-    SUM(a.status='pending') AS pending
+    SUM(a.status='pending') AS pending,
+    (SELECT COALESCE(SUM(o.amount_vnd),0) FROM teaching_payroll_open_advances o
+     WHERE o.teacher_id=a.teacher_id AND o.pay_month=? AND o.voided_at IS NULL) AS advance
     FROM teaching_period_attendance a JOIN users u ON u.id=a.teacher_id
     WHERE ${shiftFilter} AND a.status IN ('approved','pending')
     AND NOT EXISTS (SELECT 1 FROM teaching_payroll p WHERE p.teacher_id=a.teacher_id AND p.pay_month=?)
-    GROUP BY a.teacher_id,u.fullname,u.code ORDER BY u.fullname,a.teacher_id`, [month, month, month]);
+    GROUP BY a.teacher_id,u.fullname,u.code ORDER BY u.fullname,a.teacher_id`, [month, month, month, month]);
   return { month, closed, drafts, admin, canClose: month < vietnamClock().slice(0, 7) };
 }));
 
@@ -73,7 +75,60 @@ router.post('/close', endpoint(async (req, account) => {
     const [record] = await conn.query(`INSERT INTO teaching_payroll
       (teacher_id,pay_month,teacher_name,teacher_code,periods,amount_vnd,snapshot,closed_by)
       VALUES (?,?,?,?,?,?,?,?)`, [teacher, month, person.fullname, person.code, periods, amount, JSON.stringify(shifts), account.id]);
+    await conn.query(`INSERT INTO teaching_payroll_entries
+      (payroll_id,request_id,kind,method,amount_vnd,entry_date,note,created_by,created_at,voided_by,voided_at,void_reason)
+      SELECT ?,request_id,'advance',method,amount_vnd,entry_date,note,created_by,created_at,voided_by,voided_at,void_reason
+      FROM teaching_payroll_open_advances WHERE teacher_id=? AND pay_month=?`, [record.insertId, teacher, month]);
     return { id: record.insertId };
+  });
+}, true));
+
+router.get('/draft/:teacherId/:month/advances', endpoint(async (req) => {
+  const teacher = positiveId(req.params.teacherId), month = monthField(req.params.month);
+  const [rows] = await pool.query(`SELECT id,method,amount_vnd,DATE_FORMAT(entry_date,'%Y-%m-%d') AS date,
+    note,voided_at,void_reason FROM teaching_payroll_open_advances WHERE teacher_id=? AND pay_month=?
+    ORDER BY entry_date,id`, [teacher, month]);
+  return rows;
+}, true));
+
+router.post('/draft/:teacherId/:month/advances', endpoint(async (req, account) => {
+  const teacher = positiveId(req.params.teacherId), month = monthField(req.params.month);
+  const entry = entryFields({ ...req.body, kind: 'advance' });
+  return transaction(async (conn) => {
+    const [[person]] = await conn.query('SELECT id FROM users WHERE id=? FOR UPDATE', [teacher]);
+    if (!person) fail('Không tìm thấy giáo viên', 404);
+    await assertUnclosed(conn, teacher, month);
+    const [entries] = await conn.query(`SELECT id,request_id,method,amount_vnd,DATE_FORMAT(entry_date,'%Y-%m-%d') AS date,
+      note,voided_at FROM teaching_payroll_open_advances WHERE teacher_id=? AND pay_month=?`, [teacher, month]);
+    const prior = entries.find((e) => e.request_id === entry.requestId);
+    if (prior) {
+      if (prior.method !== entry.method || Number(prior.amount_vnd) !== entry.amount || prior.date !== entry.date || prior.note !== entry.note) {
+        fail('Mã yêu cầu đã dùng cho giao dịch khác', 409);
+      }
+      return { id: prior.id };
+    }
+    const [[approved]] = await conn.query(`SELECT COALESCE(SUM(a.amount_vnd),0) AS amount FROM teaching_period_attendance a
+      WHERE a.teacher_id=? AND ${shiftFilter} AND a.status='approved'`, [teacher, month, month]);
+    const advanced = entries.reduce((sum, e) => sum + (e.voided_at ? 0 : Number(e.amount_vnd)), 0);
+    if (entry.amount > Number(approved.amount) - advanced) fail('Khoản ứng vượt tiền công đã duyệt còn lại', 409);
+    const [result] = await conn.query(`INSERT INTO teaching_payroll_open_advances
+      (teacher_id,pay_month,request_id,method,amount_vnd,entry_date,note,created_by) VALUES (?,?,?,?,?,?,?,?)`,
+    [teacher, month, entry.requestId, entry.method, entry.amount, entry.date, entry.note, account.id]);
+    return { id: result.insertId };
+  });
+}, true));
+
+router.post('/draft/:teacherId/:month/advances/:entryId/void', endpoint(async (req, account) => {
+  const teacher = positiveId(req.params.teacherId), month = monthField(req.params.month), entry = positiveId(req.params.entryId);
+  const reason = req.body?.reason;
+  if (typeof reason !== 'string' || !reason.trim() || reason.length > 500) fail('Cần lý do hủy (tối đa 500 ký tự)');
+  return transaction(async (conn) => {
+    await conn.query('SELECT id FROM users WHERE id=? FOR UPDATE', [teacher]);
+    await assertUnclosed(conn, teacher, month);
+    const [updated] = await conn.query(`UPDATE teaching_payroll_open_advances SET voided_by=?,voided_at=CURRENT_TIMESTAMP,void_reason=?
+      WHERE teacher_id=? AND pay_month=? AND id=? AND voided_at IS NULL`, [account.id, reason.trim(), teacher, month, entry]);
+    if (!updated.affectedRows) fail('Giao dịch không tồn tại hoặc đã hủy', 409);
+    return { id: entry };
   });
 }, true));
 

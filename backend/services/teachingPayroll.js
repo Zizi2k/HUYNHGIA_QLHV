@@ -21,6 +21,15 @@ function ensurePayroll() {
       UNIQUE KEY request_key (payroll_id,request_id),
       FOREIGN KEY (payroll_id) REFERENCES teaching_payroll(id)
     ) ENGINE=InnoDB`);
+    await pool.query(`CREATE TABLE IF NOT EXISTS teaching_payroll_open_advances (
+      id INT AUTO_INCREMENT PRIMARY KEY, teacher_id INT NOT NULL, pay_month CHAR(7) NOT NULL,
+      request_id CHAR(36) NOT NULL, method ENUM('cash','transfer','other') NOT NULL,
+      amount_vnd BIGINT UNSIGNED NOT NULL, entry_date DATE NOT NULL, note VARCHAR(500) NOT NULL,
+      created_by INT NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      voided_by INT NULL, voided_at TIMESTAMP NULL, void_reason VARCHAR(500) NULL,
+      UNIQUE KEY request_key (teacher_id,pay_month,request_id),
+      FOREIGN KEY (teacher_id) REFERENCES users(id)
+    ) ENGINE=InnoDB`);
   })().catch((err) => { schema = undefined; throw err; });
   return schema;
 }
