@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const ExcelJS = require('exceljs');
-const { payrollExcel, payrollPdf } = require('../utils/teachingPayrollExport');
+const { payrollExcel, payrollPdf, payrollReportExcel, payrollReportPdf } = require('../utils/teachingPayrollExport');
 
 const row = { id: 4, month: '2026-10', name: 'Nguyễn Thị Ánh', code: 'GV01', periods: 2,
   amount: 250000, advance: 100000, payment: 0, remaining: 150000,
@@ -24,5 +24,17 @@ test('tạo PDF bảng lương và phiếu giao dịch với phông nhúng', asy
     const pdf = Buffer.from(await payrollPdf(row, entry));
     assert.match(pdf.subarray(0, 8).toString(), /^%PDF-/);
     assert.ok(pdf.includes(Buffer.from('/FontFile2')));
+    assert.ok(pdf.includes(Buffer.from('/Subtype /Image')));
   }
+});
+test('bảng lương tháng có logo, tiêu đề, mã giáo viên, số tiết và số tiền dạng số', async () => {
+  const data = { period: row.month, department: 'Toàn trung tâm', rows: [row], totals: row };
+  const book = new ExcelJS.Workbook();
+  await book.xlsx.load(await payrollReportExcel(data));
+  const page = book.getWorksheet('Bảng lương');
+  assert.equal(page.getImages().length, 1);
+  assert.equal(page.getCell('B2').value, 'BẢNG LƯƠNG GIÁO VIÊN THÁNG 10/2026');
+  assert.deepEqual(['A6','C6','D6','E6','I6','I7'].map((id) => page.getCell(id).value), [1,row.code,row.name,2,150000,150000]);
+  const pdf = Buffer.from(await payrollReportPdf(data));
+  assert.ok(pdf.includes(Buffer.from('/Subtype /Image')));
 });

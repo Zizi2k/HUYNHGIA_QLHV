@@ -355,7 +355,7 @@ test('MySQL: duyệt công theo tiết, không xem chéo và không chấm trùn
     assert.equal(binaryReport.status, 200);
     const reportBook = new ExcelJS.Workbook();
     await reportBook.xlsx.load(Buffer.from(await binaryReport.arrayBuffer()));
-    assert.equal(reportBook.getWorksheet('Chi tiết kỳ lương').getCell('G2').value, 100000);
+    assert.equal(reportBook.getWorksheet('Bảng lương').getCell('I6').value, 100000);
     assert.equal((await pay(manager, '/' + hourRecord.id))[0], 404);
     assert.equal((await pay(manager, '/close', { teacherId: a.id, month: '2025-05' }))[0], 403);
     const [, may] = await json(a, '/staff-clock?month=2025-05');
