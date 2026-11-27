@@ -3,6 +3,7 @@ const pdfmake = require('pdfmake');
 const fonts = require('pdfmake/build/vfs_fonts.js');
 const fs = require('node:fs');
 const path = require('node:path');
+const { numberToVietnameseWords } = require('./vietnameseNumberWords');
 const logo = fs.readFileSync(path.join(__dirname, '../assets/payroll-logo.base64'), 'ascii').trim();
 
 for (const [file, base64] of Object.entries(fonts)) pdfmake.virtualfs.writeFileSync(file, Buffer.from(base64, 'base64'));
@@ -88,24 +89,64 @@ function pdfTable(headers, rows, widths, monetary) {
     ] } };
 }
 
+function payslipPdf(row) {
+  const money = (value) => ({ text: vnd(value), alignment: 'right' });
+  const table = (widths, body) => ({ table: { widths, body }, layout: {
+    hLineColor: () => '#b7c9db', vLineColor: () => '#b7c9db', paddingTop: () => 6, paddingBottom: () => 6,
+  } });
+  const heading = (text) => ({ text, bold: true, fillColor: '#e7f0fa' });
+  const groups = new Map();
+  const names = { period: 'Công theo tiết', hour: 'Công theo giờ', shift: 'Công theo ca', month: 'Lương tháng', job: 'Công ngoài ca' };
+  for (const line of row.snapshot) {
+    const label = names[line.unit || 'period'] ?? 'Tiền công khác';
+    groups.set(label, (groups.get(label) ?? 0) + Number(line.amount));
+  }
+  const content = [
+    pdfBrand('PHIẾU THANH TOÁN TIỀN LƯƠNG'),
+    { text: term(row.month), color: '#174B70', bold: true, alignment: 'center', margin: [0, 0, 0, 10] },
+    table([85, '*', 78, 112], [
+      [heading('Mã giáo viên'), row.code, heading('Số phiếu'), `LHG-${row.id}`],
+      [heading('Họ và tên'), row.name, heading('Chức danh'), 'Giáo viên'],
+    ]),
+    { margin: [0, 16, 0, 12], columnGap: 12, columns: [
+      { width: '*', ...table(['*', 86], [[heading('Các khoản thu nhập'), heading('Số tiền')],
+        ...Array.from(groups, ([label, value]) => [label, money(value)]), [heading('Tổng thu nhập'), money(row.amount)]]) },
+      { width: '*', ...table(['*', 86], [[heading('Các khoản đã chi'), heading('Số tiền')],
+        ['Đã tạm ứng', money(row.advance)], ['Đã thanh toán', money(row.payment)],
+        [heading('Tổng đã chi'), money(Number(row.advance) + Number(row.payment))]]) },
+    ] },
+    table(['*', 145], [[heading('SỐ TIỀN CÒN PHẢI TRẢ'), { ...money(row.remaining), bold: true, color: '#174B70', fillColor: '#e7f0fa' }]]),
+    { text: 'Bằng chữ: ' + (Number(row.remaining) < 0 ? 'Âm ' : '') + numberToVietnameseWords(Math.abs(Number(row.remaining))),
+      italics: true, margin: [0, 8, 0, 18] },
+    { columns: ['Người lập phiếu', 'Người nhận tiền', 'Người duyệt'].map((text) => ({
+      text: text + '\n(Ký, ghi rõ họ tên)', alignment: 'center',
+    })), margin: [0, 0, 0, 26] },
+  ];
+  if (row.snapshot.length) {
+    content.push({ text: 'Chi tiết tiền công', bold: true });
+    content.push(pdfTable(['Ngày', 'Nội dung', 'Khối lượng', 'Đơn giá', 'Tiền công'],
+      periodRows(row).map((r) => [r[0], r[1], r[4] + ' · ' + r[7], r[5], r[6]]),
+      [55, '*', 70, 72, 80], [3, 4]));
+  }
+  if (row.entries.length) {
+    content.push({ text: 'Lịch sử giao dịch', bold: true });
+    content.push(pdfTable(entryHeaders, entryRows(row), [27, 54, 52, 65, 70, '*', '*'], [4]));
+  }
+  return pdfmake.createPdf({ pageSize: 'A4', pageMargins: [32, 30, 32, 38], content,
+    defaultStyle: { font: 'Roboto', fontSize: 10 },
+    footer: (page, count) => ({ text: `${page}/${count}`, alignment: 'right', margin: [0, 8, 32, 0] }),
+  }).getBuffer();
+}
+
 function payrollPdf(row, entry) {
-  const title = entry ? 'PHIẾU GHI NHẬN ' + kindName[entry.kind].toLocaleUpperCase('vi') : `PHIẾU LƯƠNG GIÁO VIÊN ${term(row.month)}`;
+  if (!entry) return payslipPdf(row);
+  const title = 'PHIẾU GHI NHẬN ' + kindName[entry.kind].toLocaleUpperCase('vi');
   const content = [
     pdfBrand(title),
     { text: `Kỳ: ${row.month}   |   Mã phiếu: LHG-${row.id}` },
     { text: `Giáo viên: ${row.name}   |   Mã giáo viên: ${row.code}`, margin: [0, 5, 0, 10] },
   ];
-  if (entry) {
-    content.push(pdfTable(entryHeaders, entryRows({ entries: [entry] }), [30, 65, 63, 75, 85, '*', '*'], [4]));
-  } else {
-    content.push({ text: 'Chi tiết tiền công đã chốt', bold: true });
-    content.push(pdfTable(periodHeaders, periodRows(row), [65, '*', 47, 47, 61, 80, 80, 85], [5, 6]));
-    content.push({ text: summary(row).map(([k, v]) => k + ': ' + vnd(v)).join('   |   '), bold: true, margin: [0, 4, 0, 10] });
-    if (row.entries.length) {
-      content.push({ text: 'Lịch sử giao dịch', bold: true });
-      content.push(pdfTable(entryHeaders, entryRows(row), [30, 65, 63, 75, 85, '*', '*'], [4]));
-    }
-  }
+  content.push(pdfTable(entryHeaders, entryRows({ entries: [entry] }), [30, 65, 63, 75, 85, '*', '*'], [4]));
   content.push({ columns: ['Người lập', 'Người duyệt', 'Người nhận'].map((text) => ({
     text: text + '\n(Ký, ghi rõ họ tên)', alignment: 'center',
   })), margin: [0, 16, 0, 0] });
