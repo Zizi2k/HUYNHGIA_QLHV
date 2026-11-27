@@ -46,6 +46,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/classes', classRoutes);
 app.use('/api/teaching-payroll', require('./routes/teachingPayrollRoutes'));
+app.use('/api/staff-departments', require('./routes/staffDepartmentRoutes'));
 const staffClock = require('./routes/staffClockRoutes');
 app.use('/api/staff-clock', staffClock);
 setInterval(() => staffClock.purgeExpiredClockPhotos().catch((err) => {

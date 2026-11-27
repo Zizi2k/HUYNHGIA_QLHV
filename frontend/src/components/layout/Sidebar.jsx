@@ -53,8 +53,8 @@ export default function Sidebar({ collapsed, mobileOpen, onNavigate }) {
           <div className="app-sidebar-section">
             {!collapsed && <div className="app-sidebar-section-label">Giảng dạy</div>}
             <NavItem to="/attendance" icon="calendar-check" label="Điểm danh" />
-            {(isSuper || user?.role === 'teacher') && <NavItem to="/teaching-payroll" icon="cash-stack" label="Lương giáo viên" />}
-            {(isSuper || user?.role === 'teacher') && <NavItem to="/staff-clock" icon="clock-history" label="Chấm công giáo viên" />}
+            <NavItem to="/teaching-payroll" icon="cash-stack" label="Lương giáo viên" />
+            <NavItem to="/staff-clock" icon="clock-history" label="Chấm công giáo viên" />
           </div>
         )}
 
@@ -62,6 +62,7 @@ export default function Sidebar({ collapsed, mobileOpen, onNavigate }) {
           <div className="app-sidebar-section">
             {!collapsed && <div className="app-sidebar-section-label">Quản trị</div>}
             {isSuper && <NavItem to="/admin-staff" icon="shield-lock" label="Phân quyền admin" />}
+            {isSuper && <NavItem to="/staff-departments" icon="diagram-3" label="Phòng ban giảng dạy" />}
             <NavItem to="/users" icon="people" label="Người dùng" />
             <NavItem to="/students" icon="person-lines-fill" label="Quản lý học viên" />
             {isSuper && <NavItem to="/audit" icon="journal-text" label="Nhật ký & duyệt" />}

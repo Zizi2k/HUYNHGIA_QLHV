@@ -4,8 +4,10 @@ const pool = require('../config/db');
 const { authenticate } = require('../middleware/auth');
 const { isSuperAdmin } = require('../utils/adminScope');
 const { fail, vietnamClock } = require('../services/teachingPeriods');
-const { transaction, ensurePayroll } = require('../services/teachingPayroll');
-const { MAX_IMAGE, imageType, inputs, calculateClock, expiry } = require('../services/staffClock');
+const { transaction, ensurePayroll, assertUnclosed } = require('../services/teachingPayroll');
+const { MAX_IMAGE, imageType, inputs, calculateClock, expiry, correctionFields } = require('../services/staffClock');
+const { ensureDepartments, managedBy, visibleTo, managerStatus, notifyClockReviewers } = require('../services/staffDepartments');
+const { createNotification } = require('../utils/notificationDb');
 const { MAX_BYTES, template, parseWorkbook, fingerprint, norm } = require('../services/staffClockImport');
 
 let schema;
@@ -37,6 +39,16 @@ function ensureClock() {
       FOREIGN KEY (shift_id) REFERENCES staff_clock_shifts(id),
       FOREIGN KEY (batch_id) REFERENCES staff_clock_import_batches(id)
     ) ENGINE=InnoDB`);
+    await pool.query(`CREATE TABLE IF NOT EXISTS staff_clock_corrections (
+      id INT AUTO_INCREMENT PRIMARY KEY, shift_id INT NOT NULL, teacher_id INT NOT NULL,
+      before_start BIGINT UNSIGNED NOT NULL, before_end BIGINT UNSIGNED NULL, before_rest INT NOT NULL,
+      after_start BIGINT UNSIGNED NOT NULL, after_end BIGINT UNSIGNED NOT NULL, after_rest INT NOT NULL,
+      reason VARCHAR(500) NOT NULL, review_note VARCHAR(500) NULL, reviewed_by INT NULL,
+      status ENUM('pending','granted','rejected','applied') NOT NULL DEFAULT 'pending',
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, reviewed_at TIMESTAMP NULL, applied_at TIMESTAMP NULL,
+      INDEX (teacher_id,status,id), INDEX (shift_id,status),
+      FOREIGN KEY (shift_id) REFERENCES staff_clock_shifts(id)
+    ) ENGINE=InnoDB`);
   })().catch((err) => { schema = undefined; throw err; });
   return schema;
 }
@@ -53,8 +65,11 @@ router.use(authenticate, async (req, res, next) => {
   try {
     const [[account]] = await pool.query('SELECT id,role,admin_scope,status FROM users WHERE id=?', [req.user.id]);
     const admin = isSuperAdmin(account);
-    if (!account?.status || (account.role !== 'teacher' && !admin)) fail('Không có quyền xem chấm công', 403);
-    req.clockAccount = { id: account.id, admin, teacher: account.role === 'teacher' };
+    if (!account?.status || !['teacher','admin'].includes(account.role)) fail('Không có quyền xem chấm công', 403);
+    await ensureDepartments();
+    const manager = !admin && await managerStatus(pool, account.id);
+    if (account.role !== 'teacher' && !admin && !manager) fail('Không có quyền xem chấm công', 403);
+    req.clockAccount = { id: account.id, admin, manager, teacher: account.role === 'teacher' };
     await ensureClock();
     res.set('Cache-Control', 'private, no-store');
     next();
@@ -65,11 +80,11 @@ const handle = (fn) => async (req, res, next) => {
 };
 
 router.get('/', handle(async (req, res) => {
-  const { id, admin } = req.clockAccount;
+  const { id, admin, manager, teacher } = req.clockAccount;
   const month = req.query.month || vietnamClock().slice(0, 7);
   if (typeof month !== 'string' || !/^20\d{2}-(0[1-9]|1[0-2])$/.test(month)) fail('Tháng không hợp lệ');
   const current = Date.now();
-  const [shifts] = await pool.query(`SELECT s.id,u.fullname AS teacher,s.started_ms,s.ended_ms,s.rest_minutes,s.payable_minutes,
+  const [shifts] = await pool.query(`SELECT s.id,s.teacher_id,u.fullname AS teacher,s.started_ms,s.ended_ms,s.rest_minutes,s.payable_minutes,
     CASE WHEN im.shift_id IS NULL THEN 'self' ELSE 'excel' END AS source,
     im.work_type,im.class_label,im.note AS import_note,
     CASE WHEN ci.expires_ms>? AND ci.photo IS NOT NULL THEN ci.id ELSE NULL END AS inPhoto,
@@ -79,10 +94,94 @@ router.get('/', handle(async (req, res) => {
     LEFT JOIN staff_clock_events ci ON ci.shift_id=s.id AND ci.direction='in'
     LEFT JOIN staff_clock_events co ON co.shift_id=s.id AND co.direction='out'
     WHERE s.vn_date>=CONCAT(?,'-01') AND s.vn_date<DATE_ADD(CONCAT(?,'-01'),INTERVAL 1 MONTH)
-    ${admin ? '' : 'AND s.teacher_id=?'} ORDER BY s.started_ms DESC LIMIT 200`,
-  [current, current, month, month, ...(admin ? [] : [id])]);
-  const [[open]] = admin ? [[]] : await pool.query('SELECT id,started_ms FROM staff_clock_shifts WHERE open_teacher=?', [id]);
-  res.json({ shifts, open: open ?? null, admin, month });
+    ${visibleTo('s.teacher_id', admin)} ORDER BY s.started_ms DESC LIMIT 200`,
+  [current, current, month, month, ...(admin ? [] : [id, id])]);
+  const [[open]] = !teacher ? [[]] : await pool.query('SELECT id,started_ms FROM staff_clock_shifts WHERE open_teacher=?', [id]);
+  res.json({ shifts, open: open ?? null, admin, manager, teacher, viewerId: id, month });
+}));
+
+const positive = (raw) => {
+  const id = Number(raw);
+  if (!Number.isSafeInteger(id) || id < 1) fail('Mã bản ghi không hợp lệ');
+  return id;
+};
+router.get('/corrections', handle(async (req, res) => {
+  const { id, admin } = req.clockAccount;
+  const [rows] = await pool.query(`SELECT c.*,u.fullname AS teacher FROM staff_clock_corrections c
+    JOIN users u ON u.id=c.teacher_id WHERE 1=1 ${visibleTo('c.teacher_id', admin)} ORDER BY c.id DESC LIMIT 100`,
+  admin ? [] : [id, id]);
+  res.json(rows);
+}));
+router.post('/shifts/:shiftId/corrections', handle(async (req, res) => {
+  const viewer = req.clockAccount.id, shiftId = positive(req.params.shiftId);
+  const data = correctionFields(req.body || {});
+  await ensurePayroll();
+  const id = await transaction(async (conn) => {
+    await conn.query('SELECT id FROM users WHERE id=? FOR UPDATE', [viewer]);
+    const [[shift]] = await conn.query(`SELECT *,DATE_FORMAT(vn_date,'%Y-%m-%d') AS workDay
+      FROM staff_clock_shifts WHERE id=? AND teacher_id=? FOR UPDATE`, [shiftId, viewer]);
+    if (!shift) fail('Không tìm thấy ca của bạn', 404);
+    if (data.date !== shift.workDay) fail('Điều chỉnh phải giữ ngày bắt đầu của ca');
+    await assertUnclosed(conn, viewer, shift.workDay.slice(0, 7));
+    const [[pending]] = await conn.query("SELECT id FROM staff_clock_corrections WHERE shift_id=? AND status IN ('pending','granted')", [shiftId]);
+    if (pending) fail('Ca này đã có yêu cầu chưa xử lý', 409);
+    const [row] = await conn.query(`INSERT INTO staff_clock_corrections
+      (shift_id,teacher_id,before_start,before_end,before_rest,after_start,after_end,after_rest,reason)
+      VALUES (?,?,?,?,?,?,?,?,?)`, [shiftId, viewer, shift.started_ms, shift.ended_ms, shift.rest_minutes, data.start, data.end, data.rest, data.reason]);
+    await notifyClockReviewers(conn, viewer, 'Yêu cầu sửa chấm công', `Có yêu cầu sửa ca #${shiftId} cần duyệt.`);
+    return row.insertId;
+  });
+  res.status(201).json({ id });
+}));
+router.post('/corrections/:id/review', handle(async (req, res) => {
+  const actor = req.clockAccount, id = positive(req.params.id);
+  const decision = req.body?.decision, note = typeof req.body?.note === 'string' ? req.body.note.trim() : '';
+  if (!['granted','rejected'].includes(decision) || note.length > 500 || (decision === 'rejected' && !note)) fail('Kết quả duyệt hoặc lý do không hợp lệ');
+  await ensurePayroll();
+  await transaction(async (conn) => {
+    const [[row]] = await conn.query(`SELECT c.teacher_id,DATE_FORMAT(s.vn_date,'%Y-%m') AS month FROM staff_clock_corrections c
+      JOIN staff_clock_shifts s ON s.id=c.shift_id WHERE c.id=? ${actor.admin ? '' : 'AND ' + managedBy('c.teacher_id')}`,
+    actor.admin ? [id] : [id, actor.id]);
+    if (!row || row.teacher_id === actor.id) fail('Không thể duyệt yêu cầu này', 403);
+    await conn.query('SELECT id FROM users WHERE id=? FOR UPDATE', [row.teacher_id]);
+    if (decision === 'granted') await assertUnclosed(conn, row.teacher_id, row.month);
+    const [result] = await conn.query(`UPDATE staff_clock_corrections SET status=?,review_note=?,reviewed_by=?,reviewed_at=CURRENT_TIMESTAMP
+      WHERE id=? AND status='pending'`, [decision, note, actor.id, id]);
+    if (!result.affectedRows) fail('Yêu cầu đã được xử lý', 409);
+    await createNotification(conn, { userId: row.teacher_id, type: 'staff_clock', title: 'Kết quả yêu cầu sửa công',
+      body: decision === 'granted' ? 'Yêu cầu đã duyệt. Bạn có thể áp dụng nội dung đã duyệt một lần.' : 'Yêu cầu đã bị từ chối.',
+      linkPath: '/staff-clock', sentBy: actor.id });
+  });
+  res.json({ status: decision });
+}));
+router.post('/corrections/:id/apply', handle(async (req, res) => {
+  const teacher = req.clockAccount.id, id = positive(req.params.id);
+  await ensurePayroll();
+  const minutes = await transaction(async (conn) => {
+    await conn.query('SELECT id FROM users WHERE id=? FOR UPDATE', [teacher]);
+    const [[row]] = await conn.query(`SELECT c.*,s.started_ms,s.ended_ms,s.rest_minutes,s.payable_minutes,DATE_FORMAT(s.vn_date,'%Y-%m') AS month
+      FROM staff_clock_corrections c JOIN staff_clock_shifts s ON s.id=c.shift_id WHERE c.id=? AND c.teacher_id=? FOR UPDATE`, [id, teacher]);
+    if (!row) fail('Không tìm thấy yêu cầu của bạn', 404);
+    if (row.status !== 'granted') fail('Quyền sửa chưa được duyệt hoặc đã dùng', 409);
+    await assertUnclosed(conn, teacher, row.month);
+    if (Number(row.before_start) !== Number(row.started_ms) || Number(row.before_end) !== Number(row.ended_ms)
+      || row.before_rest !== row.rest_minutes) fail('Ca đã thay đổi; cần yêu cầu mới', 409);
+    const [conflicts] = await conn.query(`SELECT id FROM staff_clock_shifts WHERE teacher_id=? AND id<>?
+      AND started_ms<? AND (ended_ms IS NULL OR ended_ms>?) LIMIT 1 FOR UPDATE`, [teacher, row.shift_id, row.after_end, row.after_start]);
+    if (conflicts.length) fail('Giờ đề nghị trùng một ca khác', 409);
+    const { payableMinutes } = calculateClock(Number(row.after_start), Number(row.after_end), row.after_rest);
+    if (row.payable_minutes != null && payableMinutes < row.payable_minutes) {
+      const [[advance]] = await conn.query(`SELECT 1 AS held FROM teaching_payroll_open_advances o
+        JOIN teaching_payroll_basis b ON b.teacher_id=o.teacher_id AND b.pay_month=o.pay_month
+        WHERE o.teacher_id=? AND o.pay_month=? AND o.voided_at IS NULL AND b.basis='hour' LIMIT 1`, [teacher, row.month]);
+      if (advance) fail('Kỳ lương giờ có khoản ứng đang hiệu lực. Cần xử lý khoản ứng trước khi giảm giờ công.', 409);
+    }
+    await conn.query('UPDATE staff_clock_shifts SET started_ms=?,ended_ms=?,rest_minutes=?,payable_minutes=? WHERE id=?',
+      [row.after_start, row.after_end, row.after_rest, payableMinutes, row.shift_id]);
+    await conn.query("UPDATE staff_clock_corrections SET status='applied',applied_at=CURRENT_TIMESTAMP WHERE id=?", [id]);
+    return payableMinutes;
+  });
+  res.json({ minutes });
 }));
 
 function requireImportAdmin(req, _res, next) {
@@ -219,6 +318,7 @@ router.post('/:direction(in|out)', (req, res, next) => {
     await conn.query(`INSERT INTO staff_clock_events
       (shift_id,teacher_id,direction,request_id,lat,lng,accuracy,image_type,photo,expires_ms)
       VALUES (?,?,?,?,?,?,?,?,?,?)`, [shiftId, id, direction, data.requestId, data.lat, data.lng, data.accuracy, type, req.file.buffer, expiry(now)]);
+    await notifyClockReviewers(conn, id, direction === 'in' ? 'Giáo viên chấm công vào' : 'Giáo viên chấm công ra', `Có cập nhật ca #${shiftId}.`);
     return { id: shiftId };
   });
   res.json(output);
@@ -228,9 +328,9 @@ router.get('/evidence/:id', handle(async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isSafeInteger(id) || id < 1) fail('Không tìm thấy ảnh minh chứng', 404);
   const { id: viewer, admin } = req.clockAccount;
-  const [[row]] = await pool.query(`SELECT image_type,photo FROM staff_clock_events
-    WHERE id=? AND expires_ms>? AND photo IS NOT NULL ${admin ? '' : 'AND teacher_id=?'}`,
-  [id, Date.now(), ...(admin ? [] : [viewer])]);
+  const [[row]] = await pool.query(`SELECT image_type,photo FROM staff_clock_events e
+    WHERE id=? AND expires_ms>? AND photo IS NOT NULL ${visibleTo('e.teacher_id', admin)}`,
+  [id, Date.now(), ...(admin ? [] : [viewer, viewer])]);
   if (!row) fail('Không tìm thấy ảnh minh chứng hoặc ảnh đã hết hạn', 404);
   res.set('X-Content-Type-Options', 'nosniff').type(row.image_type).send(row.photo);
 }));

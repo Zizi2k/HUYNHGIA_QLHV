@@ -9,6 +9,7 @@ const { requireClassMember } = require('../middleware/classAccess');
 const routes = require('../routes/teachingPeriodRoutes');
 const payroll = require('../routes/teachingPayrollRoutes');
 const staffClock = require('../routes/staffClockRoutes');
+const departments = require('../routes/staffDepartmentRoutes');
 const ExcelJS = require('exceljs');
 const { template } = require('../services/staffClockImport');
 
@@ -24,6 +25,8 @@ test('MySQL: duyệt công theo tiết, không xem chéo và không chấm trùn
     await pool.query('CREATE TABLE classes (id INT PRIMARY KEY, name VARCHAR(100) NOT NULL) ENGINE=InnoDB');
     await pool.query('CREATE TABLE class_members (id INT AUTO_INCREMENT PRIMARY KEY, class_id INT, user_id INT) ENGINE=InnoDB');
     await pool.query('CREATE TABLE tuition_profiles (class_id INT, student_code VARCHAR(20)) ENGINE=InnoDB');
+    await pool.query(`CREATE TABLE notifications (id INT AUTO_INCREMENT PRIMARY KEY,user_id INT,type VARCHAR(50),title VARCHAR(255),
+      body TEXT,class_id INT,link_path VARCHAR(255),sent_by INT,zalo_status VARCHAR(30),zalo_error TEXT) ENGINE=InnoDB`);
     await pool.query(`CREATE TABLE teacher_schedule_slots (id INT PRIMARY KEY, class_id INT,
       slot_date DATE, start_time TIME, end_time TIME, is_available BOOLEAN) ENGINE=InnoDB`);
     await pool.query(`INSERT INTO users VALUES (1,'Quản trị','admin','AD1','all',1),
@@ -37,6 +40,7 @@ test('MySQL: duyệt công theo tiết, không xem chéo và không chấm trùn
     app.use('/classes/:id/teaching-periods', authenticate, requireClassMember('id'), routes);
     app.use('/teaching-payroll', payroll);
     app.use('/staff-clock', staffClock);
+    app.use('/staff-departments', departments);
     const server = app.listen(0, '127.0.0.1');
     await once(server, 'listening');
     t.after(() => new Promise((resolve) => server.close(resolve)));
@@ -217,4 +221,39 @@ test('MySQL: duyệt công theo tiết, không xem chéo và không chấm trùn
     assert.equal((await (await clock(admin, '/import/commit', uploadFile(duplicate, dupPreview.hash, true))).json()).imported, 1);
     const closedFile = await importFile([[...line.slice(0, 2), '2025-03-01', ...line.slice(3)]]);
     assert.match((await (await clock(admin, '/import/preview', uploadFile(closedFile))).json()).rows[0].error, /đã chốt/);
+    const manager = user(5, 'admin', 'HG');
+    async function json(account, url, method = 'GET', payload) {
+      const response = await fetch(`http://127.0.0.1:${server.address().port}${url}`, {
+        method, headers: { Authorization: 'Bearer ' + jwt.sign(account, secret), 'Content-Type': 'application/json' },
+        body: payload && JSON.stringify(payload),
+      });
+      return [response.status, await response.json()];
+    }
+    assert.equal((await json(manager, '/staff-departments', 'POST', { name: 'Giáo vụ' }))[0], 403);
+    const [, department] = await json(admin, '/staff-departments', 'POST', { name: 'Giáo vụ' });
+    const configuration = { name: 'Giáo vụ', active: true, assignments: [
+      { user_id: a.id, membership: 'member' }, { user_id: manager.id, membership: 'manager' },
+    ] };
+    assert.equal((await json(admin, '/staff-departments/' + department.id, 'PUT', configuration))[0], 200);
+    assert.equal((await clock(manager, '/evidence/' + saved.outPhoto)).status, 200);
+    assert.equal((await pay(manager, id))[0], 200);
+    assert.equal((await pay(manager, '/' + hourRecord.id))[0], 404);
+    assert.equal((await pay(manager, '/close', { teacherId: a.id, month: '2025-05' }))[0], 403);
+    const [, may] = await json(a, '/staff-clock?month=2025-05');
+    const shiftId = may.shifts[0].id;
+    const proposal = { start: '2025-05-01T08:00', end: '2025-05-01T10:15', rest: 15, reason: 'Sửa giờ ra' };
+    assert.equal((await json(b, `/staff-clock/shifts/${shiftId}/corrections`, 'POST', proposal))[0], 404);
+    const [requestStatus, fix] = await json(a, `/staff-clock/shifts/${shiftId}/corrections`, 'POST', proposal);
+    assert.equal(requestStatus, 201, JSON.stringify(fix));
+    assert.equal((await json(a, `/staff-clock/corrections/${fix.id}/review`, 'POST', { decision: 'granted' }))[0], 403);
+    assert.equal((await json(manager, `/staff-clock/corrections/${fix.id}/review`, 'POST', { decision: 'granted' }))[0], 200);
+    const [applyStatus, applyResult] = await json(a, `/staff-clock/corrections/${fix.id}/apply`, 'POST', {});
+    assert.equal(applyStatus, 200, JSON.stringify(applyResult));
+    assert.equal(applyResult.minutes, 120);
+    assert.equal((await json(a, `/staff-clock/corrections/${fix.id}/apply`, 'POST', {}))[0], 409);
+    const [notified] = await pool.query("SELECT DISTINCT user_id FROM notifications WHERE title='Yêu cầu sửa chấm công' ORDER BY user_id");
+    assert.deepEqual(notified.map((row) => row.user_id), [admin.id, manager.id]);
+    await json(admin, '/staff-departments/' + department.id, 'PUT', { ...configuration, active: false });
+    assert.equal((await pay(manager, id))[0], 403);
+    assert.equal((await clock(manager, '/evidence/' + saved.outPhoto)).status, 403);
   });

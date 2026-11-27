@@ -1,12 +1,20 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { imageType, inputs, calculateClock, expiry } = require('../services/staffClock');
+const { imageType, inputs, calculateClock, expiry, correctionFields } = require('../services/staffClock');
 
 const date = (hm) => Date.parse('2026-11-27T' + hm + ':00+07:00');
 test('làm tròn tại đúng 10 phút, không trừ nghỉ hai lần', () => {
   assert.deepEqual(calculateClock(date('08:10'), date('11:20'), 30), { exactMinutes: 190, payableMinutes: 180 });
   assert.deepEqual(calculateClock(date('08:11'), date('11:19'), 0), { exactMinutes: 188, payableMinutes: 188 });
   assert.throws(() => calculateClock(date('08:00'), date('08:10'), 15), { status: 400 });
+});
+
+test('yêu cầu sửa công dùng giờ Việt Nam, không nhận ca tương lai hay ngày sai', () => {
+  const now = Date.parse('2026-11-27T10:00+07:00');
+  const proposal = { start: '2026-11-27T08:00', end: '2026-11-27T09:15', rest: 15, reason: 'Điều chỉnh' };
+  assert.equal(correctionFields(proposal, now).payableMinutes, 60);
+  assert.throws(() => correctionFields({ ...proposal, end: '2026-11-27T11:00' }, now), { status: 400 });
+  assert.throws(() => correctionFields({ ...proposal, start: '2026-02-30T08:00' }, now), { status: 400 });
 });
 test('qua tháng vẫn tính theo thời gian thực và tháng hết hạn ngắn được chặn đúng ngày', () => {
   const start = Date.parse('2026-11-30T23:56:00+07:00');

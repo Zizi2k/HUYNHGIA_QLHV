@@ -6,6 +6,8 @@ const { fail, vietnamClock } = require('../services/teachingPeriods');
 const { ensurePayroll, monthField, entryFields, summarize, transaction, assertUnclosed, basisFields, salaryLines } = require('../services/teachingPayroll');
 const { ensureTeachingPeriodSchema } = require('./teachingPeriodRoutes');
 const { ensureClock } = require('./staffClockRoutes');
+const { ensureDepartments, visibleTo, managerStatus } = require('../services/staffDepartments');
+const { createNotification } = require('../utils/notificationDb');
 
 router.use(authenticate);
 const positiveId = (raw) => {
@@ -18,7 +20,9 @@ function endpoint(handler, adminOnly = false) {
     try {
       const [[account]] = await pool.query('SELECT id,role,admin_scope,status FROM users WHERE id=?', [req.user.id]);
       const admin = isSuperAdmin(account);
-      if (!account?.status || (!admin && (adminOnly || account.role !== 'teacher'))) fail('Không có quyền truy cập kỳ lương', 403);
+      if (!account?.status || !['teacher','admin'].includes(account.role) || (adminOnly && !admin)) fail('Không có quyền truy cập kỳ lương', 403);
+      await ensureDepartments();
+      if (!admin && account.role !== 'teacher' && !(await managerStatus(pool, account.id))) fail('Không có quyền truy cập kỳ lương', 403);
       await ensureTeachingPeriodSchema();
       await ensurePayroll();
       await ensureClock();
@@ -62,8 +66,8 @@ router.get('/', endpoint(async (req, account, admin) => {
     p.periods,p.amount_vnd AS amount,COALESCE(SUM(CASE WHEN e.voided_at IS NULL AND e.kind='advance' THEN e.amount_vnd ELSE 0 END),0) AS advance,
     COALESCE(SUM(CASE WHEN e.voided_at IS NULL AND e.kind='payment' THEN e.amount_vnd ELSE 0 END),0) AS payment
     FROM teaching_payroll p LEFT JOIN teaching_payroll_entries e ON e.payroll_id=p.id
-    WHERE p.pay_month=? ${admin ? '' : 'AND p.teacher_id=?'} GROUP BY p.id ORDER BY p.teacher_name,p.id`,
-  admin ? [month] : [month, account.id]);
+    WHERE p.pay_month=? ${visibleTo('p.teacher_id', admin)} GROUP BY p.id ORDER BY p.teacher_name,p.id`,
+  admin ? [month] : [month, account.id, account.id]);
   if (!admin) return { month, closed, drafts: [], admin };
   const [drafts] = await pool.query(`SELECT a.teacher_id AS teacherId,u.fullname AS name,u.code,
     SUM(CASE WHEN a.status='approved' THEN a.period_count ELSE 0 END) AS periods,
@@ -144,6 +148,8 @@ router.post('/close', endpoint(async (req, account) => {
       (payroll_id,request_id,kind,method,amount_vnd,entry_date,note,created_by,created_at,voided_by,voided_at,void_reason)
       SELECT ?,request_id,'advance',method,amount_vnd,entry_date,note,created_by,created_at,voided_by,voided_at,void_reason
       FROM teaching_payroll_open_advances WHERE teacher_id=? AND pay_month=?`, [record.insertId, teacher, month]);
+    await createNotification(conn, { userId: teacher, type: 'staff_payroll', title: 'Kỳ lương đã được chốt',
+      body: `Kỳ ${month} đã chốt. Đăng nhập để xem phiếu lương.`, linkPath: '/teaching-payroll', sentBy: account.id });
     return { id: record.insertId };
   });
 }, true));
@@ -178,6 +184,8 @@ router.post('/draft/:teacherId/:month/advances', endpoint(async (req, account) =
     const [result] = await conn.query(`INSERT INTO teaching_payroll_open_advances
       (teacher_id,pay_month,request_id,method,amount_vnd,entry_date,note,created_by) VALUES (?,?,?,?,?,?,?,?)`,
     [teacher, month, entry.requestId, entry.method, entry.amount, entry.date, entry.note, account.id]);
+    await createNotification(conn, { userId: teacher, type: 'staff_payroll', title: 'Khoản ứng đã được ghi nhận',
+      body: `Có khoản ứng mới cho kỳ ${month}.`, linkPath: '/teaching-payroll', sentBy: account.id });
     return { id: result.insertId };
   });
 }, true));
@@ -198,8 +206,8 @@ router.post('/draft/:teacherId/:month/advances/:entryId/void', endpoint(async (r
 
 async function detail(id, account, admin) {
   const [[row]] = await pool.query(`SELECT id,pay_month AS month,teacher_name AS name,teacher_code AS code,
-    periods,amount_vnd AS amount,snapshot,closed_at FROM teaching_payroll WHERE id=? ${admin ? '' : 'AND teacher_id=?'}`,
-  admin ? [id] : [id, account.id]);
+    periods,amount_vnd AS amount,snapshot,closed_at FROM teaching_payroll p WHERE id=? ${visibleTo('p.teacher_id', admin)}`,
+  admin ? [id] : [id, account.id, account.id]);
   if (!row) fail('Không tìm thấy kỳ lương', 404);
   const [entries] = await pool.query(`SELECT id,kind,method,amount_vnd,DATE_FORMAT(entry_date,'%Y-%m-%d') AS date,
     note,voided_at,void_reason FROM teaching_payroll_entries WHERE payroll_id=? ORDER BY entry_date,id`, [id]);
@@ -213,7 +221,7 @@ router.get('/debts', endpoint(async (_req, account, admin) => {
     COALESCE(SUM(CASE WHEN e.voided_at IS NULL AND e.kind='advance' THEN e.amount_vnd ELSE 0 END),0) AS advance,
     COALESCE(SUM(CASE WHEN e.voided_at IS NULL AND e.kind='payment' THEN e.amount_vnd ELSE 0 END),0) AS payment
     FROM teaching_payroll p LEFT JOIN teaching_payroll_entries e ON e.payroll_id=p.id
-    ${admin ? '' : 'WHERE p.teacher_id=?'} GROUP BY p.id ORDER BY p.teacher_name,p.pay_month,p.id`, admin ? [] : [account.id]);
+    WHERE 1=1 ${visibleTo('p.teacher_id', admin)} GROUP BY p.id ORDER BY p.teacher_name,p.pay_month,p.id`, admin ? [] : [account.id, account.id]);
   const groups = new Map();
   for (const row of rows) {
     const remaining = Number(row.amount) - Number(row.advance) - Number(row.payment);
@@ -253,7 +261,7 @@ router.post('/:id/entries', endpoint(async (req, account) => {
   const id = positiveId(req.params.id);
   const entry = entryFields(req.body || {});
   return transaction(async (conn) => {
-    const [[payroll]] = await conn.query('SELECT amount_vnd FROM teaching_payroll WHERE id=? FOR UPDATE', [id]);
+    const [[payroll]] = await conn.query('SELECT teacher_id,pay_month,amount_vnd FROM teaching_payroll WHERE id=? FOR UPDATE', [id]);
     if (!payroll) fail('Không tìm thấy kỳ lương', 404);
     const [entries] = await conn.query(`SELECT id,request_id,kind,method,amount_vnd,DATE_FORMAT(entry_date,'%Y-%m-%d') AS date,
       note,voided_at FROM teaching_payroll_entries WHERE payroll_id=? FOR UPDATE`, [id]);
@@ -267,6 +275,8 @@ router.post('/:id/entries', endpoint(async (req, account) => {
     const [result] = await conn.query(`INSERT INTO teaching_payroll_entries
       (payroll_id,request_id,kind,method,amount_vnd,entry_date,note,created_by) VALUES (?,?,?,?,?,?,?,?)`,
     [id, entry.requestId, entry.kind, entry.method, entry.amount, entry.date, entry.note, account.id]);
+    await createNotification(conn, { userId: payroll.teacher_id, type: 'staff_payroll', title: 'Ghi nhận giao dịch lương',
+      body: `Có giao dịch mới cho kỳ ${payroll.pay_month}. Đăng nhập để xem chi tiết.`, linkPath: '/teaching-payroll', sentBy: account.id });
     return { id: result.insertId };
   });
 }, true));

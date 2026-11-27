@@ -43,4 +43,17 @@ function expiry(now) {
   day.setUTCDate(Math.min(originalDay, monthEnd));
   return +day;
 }
-module.exports = { MAX_IMAGE, imageType, inputs, calculateClock, expiry };
+function correctionFields(body, now = Date.now()) {
+  const toMs = (value) => {
+    if (typeof value !== 'string' || !/^20\d\d-\d\d-\d\dT(?:[01]\d|2[0-3]):[0-5]\d$/.test(value)) fail('Ngày giờ đề nghị không hợp lệ');
+    const stamp = Date.parse(value + ':00+07:00');
+    if (!Number.isFinite(stamp) || new Date(stamp + 25200000).toISOString().slice(0, 16) !== value) fail('Ngày giờ đề nghị không tồn tại');
+    return stamp;
+  };
+  const start = toMs(body.start), end = toMs(body.end), rest = body.rest;
+  if (end > now || end - start > 86400000 || !Number.isInteger(rest) || rest < 0 || rest > 720 || rest % 15) fail('Ca phải đã kết thúc, tối đa 24 giờ; phút nghỉ theo bước 15');
+  const reason = typeof body.reason === 'string' ? body.reason.trim() : '';
+  if (!reason || reason.length > 500) fail('Cần lý do đề nghị (tối đa 500 ký tự)');
+  return { start, end, rest, reason, date: body.start.slice(0, 10), ...calculateClock(start, end, rest) };
+}
+module.exports = { MAX_IMAGE, imageType, inputs, calculateClock, expiry, correctionFields };

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Alert, Badge, Button, Form, Modal, Stack, Table } from 'react-bootstrap';
 import api from '../services/api';
 import StaffClockImport from '../components/attendance/StaffClockImport';
+import StaffClockCorrections from '../components/attendance/StaffClockCorrections';
 
 const path = '/staff-clock';
 const vnMonth = () => new Date(Date.now() + 25200000).toISOString().slice(0, 7);
@@ -19,6 +20,7 @@ export default function StaffClockPage() {
   const [busy, setBusy] = useState(false);
   const [locating, setLocating] = useState(false);
   const [photo, setPhoto] = useState('');
+  const [correctionShift, setCorrectionShift] = useState(null);
   const [limit, setLimit] = useState(10);
   const load = useCallback(async (signal) => {
     try {
@@ -92,19 +94,21 @@ export default function StaffClockPage() {
     <Stack direction="horizontal" gap={2} className="align-items-end flex-wrap mb-3">
       <Form.Group controlId="staff-clock-month"><Form.Label>Tháng</Form.Label>
         <Form.Control type="month" value={month} onChange={(e) => { if (e.target.value) setMonth(e.target.value); }} /></Form.Group>
-      {data && !data.admin && <Button onClick={start}>{data.open ? 'Chấm công ra' : 'Chấm công vào'}</Button>}
+      {data?.teacher && <Button onClick={start}>{data.open ? 'Chấm công ra' : 'Chấm công vào'}</Button>}
     </Stack>
     {data?.open && <p><Badge bg="warning" text="dark">Đang làm việc</Badge> · Vào lúc {stamp(data.open.started_ms)}</p>}
     {!data && !notice && <p role="status">Đang tải…</p>}
     {data && <>
       {data.admin && <StaffClockImport onImported={load} />}
-      <Table responsive bordered hover><thead><tr>{data.admin && <th>Giáo viên</th>}<th>Giờ vào</th><th>Giờ ra</th>
+      <StaffClockCorrections data={data} shift={correctionShift} clearShift={() => setCorrectionShift(null)} onSaved={load} />
+      <Table responsive bordered hover><thead><tr>{(data.admin || data.manager) && <th>Giáo viên</th>}<th>Giờ vào</th><th>Giờ ra</th>
         <th>Nghỉ không lương</th><th>Phút tính công</th><th>Minh chứng / Nguồn</th></tr></thead>
-        <tbody>{data.shifts.slice(0, limit).map((row) => <tr key={row.id}>{data.admin && <td>{row.teacher}</td>}
+        <tbody>{data.shifts.slice(0, limit).map((row) => <tr key={row.id}>{(data.admin || data.manager) && <td>{row.teacher}</td>}
           <td>{stamp(row.started_ms)}</td><td>{row.ended_ms == null ? 'Chưa chấm ra' : stamp(row.ended_ms)}</td>
           <td>{row.rest_minutes} phút</td><td>{row.payable_minutes ?? '—'}</td><td><div className="d-flex gap-2 flex-wrap">
             {row.inPhoto && <Button size="sm" variant="outline-primary" onClick={() => evidence(row.inPhoto)}>Ảnh vào</Button>}
             {row.outPhoto && <Button size="sm" variant="outline-primary" onClick={() => evidence(row.outPhoto)}>Ảnh ra</Button>}
+            {row.teacher_id === data.viewerId && <Button size="sm" variant="outline-secondary" onClick={() => setCorrectionShift(row)}>Đề nghị sửa</Button>}
             {row.source === 'excel' ? <span>Excel · {row.work_type}{row.class_label ? ` · ${row.class_label}` : ''}<br />{row.import_note}</span>
               : !row.inPhoto && !row.outPhoto && <span>Không còn ảnh</span>}</div></td></tr>)}</tbody>
       </Table>
