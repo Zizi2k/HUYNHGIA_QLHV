@@ -19,6 +19,7 @@ export default function TeachingPayrollPage() {
   const [month, setMonth] = useState(dateVN().slice(0, 7));
   const [data, setData] = useState(null);
   const [detail, setDetail] = useState(null);
+  const [draftPreview, setDraftPreview] = useState(null);
   const [reopenLog, setReopenLog] = useState(null);
   const [debts, setDebts] = useState(null);
   const [debtLoading, setDebtLoading] = useState(false);
@@ -41,6 +42,13 @@ export default function TeachingPayrollPage() {
     void load(controller.signal);
     return () => controller.abort();
   }, [load]);
+  async function previewDraft(teacher) {
+    setDraftPreview({ loading: true });
+    try {
+      const { data: result } = await api.get(`${path}/draft/${teacher.teacherId}/${month}/preview`);
+      setDraftPreview(result);
+    } catch (err) { setDraftPreview({ error: errorText(err) }); }
+  }
   async function view(id) {
     setFeedback(null);
     setReopenLog(null);
@@ -155,7 +163,9 @@ export default function TeachingPayrollPage() {
         <tbody>{data.drafts.map((row) => <tr key={row.teacherId}><td>{row.name} · {row.code}</td>
           <td>{bases[row.basis]}{row.basis === 'period' ? ` · ${row.periods} tiết` : row.basis === 'hour' ? ` · ${row.minutes} phút` : ''}</td>
           <td>{row.pending}</td><td>{format(row.amount)}{Number(row.extraAmount) > 0 && <div className="small">Ngoài ca: {format(row.extraAmount)}</div>}
-            {Number(row.manualAmount) > 0 && <div className="small">Ca đơn giá riêng: {format(row.manualAmount)}</div>}</td><td>{format(row.advance)}</td><td><div className="d-flex flex-wrap gap-2"><Button size="sm"
+            {Number(row.manualAmount) > 0 && <div className="small">Ca đơn giá riêng: {format(row.manualAmount)}</div>}</td><td>{format(row.advance)}</td><td><div className="d-flex flex-wrap gap-2">
+            <Button size="sm" variant="outline-primary" onClick={() => previewDraft(row)}>Xem thử bảng lương</Button>
+            <Button size="sm"
             disabled={!data.canClose || Number(row.pending) > 0}
             onClick={() => open({ mode: 'close', teacher: row })}>Chốt tháng</Button>
             <Button size="sm" variant="outline-primary" onClick={() => viewDraft(row)}>Ứng trước kỳ</Button></div></td></tr>)}</tbody></Table>
@@ -169,6 +179,32 @@ export default function TeachingPayrollPage() {
           <td><Button variant="outline-primary" size="sm" onClick={() => view(row.id)}>Xem phiếu</Button></td></tr>)}</tbody></Table>
       {!data.closed.length && <p>Chưa có kỳ lương được chốt trong tháng này.</p>}
     </>}
+    <Modal centered size="xl" show={draftPreview !== null} onHide={() => { if (!draftPreview?.loading) setDraftPreview(null); }}>
+      <Modal.Header closeButton={!draftPreview?.loading}><Modal.Title>Xem thử bảng lương</Modal.Title></Modal.Header>
+      <Modal.Body>
+        {draftPreview?.loading ? <p role="status">Đang tải bảng lương…</p> : draftPreview?.error ? <Alert variant="danger">{draftPreview.error}</Alert> :
+          draftPreview && <>
+            <div className="text-center mb-3">
+              <img src="/logo-navbar.png" width="72" alt="Logo Huỳnh Gia" />
+              <div className="fw-semibold">Trung tâm Ngoại ngữ – Tin học Huỳnh Gia</div>
+              <h3 className="h5 mt-2">Bảng lương tháng {draftPreview.month.slice(5)}/{draftPreview.month.slice(0, 4)}</h3>
+              <p>{draftPreview.name} · {draftPreview.code}</p>
+            </div>
+            <Alert variant={draftPreview.conflict ? 'warning' : 'info'}>{draftPreview.conflict
+              ? 'Có ca đơn giá riêng trùng tiết dạy. Tổng tạm tính có thể gồm tiền trùng; cần xử lý trước khi chốt.'
+              : 'Bản tạm tính. Công chưa hoàn tất không được cộng vào tổng.'}</Alert>
+            <Table responsive bordered striped size="sm"><thead><tr><th>Ngày</th><th>Nội dung</th><th>Khối lượng</th><th>Đơn giá</th><th>Tiền công</th><th>Trạng thái</th></tr></thead>
+              <tbody>{draftPreview.snapshot.map((row) => <tr key={row.id}>
+                <td>{row.date}</td><td>{row.className}{row.override_note && <div className="small text-body-secondary">{row.override_note}</div>}</td>
+                <td>{quantity(row)}</td><td>{row.status === 'approved' ? format(row.rate) + '/' + units[row.unit || 'period'] : '—'}</td>
+                <td>{row.status === 'approved' ? format(row.amount) : '—'}</td><td>{row.status === 'approved' ? 'Tính vào lương' : 'Chưa hoàn tất'}</td>
+              </tr>)}</tbody></Table>
+            {!draftPreview.snapshot.length && <p>Chưa có dữ liệu công trong kỳ.</p>}
+            <p className="mb-0"><strong>Tổng tạm tính: {format(draftPreview.amount)}</strong> · Đã ứng: {format(draftPreview.advance)}
+              {' · '}Còn phải trả dự kiến: {format(draftPreview.remaining)}</p>
+          </>}
+      </Modal.Body>
+    </Modal>
     <Modal centered size="lg" show={debts !== null} onHide={() => setDebts(null)}>
       <Modal.Header closeButton><Modal.Title>Công nợ lương đã chốt</Modal.Title></Modal.Header>
       <Modal.Body>
