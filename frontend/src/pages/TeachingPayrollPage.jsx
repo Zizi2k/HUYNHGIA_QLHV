@@ -153,7 +153,8 @@ export default function TeachingPayrollPage() {
       <Table responsive bordered><thead><tr><th>Giáo viên</th><th>Cách tính / Công</th><th>Công chưa hoàn tất</th><th>Tiền công tạm tính</th><th>Đã ứng</th><th>Thao tác</th></tr></thead>
         <tbody>{data.drafts.map((row) => <tr key={row.teacherId}><td>{row.name} · {row.code}</td>
           <td>{bases[row.basis]}{row.basis === 'period' ? ` · ${row.periods} tiết` : row.basis === 'hour' ? ` · ${row.minutes} phút` : ''}</td>
-          <td>{row.pending}</td><td>{format(row.amount)}{Number(row.extraAmount) > 0 && <div className="small">Ngoài ca: {format(row.extraAmount)}</div>}</td><td>{format(row.advance)}</td><td><div className="d-flex flex-wrap gap-2"><Button size="sm"
+          <td>{row.pending}</td><td>{format(row.amount)}{Number(row.extraAmount) > 0 && <div className="small">Ngoài ca: {format(row.extraAmount)}</div>}
+            {Number(row.manualAmount) > 0 && <div className="small">Ca đơn giá riêng: {format(row.manualAmount)}</div>}</td><td>{format(row.advance)}</td><td><div className="d-flex flex-wrap gap-2"><Button size="sm"
             disabled={!data.canClose || Number(row.pending) > 0}
             onClick={() => open({ mode: 'close', teacher: row })}>Chốt tháng</Button>
             <Button size="sm" variant="outline-primary" onClick={() => viewDraft(row)}>Ứng trước kỳ</Button></div></td></tr>)}</tbody></Table>

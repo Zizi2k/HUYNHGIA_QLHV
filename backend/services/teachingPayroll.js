@@ -139,8 +139,11 @@ const clockPaySql = (defaultRate) => `CASE WHEN r.mode='fixed' THEN r.rate_vnd
   ELSE ROUND(s.payable_minutes*IF(r.mode='hour',r.rate_vnd,${defaultRate})/60) END`;
 
 async function extraWorkTotal(db, teacher, month) {
-  const [[row]] = await db.query(`SELECT COALESCE(SUM(amount_vnd),0) AS amount FROM teaching_payroll_extra_work
-    WHERE teacher_id=? AND pay_month=? AND voided_at IS NULL`, [teacher, month]);
+  const [[row]] = await db.query(`SELECT COALESCE(SUM(amount_vnd),0) AS amount FROM (
+    SELECT amount_vnd FROM teaching_payroll_extra_work WHERE teacher_id=? AND pay_month=? AND voided_at IS NULL
+    UNION ALL SELECT mp.amount_vnd FROM staff_clock_manual_pay mp JOIN staff_clock_shifts s ON s.id=mp.shift_id
+    WHERE s.teacher_id=? AND s.vn_date>=CONCAT(?,'-01') AND s.vn_date<DATE_ADD(CONCAT(?,'-01'),INTERVAL 1 MONTH)
+    ) amounts`, [teacher, month, teacher, month, month]);
   return Number(row.amount);
 }
 module.exports = { ensurePayroll, monthField, entryFields, summarize, transaction, assertUnclosed, basisFields, salaryLines, isClosedPayroll, clockPaySql, extraWorkTotal };

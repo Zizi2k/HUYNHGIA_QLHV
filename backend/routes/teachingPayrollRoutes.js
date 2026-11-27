@@ -44,6 +44,7 @@ async function clocksFor(db, teacher, month) {
     s.payable_minutes AS minutes,s.started_ms,r.mode AS override_mode,r.rate_vnd AS override_rate,r.note AS override_note,m.minutes AS override_minutes
     FROM staff_clock_shifts s LEFT JOIN staff_clock_rates r ON r.shift_id=s.id
     LEFT JOIN staff_clock_rate_minutes m ON m.shift_id=s.id WHERE s.teacher_id=? AND ${clockFilter}
+    AND NOT EXISTS (SELECT 1 FROM staff_clock_manual_pay mp WHERE mp.shift_id=s.id)
     ORDER BY s.started_ms,s.id`, [teacher, month, month]);
   return rows.map((row) => ({ ...row,
     startTime: vietnamClock(Number(row.started_ms)).slice(11), endTime: row.ended_ms == null ? null : vietnamClock(Number(row.ended_ms)).slice(11) }));
@@ -93,6 +94,7 @@ router.get('/', endpoint(async (req, account, admin) => {
      WHERE o.teacher_id=b.teacher_id AND o.pay_month=b.pay_month AND o.voided_at IS NULL) AS advance
     FROM teaching_payroll_basis b JOIN users u ON u.id=b.teacher_id
     LEFT JOIN staff_clock_shifts s ON s.teacher_id=b.teacher_id AND ${clockFilter}
+      AND NOT EXISTS (SELECT 1 FROM staff_clock_manual_pay mp WHERE mp.shift_id=s.id)
     LEFT JOIN staff_clock_rates r ON r.shift_id=s.id
     LEFT JOIN staff_clock_rate_minutes m ON m.shift_id=s.id
     WHERE b.pay_month=? AND NOT EXISTS (SELECT 1 FROM teaching_payroll p WHERE p.teacher_id=b.teacher_id AND p.pay_month=b.pay_month AND ${isClosedPayroll('p')})
@@ -108,16 +110,22 @@ router.get('/', endpoint(async (req, account, admin) => {
       amount: plan.basis === 'hour' ? plan.hourlyAmount : plan.rate });
   }
   const [extras] = await pool.query(`SELECT e.teacher_id AS teacherId,u.fullname AS name,u.code,
-    SUM(e.amount_vnd) AS extraAmount,
+    SUM(e.amount_vnd) AS addonAmount,SUM(IF(e.manual=0,e.amount_vnd,0)) AS extraAmount,
+    SUM(IF(e.manual=1,e.amount_vnd,0)) AS manualAmount,
     (SELECT COALESCE(SUM(o.amount_vnd),0) FROM teaching_payroll_open_advances o
       WHERE o.teacher_id=e.teacher_id AND o.pay_month=e.pay_month AND o.voided_at IS NULL) AS advance
-    FROM teaching_payroll_extra_work e JOIN users u ON u.id=e.teacher_id
-    WHERE e.pay_month=? AND e.voided_at IS NULL AND NOT EXISTS (
+    FROM (
+      SELECT teacher_id,pay_month,amount_vnd,0 AS manual FROM teaching_payroll_extra_work WHERE pay_month=? AND voided_at IS NULL
+      UNION ALL SELECT s.teacher_id,DATE_FORMAT(s.vn_date,'%Y-%m'),mp.amount_vnd,1
+      FROM staff_clock_manual_pay mp JOIN staff_clock_shifts s ON s.id=mp.shift_id WHERE ${clockFilter}
+    ) e JOIN users u ON u.id=e.teacher_id
+    WHERE NOT EXISTS (
       SELECT 1 FROM teaching_payroll p WHERE p.teacher_id=e.teacher_id AND p.pay_month=e.pay_month AND ${isClosedPayroll('p')})
-    GROUP BY e.teacher_id,e.pay_month,u.fullname,u.code`, [month]);
+    GROUP BY e.teacher_id,e.pay_month,u.fullname,u.code`, [month, month, month]);
   for (const extra of extras) {
     const row = rows.get(extra.teacherId) ?? { ...extra, basis: 'period', periods: 0, pending: 0, amount: 0 };
-    rows.set(extra.teacherId, { ...row, extraAmount: extra.extraAmount, amount: Number(row.amount) + Number(extra.extraAmount) });
+    rows.set(extra.teacherId, { ...row, extraAmount: extra.extraAmount, manualAmount: extra.manualAmount,
+      amount: Number(row.amount) + Number(extra.addonAmount) });
   }
   return { month, closed, drafts: [...rows.values()], teachers, admin, canClose: month < vietnamClock().slice(0, 7) };
 }));
@@ -200,6 +208,20 @@ router.post('/close', endpoint(async (req, account) => {
       WHERE a.teacher_id=? AND ${shiftFilter} AND a.status IN ('approved','pending')
       ORDER BY a.work_date,a.start_time,a.id FOR UPDATE`, [teacher, month, month]) : [[]];
     const shifts = salaryLines(plan, periodRows, plan?.basis === 'hour' ? await clocksFor(conn, teacher, month) : [], month);
+    const [manual] = await conn.query(`SELECT s.id,DATE_FORMAT(s.vn_date,'%Y-%m-%d') AS date,s.started_ms,s.ended_ms,s.payable_minutes,
+      mp.unit,mp.rate_vnd,mp.period_count,mp.amount_vnd,mp.note FROM staff_clock_manual_pay mp
+      JOIN staff_clock_shifts s ON s.id=mp.shift_id WHERE s.teacher_id=? AND ${clockFilter} ORDER BY s.started_ms,s.id`, [teacher, month, month]);
+    for (const row of manual) {
+      if (periodRows.some((p) => Date.parse(p.date + 'T' + p.startTime + ':00+07:00') < Number(row.ended_ms)
+        && Date.parse(p.date + 'T' + p.endTime + ':00+07:00') > Number(row.started_ms))) {
+        fail('Có ca đặt đơn giá riêng trùng giờ với tiết dạy. Kiểm tra chấm công trước khi chốt.', 409);
+      }
+      const periods = Number(row.period_count);
+      shifts.push({ id: 'manual-' + row.id, date: row.date, className: 'Ca chấm công · đơn giá riêng',
+        startTime: vietnamClock(Number(row.started_ms)).slice(11), endTime: vietnamClock(Number(row.ended_ms)).slice(11),
+        override_note: row.note, unit: row.unit, quantity: row.unit === 'period' ? periods : row.payable_minutes,
+        periods, rate: Number(row.rate_vnd), amount: Number(row.amount_vnd), status: 'approved' });
+    }
     const [extras] = await conn.query(`SELECT id,DATE_FORMAT(work_date,'%Y-%m-%d') AS date,amount_vnd,note
       FROM teaching_payroll_extra_work WHERE teacher_id=? AND pay_month=? AND voided_at IS NULL ORDER BY work_date,id`, [teacher, month]);
     for (const row of extras) shifts.push({ id: 'extra-' + row.id, date: row.date, className: 'Công ngoài ca',

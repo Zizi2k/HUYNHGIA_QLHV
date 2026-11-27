@@ -111,7 +111,8 @@ export default function StaffClockPage() {
     const date = vnMonth() === month ? localStamp(Date.now()).slice(0, 10) : month + '-01';
     setAdminShift({ id: row?.id, teacherId: row?.teacher_id ?? '', teacher: row?.teacher,
       start: row ? localStamp(row.started_ms) : date + 'T08:00', end: row ? localStamp(row.ended_ms) : date + 'T11:30',
-      rest: row?.rest_minutes ?? 0, reason: '' });
+      rest: row?.rest_minutes ?? 0, reason: '', payUnit: row?.payUnit ?? 'default',
+      payRate: row?.payRate ?? '', payPeriods: row?.payPeriods || 1 });
   }
   async function saveAdminShift(event) {
     event.preventDefault();
@@ -120,7 +121,8 @@ export default function StaffClockPage() {
     setError('');
     try {
       const { id, teacherId, start, end, rest, reason } = adminShift;
-      const body = { teacherId: Number(teacherId), start, end, rest: Number(rest), reason };
+      const body = { teacherId: Number(teacherId), start, end, rest: Number(rest), reason,
+        payUnit: adminShift.payUnit, payRate: Number(adminShift.payRate), payPeriods: Number(adminShift.payPeriods) };
       if (id) await api.put(`${path}/shifts/${id}/manual`, body);
       else await api.post(path + '/shifts/manual', body);
       setAdminShift(null);
@@ -161,7 +163,8 @@ export default function StaffClockPage() {
               onClick={() => setPhotoEvent(item)}>Yêu cầu thay {item.label}</Button>)}
             {row.teacher_id === data.viewerId && <Button size="sm" variant="outline-secondary" onClick={() => setCorrectionShift(row)}>Đề nghị sửa</Button>}
             {data.admin && <Button size="sm" variant="outline-primary" onClick={() => openAdminShift(row)}>Sửa chấm công</Button>}
-            {data.admin && row.ended_ms != null && <Button size="sm" variant="outline-primary" onClick={() => {
+            {row.payUnit && <span>{row.payUnit === 'hour' ? 'Theo giờ' : 'Theo tiết'} · {Number(row.payAmount).toLocaleString('vi-VN')} ₫</span>}
+            {data.admin && !row.payUnit && row.ended_ms != null && <Button size="sm" variant="outline-primary" onClick={() => {
               setError(''); setRateEdit({ id: row.id, mode: row.rateMode || 'default', rate: row.rateOverride ?? '', note: row.rateNote || '',
                 minutes: row.rateMinutes ?? '', payableMinutes: row.payable_minutes });
             }}>Đơn giá ca</Button>}
@@ -190,6 +193,22 @@ export default function StaffClockPage() {
               <Form.Control required type="datetime-local" value={adminShift.end} onChange={adminField('end')} /></Form.Group>
             <Form.Group controlId="admin-clock-rest" className="mb-2"><Form.Label>Phút nghỉ không lương</Form.Label>
               <Form.Control required type="number" min={0} max={720} step={15} value={adminShift.rest} onChange={adminField('rest')} /></Form.Group>
+            <Form.Group controlId="admin-clock-pay-unit" className="mb-2"><Form.Label>Cách tính lương của ca</Form.Label>
+              <Form.Select value={adminShift.payUnit} onChange={adminField('payUnit')}>
+                <option value="default">Mặc định theo kỳ lương</option>
+                <option value="hour">Theo giờ</option><option value="period">Theo tiết</option>
+              </Form.Select>
+              <Form.Text>Đơn giá riêng được tính một lần trên phiếu lương, tách khỏi công tính theo mặc định.</Form.Text>
+            </Form.Group>
+            {adminShift.payUnit !== 'default' && <Form.Group controlId="admin-clock-pay-rate" className="mb-2">
+              <Form.Label>{adminShift.payUnit === 'hour' ? 'Đơn giá mỗi giờ (VND)' : 'Đơn giá mỗi tiết (VND)'}</Form.Label>
+              <Form.Control required type="number" min={1} max={1000000000} step={1} value={adminShift.payRate} onChange={adminField('payRate')} />
+            </Form.Group>}
+            {adminShift.payUnit === 'period' && <Form.Group controlId="admin-clock-pay-periods" className="mb-2">
+              <Form.Label>Số tiết</Form.Label>
+              <Form.Control required type="number" min={1} max={24} step={1} value={adminShift.payPeriods} onChange={adminField('payPeriods')} />
+              <Form.Text>Thành tiền: {(Number(adminShift.payRate) * Number(adminShift.payPeriods)).toLocaleString('vi-VN')} ₫</Form.Text>
+            </Form.Group>}
             <Form.Group controlId="admin-clock-reason"><Form.Label>Lý do</Form.Label>
               <Form.Control required as="textarea" maxLength={500} value={adminShift.reason} onChange={adminField('reason')} /></Form.Group>
           </fieldset>

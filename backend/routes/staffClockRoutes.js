@@ -64,6 +64,11 @@ function ensureClock() {
       before_data JSON NULL, after_data JSON NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       INDEX (shift_id,action,id), FOREIGN KEY (shift_id) REFERENCES staff_clock_shifts(id)
     ) ENGINE=InnoDB`);
+    await pool.query(`CREATE TABLE IF NOT EXISTS staff_clock_manual_pay (
+      shift_id INT PRIMARY KEY, unit ENUM('hour','period') NOT NULL, rate_vnd BIGINT UNSIGNED NOT NULL,
+      period_count INT UNSIGNED NOT NULL DEFAULT 0, amount_vnd BIGINT UNSIGNED NOT NULL, note VARCHAR(500) NOT NULL,
+      FOREIGN KEY (shift_id) REFERENCES staff_clock_shifts(id)
+    ) ENGINE=InnoDB`);
   })().catch((err) => { schema = undefined; throw err; });
   return schema;
 }
@@ -105,12 +110,14 @@ router.get('/', handle(async (req, res) => {
       WHEN im.shift_id IS NULL THEN 'self' ELSE 'excel' END AS source,
     im.work_type,im.class_label,im.note AS import_note,ci.id AS inEvent,co.id AS outEvent,
     r.mode AS rateMode,r.rate_vnd AS rateOverride,r.note AS rateNote,m.minutes AS rateMinutes,
+    mp.unit AS payUnit,mp.rate_vnd AS payRate,mp.period_count AS payPeriods,mp.amount_vnd AS payAmount,
     CASE WHEN ci.expires_ms>? AND ci.photo IS NOT NULL THEN ci.id ELSE NULL END AS inPhoto,
     CASE WHEN co.expires_ms>? AND co.photo IS NOT NULL THEN co.id ELSE NULL END AS outPhoto
     FROM staff_clock_shifts s JOIN users u ON u.id=s.teacher_id
     LEFT JOIN staff_clock_import_details im ON im.shift_id=s.id
     LEFT JOIN staff_clock_rates r ON r.shift_id=s.id
     LEFT JOIN staff_clock_rate_minutes m ON m.shift_id=s.id
+    LEFT JOIN staff_clock_manual_pay mp ON mp.shift_id=s.id
     LEFT JOIN staff_clock_events ci ON ci.shift_id=s.id AND ci.direction='in'
     LEFT JOIN staff_clock_events co ON co.shift_id=s.id AND co.direction='out'
     WHERE s.vn_date>=CONCAT(?,'-01') AND s.vn_date<DATE_ADD(CONCAT(?,'-01'),INTERVAL 1 MONTH)
@@ -131,6 +138,12 @@ const saveAdminShift = handle(async (req, res) => {
   if (!actor.admin) fail('Chỉ quản trị viên tổng được chấm công bổ sung hoặc sửa trực tiếp', 403);
   const shiftId = req.params.id ? positive(req.params.id) : null;
   const next = correctionFields(req.body || {});
+  const payUnit = req.body.payUnit ?? 'default', rate = req.body.payRate, periods = req.body.payPeriods;
+  if (!['default', 'hour', 'period'].includes(payUnit) ||
+      (payUnit !== 'default' && (!Number.isSafeInteger(rate) || rate < 1 || rate > 1000000000)) ||
+      (payUnit === 'period' && (!Number.isInteger(periods) || periods < 1 || periods > 24))) fail('Đơn giá hoặc số tiết không hợp lệ');
+  const pay = payUnit === 'default' ? null : { unit: payUnit, rate, periods: payUnit === 'period' ? periods : 0,
+    amount: payUnit === 'period' ? periods * rate : Math.round(next.payableMinutes * rate / 60) };
   const target = shiftId ? (await pool.query('SELECT teacher_id FROM staff_clock_shifts WHERE id=?', [shiftId]))[0][0] : null;
   if (shiftId && !target) fail('Không tìm thấy ca chấm công', 404);
   const teacher = shiftId ? target.teacher_id : positive(req.body.teacherId);
@@ -151,6 +164,8 @@ const saveAdminShift = handle(async (req, res) => {
     const values = [next.date, next.start, next.end, next.rest, next.payableMinutes];
     let id = shiftId;
     if (before) {
+      const [[oldPay]] = await conn.query('SELECT * FROM staff_clock_manual_pay WHERE shift_id=?', [shiftId]);
+      before.pay = oldPay ?? null;
       const [[split]] = await conn.query('SELECT minutes FROM staff_clock_rate_minutes WHERE shift_id=?', [shiftId]);
       if (split && next.payableMinutes <= split.minutes) fail('Cần điều chỉnh số phút dùng đơn giá riêng trước khi giảm giờ công', 409);
       if (before.payable_minutes != null && next.payableMinutes < before.payable_minutes) {
@@ -159,17 +174,25 @@ const saveAdminShift = handle(async (req, res) => {
           WHERE o.teacher_id=? AND o.pay_month=? AND o.voided_at IS NULL AND b.basis='hour' LIMIT 1`, [teacher, month]);
         if (advance) fail('Cần xử lý khoản ứng đang hiệu lực trước khi giảm giờ công', 409);
       }
+      if ((oldPay || pay) && (!oldPay || !pay || pay.amount < Number(oldPay.amount))) {
+        const [[advance]] = await conn.query('SELECT id FROM teaching_payroll_open_advances WHERE teacher_id=? AND pay_month=? AND voided_at IS NULL LIMIT 1', [teacher, month]);
+        if (advance) fail('Cần xử lý khoản ứng đang hiệu lực trước khi đổi cách tính lương của ca', 409);
+      }
       await conn.query(`UPDATE staff_clock_shifts SET vn_date=?,started_ms=?,ended_ms=?,rest_minutes=?,payable_minutes=? WHERE id=?`, [...values, id]);
     } else {
       const [shift] = await conn.query(`INSERT INTO staff_clock_shifts (teacher_id,vn_date,started_ms,ended_ms,rest_minutes,payable_minutes)
         VALUES (?,?,?,?,?,?)`, [teacher, ...values]);
       id = shift.insertId;
     }
+    if (pay) await conn.query(`INSERT INTO staff_clock_manual_pay (shift_id,unit,rate_vnd,period_count,amount_vnd,note) VALUES (?,?,?,?,?,?)
+      ON DUPLICATE KEY UPDATE unit=?,rate_vnd=?,period_count=?,amount_vnd=?,note=?`,
+    [id, pay.unit, pay.rate, pay.periods, pay.amount, next.reason, pay.unit, pay.rate, pay.periods, pay.amount, next.reason]);
+    else if (before?.pay) await conn.query('DELETE FROM staff_clock_manual_pay WHERE shift_id=?', [id]);
     await conn.query(`INSERT INTO staff_clock_admin_changes (shift_id,actor_id,action,reason,before_data,after_data)
-      VALUES (?,?,?,?,?,?)`, [id, actor.id, before ? 'edit' : 'add', next.reason, before ? JSON.stringify(before) : null, JSON.stringify(next)]);
+      VALUES (?,?,?,?,?,?)`, [id, actor.id, before ? 'edit' : 'add', next.reason, before ? JSON.stringify(before) : null, JSON.stringify({ ...next, pay })]);
     return id;
   });
-  res.json({ id, minutes: next.payableMinutes });
+  res.json({ id, minutes: next.payableMinutes, pay });
 });
 router.post('/shifts/manual', saveAdminShift);
 router.put('/shifts/:id/manual', saveAdminShift);
@@ -189,6 +212,8 @@ router.put('/shifts/:id/rate', handle(async (req, res) => {
     await conn.query('SELECT id FROM users WHERE id=? FOR UPDATE', [target.teacher_id]);
     const [[shift]] = await conn.query("SELECT ended_ms,payable_minutes,DATE_FORMAT(vn_date,'%Y-%m') AS month FROM staff_clock_shifts WHERE id=? FOR UPDATE", [id]);
     if (shift.ended_ms == null) fail('Ca chưa chấm ra', 409);
+    const [[manualPay]] = await conn.query('SELECT shift_id FROM staff_clock_manual_pay WHERE shift_id=?', [id]);
+    if (manualPay) fail('Đổi đơn giá của ca này trong form Sửa chấm công', 409);
     if (minutes != null && minutes >= Number(shift.payable_minutes)) fail('Số phút đơn giá riêng phải ít hơn số phút tính công của ca');
     await assertUnclosed(conn, target.teacher_id, shift.month);
     const [[plan]] = await conn.query('SELECT basis,rate_vnd FROM teaching_payroll_basis WHERE teacher_id=? AND pay_month=?', [target.teacher_id, shift.month]);
@@ -201,7 +226,7 @@ router.put('/shifts/:id/rate', handle(async (req, res) => {
     const [[subtotal]] = await conn.query(`SELECT COALESCE(SUM(${clockPaySql('p.rate_vnd')}),0) AS amount
       FROM staff_clock_shifts s LEFT JOIN staff_clock_rates r ON r.shift_id=s.id
       LEFT JOIN staff_clock_rate_minutes m ON m.shift_id=s.id CROSS JOIN (SELECT ? AS rate_vnd) p
-      WHERE s.ended_ms IS NOT NULL
+      WHERE s.ended_ms IS NOT NULL AND NOT EXISTS (SELECT 1 FROM staff_clock_manual_pay mp WHERE mp.shift_id=s.id)
       AND s.teacher_id=? AND s.vn_date>=CONCAT(?,'-01') AND s.vn_date<DATE_ADD(CONCAT(?,'-01'),INTERVAL 1 MONTH)`,
     [plan.rate_vnd, target.teacher_id, shift.month, shift.month]);
     const [[advances]] = await conn.query(`SELECT COALESCE(SUM(amount_vnd),0) AS amount FROM teaching_payroll_open_advances
@@ -268,6 +293,8 @@ router.post('/corrections/:id/apply', handle(async (req, res) => {
       FROM staff_clock_corrections c JOIN staff_clock_shifts s ON s.id=c.shift_id WHERE c.id=? AND c.teacher_id=? FOR UPDATE`, [id, teacher]);
     if (!row) fail('Không tìm thấy yêu cầu của bạn', 404);
     if (row.status !== 'granted') fail('Quyền sửa chưa được duyệt hoặc đã dùng', 409);
+    const [[manualPay]] = await conn.query('SELECT shift_id FROM staff_clock_manual_pay WHERE shift_id=?', [row.shift_id]);
+    if (manualPay) fail('Ca có đơn giá riêng; cần quản trị viên sửa trực tiếp', 409);
     await assertUnclosed(conn, teacher, row.month);
     if (Number(row.before_start) !== Number(row.started_ms) || Number(row.before_end) !== Number(row.ended_ms)
       || row.before_rest !== row.rest_minutes) fail('Ca đã thay đổi; cần yêu cầu mới', 409);
