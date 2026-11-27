@@ -19,11 +19,12 @@ test('MySQL: duyệt công theo tiết, không xem chéo và không chấm trùn
       code VARCHAR(20), admin_scope VARCHAR(10), status BOOLEAN) ENGINE=InnoDB`);
     await pool.query('CREATE TABLE classes (id INT PRIMARY KEY) ENGINE=InnoDB');
     await pool.query('CREATE TABLE class_members (id INT AUTO_INCREMENT PRIMARY KEY, class_id INT, user_id INT) ENGINE=InnoDB');
+    await pool.query('CREATE TABLE tuition_profiles (class_id INT, student_code VARCHAR(20)) ENGINE=InnoDB');
     await pool.query(`CREATE TABLE teacher_schedule_slots (id INT PRIMARY KEY, class_id INT,
       slot_date DATE, start_time TIME, end_time TIME, is_available BOOLEAN) ENGINE=InnoDB`);
     await pool.query(`INSERT INTO users VALUES (1,'Quản trị','admin','AD1','all',1),
       (2,'Giáo viên A','teacher','GV1',NULL,1),(3,'Giáo viên B','teacher','GV2',NULL,1),
-      (4,'Học viên','student','HV1',NULL,1),(5,'Admin chi nhánh','admin','AD2','HG',1)`);
+      (4,'Học viên','student','HGHV1',NULL,1),(5,'Admin chi nhánh','admin','AD2','HG',1)`);
     await pool.query('INSERT INTO classes VALUES (7),(8)');
     await pool.query('INSERT INTO class_members (class_id,user_id) VALUES (7,2),(7,3),(7,4),(8,2)');
     await pool.query("INSERT INTO teacher_schedule_slots VALUES (4,7,'2025-03-02','10:00','11:00',1)");
