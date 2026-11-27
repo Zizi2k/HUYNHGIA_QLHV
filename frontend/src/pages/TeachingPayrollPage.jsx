@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Alert, Button, Form, Modal, Table } from 'react-bootstrap';
 import api from '../services/api';
 import TeachingPayrollReport from '../components/attendance/TeachingPayrollReport';
+import PayrollTransfer from './PayrollTransfer';
 
 const path = '/teaching-payroll';
 const dateVN = () => new Date(Date.now() + 25200000).toISOString().slice(0, 10);
@@ -204,6 +205,8 @@ export default function TeachingPayrollPage() {
             <td>{format(row.rate)}/{units[row.unit || 'period']}</td><td>{format(row.amount)}</td></tr>)}</tbody></Table>
         <p><strong>Phải trả: {format(detail.amount)}</strong><br />
           Đã ứng: {format(detail.advance)} · Đã trả: {format(detail.payment)} · Còn phải trả: {format(detail.remaining)}</p>
+        {data?.admin && !form && detail.remaining > 0 &&
+          <PayrollTransfer key={`${detail.id}:${detail.remaining}`} api={api} path={path + '/' + detail.id + '/transfer'} format={format} />}
         <h3 className="h6">Giao dịch</h3>
         <Table responsive size="sm"><thead><tr><th>Mã / Ngày</th><th>Loại / Phương thức</th><th>Số tiền</th><th>Ghi chú</th><th>Thao tác</th></tr></thead>
           <tbody>{detail.entries.map((entry) => <tr key={entry.id}><td>#{entry.id} · {entry.date}</td>

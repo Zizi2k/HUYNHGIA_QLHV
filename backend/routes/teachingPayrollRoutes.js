@@ -8,6 +8,7 @@ const { ensureTeachingPeriodSchema } = require('./teachingPeriodRoutes');
 const { ensureClock } = require('./staffClockRoutes');
 const { ensureDepartments, visibleTo, managerStatus } = require('../services/staffDepartments');
 const { createNotification } = require('../utils/notificationDb');
+const vietQr = require('../services/payrollVietQr');
 
 router.use(authenticate);
 const positiveId = (raw) => {
@@ -362,6 +363,15 @@ router.get('/debts', endpoint(async (_req, account, admin) => {
   }
   return [...groups.values()];
 }));
+router.get('/transfer/banks', endpoint(async () => vietQr.banks(), true));
+router.post('/:id/transfer/lookup', endpoint(async (req, account, admin) => {
+  await detail(positiveId(req.params.id), account, admin);
+  return vietQr.lookup(req.body);
+}, true));
+router.post('/:id/transfer/qr', endpoint(async (req, account, admin) => {
+  const row = await detail(positiveId(req.params.id), account, admin);
+  return { amount: row.remaining, image: await vietQr.qr(req.body, row.id, row.remaining) };
+}, true));
 router.get('/:id', endpoint(async (req, account, admin) => detail(positiveId(req.params.id), account, admin)));
 router.get('/:id/reopen-history', endpoint(async (req) => {
   const id = positiveId(req.params.id);

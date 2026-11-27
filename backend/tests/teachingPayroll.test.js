@@ -1,6 +1,19 @@
 const { test, after } = require('node:test');
 const assert = require('node:assert/strict');
 const { monthField, entryFields, summarize, basisFields, salaryLines } = require('../services/teachingPayroll');
+const { qrUrl, fields } = require('../services/payrollVietQr');
+
+test('VietQR giữ số 0 đầu và chỉ tạo URL cố định với số dư dương', () => {
+  const account = { bin: '970436', accountNumber: '001234567890' };
+  const url = qrUrl(account, 7, 175000);
+  assert.equal(url.origin, 'https://img.vietqr.io');
+  assert.equal(url.pathname, '/image/970436-001234567890-qr_only.png');
+  assert.equal(url.searchParams.get('amount'), '175000');
+  assert.equal(url.searchParams.get('addInfo'), 'LUONG HG 7');
+  assert.throws(() => qrUrl(account, 7, 0), { status: 409 });
+  assert.throws(() => fields({ ...account, accountNumber: '../secret' }), { status: 400 });
+  assert.throws(() => fields({ ...account, accountNumber: 123456 }), { status: 400 });
+});
 after(() => require('../config/db').end());
 
 test('không cộng giao dịch bị hủy và không trừ tiền ứng hai lần', () => {

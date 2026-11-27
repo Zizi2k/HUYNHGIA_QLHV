@@ -104,6 +104,21 @@ test('MySQL: duyệt công theo tiết, không xem chéo và không chấm trùn
     const [, initialPayroll] = await pay(a, id);
     assert.equal(initialPayroll.advance, 20000);
     assert.equal(initialPayroll.remaining, 230000);
+    const qrPath = id + '/transfer/qr';
+    const accountData = { bin: '970436', accountNumber: '001234567890', amount: 1 };
+    assert.equal((await pay(a, qrPath, accountData))[0], 403);
+    assert.equal((await pay(admin, qrPath, { ...accountData, accountNumber: 'invalid' }))[0], 400);
+    const qrService = require('../services/payrollVietQr');
+    const originalQr = qrService.qr;
+    try {
+      qrService.qr = async (input, payrollId, amount) => {
+        assert.equal(qrService.qrUrl(input, payrollId, amount).searchParams.get('amount'), '230000');
+        return 'data:image/png;base64,mock';
+      };
+      assert.deepEqual(await pay(admin, qrPath, accountData), [200, { amount: 230000, image: 'data:image/png;base64,mock' }]);
+    } finally {
+      qrService.qr = originalQr;
+    }
     assert.equal(initialPayroll.entries.length, 1);
     assert.equal((await pay(admin, earlyPath, early))[0], 409);
     assert.equal((await pay(admin, id + '/entries/' + initialPayroll.entries[0].id + '/void', { reason: 'Ghi nhầm khoản ứng trước' }))[0], 200);
@@ -119,6 +134,7 @@ test('MySQL: duyệt công theo tiết, không xem chéo và không chấm trùn
     assert.equal((await pay(admin, id + '/entries', { ...payment, amount: 150000 }))[0], 200);
     const [, summary] = await pay(a, id);
     assert.deepEqual([summary.advance, summary.payment, summary.remaining], [100000, 150000, 0]);
+    assert.equal((await pay(admin, qrPath, accountData))[0], 409);
     assert.equal(Number((await pay(a, '?month=2025-03'))[1].closed[0].payment), 150000);
     assert.equal((await pay(admin, id + '/entries/' + entry.id + '/void', { reason: 'Ghi nhầm' }))[0], 200);
     assert.equal((await pay(a, id))[1].remaining, 100000);
