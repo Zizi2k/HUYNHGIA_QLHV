@@ -3,6 +3,7 @@ const pool = require('../config/db');
 const { canManageClass } = require('../middleware/classAccess');
 const { isSuperAdmin } = require('../utils/adminScope');
 const { fail, vietnamClock, recordFields, reviewFields } = require('../services/teachingPeriods');
+const { ensurePayroll, transaction, assertUnclosed } = require('../services/teachingPayroll');
 
 const router = express.Router();
 let schema;
@@ -36,6 +37,7 @@ function route(handler) {
         fail('Bạn không có quyền truy cập sổ công giảng dạy', 403);
       }
       await ensureSchema();
+      await ensurePayroll();
       res.set('Cache-Control', 'no-store');
       await handler(req, res, classId, admin);
     } catch (err) {
@@ -76,6 +78,7 @@ router.post('/', route(async (req, res, classId, admin) => {
     await conn.beginTransaction();
     const [teachers] = await conn.query("SELECT id FROM users WHERE id=? AND role='teacher' AND status=1 FOR UPDATE", [req.user.id]);
     if (!teachers.length) fail('Tài khoản giáo viên không còn hoạt động', 403);
+    await assertUnclosed(conn, req.user.id, data.date.slice(0, 7));
     if (data.slotId !== null) {
       const [slots] = await conn.query(`SELECT id FROM teacher_schedule_slots WHERE id=? AND class_id=?
         AND slot_date=? AND is_available=1`, [data.slotId, classId, data.date]);
@@ -100,14 +103,19 @@ router.patch('/:recordId/review', route(async (req, res, classId, admin) => {
   if (!admin) fail('Chỉ quản trị viên tổng được duyệt công và đặt đơn giá', 403);
   const id = Number(req.params.recordId);
   if (!Number.isSafeInteger(id) || id < 1) fail('Bản ghi không hợp lệ');
-  const [rows] = await pool.query('SELECT period_count FROM teaching_period_attendance WHERE id=? AND class_id=?', [id, classId]);
+  const [rows] = await pool.query("SELECT teacher_id,period_count,DATE_FORMAT(work_date,'%Y-%m') AS month FROM teaching_period_attendance WHERE id=? AND class_id=?", [id, classId]);
   if (!rows.length) fail('Không tìm thấy công dạy', 404);
   const review = reviewFields(req.body || {}, rows[0].period_count);
-  const [updated] = await pool.query(`UPDATE teaching_period_attendance SET status=?,review_note=?,rate_vnd=?,
+  await transaction(async (conn) => {
+    await conn.query('SELECT id FROM users WHERE id=? FOR UPDATE', [rows[0].teacher_id]);
+    await assertUnclosed(conn, rows[0].teacher_id, rows[0].month);
+    const [updated] = await conn.query(`UPDATE teaching_period_attendance SET status=?,review_note=?,rate_vnd=?,
     amount_vnd=?,reviewed_by=?,reviewed_at=CURRENT_TIMESTAMP WHERE id=? AND class_id=? AND status='pending'`,
   [review.status, review.reason, review.rate, review.amount, req.user.id, id, classId]);
-  if (!updated.affectedRows) fail('Bản ghi đã được xử lý', 409);
+    if (!updated.affectedRows) fail('Bản ghi đã được xử lý', 409);
+  });
   res.json({ status: review.status, amount: review.amount });
 }));
 
 module.exports = router;
+module.exports.ensureTeachingPeriodSchema = ensureSchema;

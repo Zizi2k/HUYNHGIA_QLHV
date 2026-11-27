@@ -53,6 +53,7 @@ export default function Sidebar({ collapsed, mobileOpen, onNavigate }) {
           <div className="app-sidebar-section">
             {!collapsed && <div className="app-sidebar-section-label">Giảng dạy</div>}
             <NavItem to="/attendance" icon="calendar-check" label="Điểm danh" />
+            {(isSuper || user?.role === 'teacher') && <NavItem to="/teaching-payroll" icon="cash-stack" label="Lương theo tiết" />}
           </div>
         )}
 
