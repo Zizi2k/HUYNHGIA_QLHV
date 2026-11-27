@@ -68,7 +68,7 @@ router.get('/', endpoint(async (req, account, admin) => {
     FROM teaching_payroll p LEFT JOIN teaching_payroll_entries e ON e.payroll_id=p.id
     WHERE p.pay_month=? ${visibleTo('p.teacher_id', admin)} GROUP BY p.id ORDER BY p.teacher_name,p.id`,
   admin ? [month] : [month, account.id, account.id]);
-  if (!admin) return { month, closed, drafts: [], admin };
+  if (!admin) return { month, closed, drafts: [], admin, manager: await managerStatus(pool, account.id) };
   const [drafts] = await pool.query(`SELECT a.teacher_id AS teacherId,u.fullname AS name,u.code,
     SUM(CASE WHEN a.status='approved' THEN a.period_count ELSE 0 END) AS periods,
     SUM(CASE WHEN a.status='approved' THEN a.amount_vnd ELSE 0 END) AS amount,
@@ -214,6 +214,57 @@ async function detail(id, account, admin) {
   return { ...row, snapshot: typeof row.snapshot === 'string' ? JSON.parse(row.snapshot) : row.snapshot,
     entries, ...summarize(row.amount, entries) };
 }
+
+router.get('/reports/departments', endpoint(async (_req, account, admin) => {
+  const [rows] = await pool.query(`SELECT d.id,d.name FROM staff_departments d WHERE d.active=1
+    ${admin ? '' : "AND EXISTS (SELECT 1 FROM staff_department_assignments a WHERE a.department_id=d.id AND a.user_id=? AND a.membership='manager')"}
+    ORDER BY d.name,d.id`, admin ? [] : [account.id]);
+  return rows;
+}));
+
+async function loadReport(req, account, admin) {
+  const period = req.query.period;
+  if (typeof period !== 'string' || !/^20\d{2}(?:-(?:0[1-9]|1[0-2]))?$/.test(period)) fail('Kỳ báo cáo phải theo tháng hoặc năm');
+  const debtOnly = req.query.debt === '1';
+  const departmentId = req.query.department ? positiveId(req.query.department) : null;
+  if (!admin && !departmentId) fail('Cần chọn phòng ban được phân công', 403);
+  let department = 'Toàn trung tâm';
+  if (departmentId) {
+    const [[dept]] = await pool.query(`SELECT d.name FROM staff_departments d WHERE d.id=? AND d.active=1
+      ${admin ? '' : "AND EXISTS (SELECT 1 FROM staff_department_assignments m WHERE m.department_id=d.id AND m.user_id=? AND m.membership='manager')"}`,
+    admin ? [departmentId] : [departmentId, account.id]);
+    if (!dept) fail('Không có quyền xem báo cáo phòng ban này', 403);
+    department = dept.name;
+  }
+  const [rows] = await pool.query(`SELECT p.id,p.pay_month AS month,p.teacher_name AS name,p.teacher_code AS code,p.amount_vnd AS amount,
+    COALESCE(SUM(CASE WHEN e.voided_at IS NULL AND e.kind='advance' THEN e.amount_vnd ELSE 0 END),0) AS advance,
+    COALESCE(SUM(CASE WHEN e.voided_at IS NULL AND e.kind='payment' THEN e.amount_vnd ELSE 0 END),0) AS payment
+    FROM teaching_payroll p LEFT JOIN teaching_payroll_entries e ON e.payroll_id=p.id
+    WHERE p.pay_month LIKE ? ${departmentId ? `AND EXISTS (SELECT 1 FROM staff_department_assignments m JOIN staff_departments d ON d.id=m.department_id AND d.active=1
+      WHERE m.department_id=? AND m.membership='member' AND m.user_id=p.teacher_id
+      ${admin ? '' : "AND EXISTS (SELECT 1 FROM staff_department_assignments a WHERE a.department_id=d.id AND a.user_id=? AND a.membership='manager')"})` : ''}
+    GROUP BY p.id ORDER BY p.pay_month,p.teacher_name,p.id`,
+  [period.length === 4 ? period + '-%' : period, ...(departmentId ? [departmentId] : []), ...(!admin ? [account.id] : [])]);
+  const totals = { amount: 0, advance: 0, payment: 0, remaining: 0 };
+  const mapped = [];
+  for (const row of rows) {
+    const amount = Number(row.amount), advance = Number(row.advance), payment = Number(row.payment);
+    const remaining = amount - advance - payment;
+    if (debtOnly && remaining <= 0) continue;
+    totals.amount += amount; totals.advance += advance; totals.payment += payment; totals.remaining += remaining;
+    mapped.push({ ...row, amount, advance, payment, remaining });
+  }
+  return { period, department, debtOnly, rows: mapped, totals };
+}
+router.get('/reports/preview', endpoint(loadReport));
+router.get('/reports/export/:format', endpoint(async (req, account, admin, res) => {
+  const format = req.params.format;
+  if (!['pdf','xlsx'].includes(format)) fail('Định dạng không hỗ trợ');
+  const data = await loadReport(req, account, admin);
+  const { payrollReportExcel, payrollReportPdf } = require('../utils/teachingPayrollExport');
+  const output = format === 'pdf' ? await payrollReportPdf(data) : await payrollReportExcel(data);
+  res.attachment(`bao-cao-luong-${data.period}.${format}`).send(Buffer.from(output));
+}));
 
 router.get('/debts', endpoint(async (_req, account, admin) => {
   const [rows] = await pool.query(`SELECT p.id,p.teacher_id AS teacherId,p.teacher_name AS name,p.teacher_code AS code,

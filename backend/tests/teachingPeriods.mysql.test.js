@@ -250,6 +250,20 @@ test('MySQL: duyệt công theo tiết, không xem chéo và không chấm trùn
     assert.equal((await clock(a, '/photo-requests/' + reqPhoto.id + '/replace', uploadPhoto())).status, 409);
     assert.deepEqual((await pool.query('SELECT lat,lng,shift_id FROM staff_clock_events WHERE id=?', [saved.outPhoto]))[0], beforePhoto);
     assert.equal((await pay(manager, id))[0], 200);
+    assert.equal((await pay(manager, '/reports/preview?period=2025'))[0], 403);
+    assert.equal((await pay(b, '/reports/preview?period=2025&department=' + department.id))[0], 403);
+    const [reportStatus, deptReport] = await pay(manager, '/reports/preview?period=2025&department=' + department.id);
+    assert.equal(reportStatus, 200, JSON.stringify(deptReport));
+    assert.deepEqual(deptReport.rows.map((row) => row.code), ['GV1']);
+    assert.equal(deptReport.totals.remaining, 100000);
+    const reportApi = `/teaching-payroll/reports/export/xlsx?period=2025&department=${department.id}`;
+    const binaryReport = await fetch(`http://127.0.0.1:${server.address().port}${reportApi}`, {
+      headers: { Authorization: 'Bearer ' + jwt.sign(manager, secret) },
+    });
+    assert.equal(binaryReport.status, 200);
+    const reportBook = new ExcelJS.Workbook();
+    await reportBook.xlsx.load(Buffer.from(await binaryReport.arrayBuffer()));
+    assert.equal(reportBook.getWorksheet('Chi tiết kỳ lương').getCell('G2').value, 100000);
     assert.equal((await pay(manager, '/' + hourRecord.id))[0], 404);
     assert.equal((await pay(manager, '/close', { teacherId: a.id, month: '2025-05' }))[0], 403);
     const [, may] = await json(a, '/staff-clock?month=2025-05');
@@ -291,5 +305,6 @@ test('MySQL: duyệt công theo tiết, không xem chéo và không chấm trùn
     await json(admin, '/staff-departments/' + department.id, 'PUT', { ...configuration, active: false });
     assert.equal((await json(manager, weekUrl))[0], 404);
     assert.equal((await pay(manager, id))[0], 403);
+    assert.equal((await pay(manager, '/reports/preview?period=2025&department=' + department.id))[0], 403);
     assert.equal((await clock(manager, '/evidence/' + saved.outPhoto)).status, 403);
   });

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Alert, Button, Form, Modal, Table } from 'react-bootstrap';
 import api from '../services/api';
+import TeachingPayrollReport from '../components/attendance/TeachingPayrollReport';
 
 const path = '/teaching-payroll';
 const dateVN = () => new Date(Date.now() + 25200000).toISOString().slice(0, 10);
@@ -121,6 +122,7 @@ export default function TeachingPayrollPage() {
       <Button variant="outline-primary" disabled={!data || debtLoading} onClick={viewDebts}>
         {debtLoading ? 'Đang tải…' : 'Xem công nợ lương'}
       </Button>
+      {(data?.admin || data?.manager) && <TeachingPayrollReport admin={data.admin} month={month} />}
     </div>
     {!data && !feedback?.error && <p role="status">Đang tải…</p>}
     {data?.admin && <><div className="d-flex gap-2 align-items-center flex-wrap mb-2">

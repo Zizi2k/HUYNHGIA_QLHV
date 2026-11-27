@@ -96,4 +96,32 @@ function payrollPdf(row, entry) {
   }).getBuffer();
 }
 
-module.exports = { payrollExcel, payrollPdf };
+const reportHeaders = ['Kỳ', 'Mã GV', 'Giáo viên', 'Phải trả', 'Đã ứng', 'Đã trả', 'Còn phải trả'];
+const reportTotals = (data) => ['Tổng', '', '', data.totals.amount, data.totals.advance, data.totals.payment, data.totals.remaining];
+const reportLines = (data) => data.rows.map((r) => [r.month, r.code, r.name, r.amount, r.advance, r.payment, r.remaining]);
+function payrollReportExcel(data) {
+  const book = new ExcelJS.Workbook();
+  book.creator = 'Huỳnh Gia';
+  const info = book.addWorksheet('Tổng hợp');
+  info.columns = [{ width: 45 }, { width: 30 }];
+  info.addRows([[org], ['Báo cáo lương đã chốt'], ['Đơn vị', data.department], ['Kỳ', data.period],
+    ['Phạm vi', data.debtOnly ? 'Còn công nợ' : 'Tất cả kỳ đã chốt'], ...summary(data.totals)]);
+  info.getRow(1).font = { bold: true };
+  for (let row = 6; row <= 9; row++) info.getCell(row, 2).numFmt = '#,##0" ₫"';
+  sheet(book, 'Chi tiết kỳ lương', reportHeaders, reportLines(data), [12, 14, 31, 19, 19, 19, 19], [4, 5, 6, 7]);
+  return book.xlsx.writeBuffer();
+}
+function payrollReportPdf(data) {
+  return pdfmake.createPdf({
+    pageSize: 'A4', pageOrientation: 'landscape', pageMargins: [32, 30, 32, 36],
+    defaultStyle: { font: 'Roboto', fontSize: 10 },
+    footer: (page, count) => ({ text: `${page}/${count}`, alignment: 'right', margin: [0, 4, 32, 0] }),
+    content: [
+      { text: org, alignment: 'center', bold: true },
+      { text: 'BÁO CÁO LƯƠNG ĐÃ CHỐT', alignment: 'center', fontSize: 18, bold: true, margin: [0, 8, 0, 12] },
+      { text: `Phạm vi: ${data.department} · Kỳ: ${data.period}${data.debtOnly ? ' · Chỉ kỳ còn nợ' : ''}`, margin: [0, 0, 0, 8] },
+      pdfTable(reportHeaders, [...reportLines(data), reportTotals(data)], [44, 58, '*', 100, 100, 100, 100], [3, 4, 5, 6]),
+    ],
+  }).getBuffer();
+}
+module.exports = { payrollExcel, payrollPdf, payrollReportExcel, payrollReportPdf };
