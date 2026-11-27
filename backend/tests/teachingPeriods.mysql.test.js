@@ -9,6 +9,8 @@ const { requireClassMember } = require('../middleware/classAccess');
 const routes = require('../routes/teachingPeriodRoutes');
 const payroll = require('../routes/teachingPayrollRoutes');
 const staffClock = require('../routes/staffClockRoutes');
+const ExcelJS = require('exceljs');
+const { template } = require('../services/staffClockImport');
 
 test('MySQL: duyệt công theo tiết, không xem chéo và không chấm trùng giữa hai lớp',
   { skip: process.env.TEACHING_PERIOD_MYSQL !== '1' }, async (t) => {
@@ -184,4 +186,35 @@ test('MySQL: duyệt công theo tiết, không xem chéo và không chấm trùn
     assert.deepEqual(debtsB[0].months.map((item) => item.month), ['2025-03', '2025-04']);
     const [, debtsAdmin] = await pay(admin, '/debts');
     assert.equal(debtsAdmin.find((item) => item.teacherId === a.id).total, 100000);
+    async function importFile(rows) {
+      const workbook = new ExcelJS.Workbook();
+      await workbook.xlsx.load(await template());
+      workbook.getWorksheet('Chấm công').addRows(rows);
+      return new Blob([await workbook.xlsx.writeBuffer()], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    }
+    function uploadFile(blob, hash, skip) {
+      const f = new FormData();
+      f.append('file', blob, 'fixture.xlsx');
+      if (hash) { f.append('hash', hash); f.append('skipDuplicates', skip ? '1' : '0'); }
+      return f;
+    }
+    const line = ['GV1','Giáo viên A','2025-05-01','08:00','10:00',15,'Dạy bù','Toán 9','Nhập sổ'];
+    const bad = await importFile([line, ['GV2','Sai tên','2025-05-01','08:00','10:00',15,'Dạy bù','','Nhập sổ']]);
+    const good = await importFile([line]);
+    assert.equal((await clock(a, '/import/template')).status, 403);
+    const badPreview = await (await clock(admin, '/import/preview', uploadFile(bad))).json();
+    assert.deepEqual(badPreview.rows.map((r) => r.status), ['ready', 'error']);
+    assert.equal((await (await clock(admin, '/import/commit', uploadFile(bad, badPreview.hash))).json()).blocked, true);
+    const previewImport = await (await clock(admin, '/import/preview', uploadFile(good))).json();
+    assert.equal(previewImport.rows[0].status, 'ready');
+    assert.equal((await clock(admin, '/import/commit', uploadFile(good, badPreview.hash))).status, 400);
+    const resultImport = await (await clock(admin, '/import/commit', uploadFile(good, previewImport.hash))).json();
+    assert.equal(resultImport.imported, 1);
+    assert.equal((await clock(admin, '/import/commit', uploadFile(good, previewImport.hash))).status, 409);
+    const duplicate = await importFile([line, ['GV2','Giáo viên B','2025-06-01','08:00','10:00',0,'Dạy bù','','Nhập sổ']]);
+    const dupPreview = await (await clock(admin, '/import/preview', uploadFile(duplicate))).json();
+    assert.deepEqual(dupPreview.rows.map((r) => r.status), ['duplicate', 'ready']);
+    assert.equal((await (await clock(admin, '/import/commit', uploadFile(duplicate, dupPreview.hash, true))).json()).imported, 1);
+    const closedFile = await importFile([[...line.slice(0, 2), '2025-03-01', ...line.slice(3)]]);
+    assert.match((await (await clock(admin, '/import/preview', uploadFile(closedFile))).json()).rows[0].error, /đã chốt/);
   });
