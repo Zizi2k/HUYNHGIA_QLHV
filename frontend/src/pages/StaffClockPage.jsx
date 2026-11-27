@@ -9,6 +9,7 @@ const path = '/staff-clock';
 const vnMonth = () => new Date(Date.now() + 25200000).toISOString().slice(0, 7);
 const dateTime = new Intl.DateTimeFormat('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh', dateStyle: 'short', timeStyle: 'short' });
 const stamp = (ms) => ms == null ? '—' : dateTime.format(Number(ms));
+const localStamp = (ms) => ms == null ? '' : new Date(Number(ms) + 25200000).toISOString().slice(0, 16);
 const msg = (err) => err.response?.data?.message || err.message || 'Không thể xử lý yêu cầu';
 const MAX_IMAGE = 1536 * 1024;
 
@@ -24,6 +25,7 @@ export default function StaffClockPage() {
   const [correctionShift, setCorrectionShift] = useState(null);
   const [photoEvent, setPhotoEvent] = useState(null);
   const [rateEdit, setRateEdit] = useState(null);
+  const [adminShift, setAdminShift] = useState(null);
   const [limit, setLimit] = useState(10);
   const load = useCallback(async (signal) => {
     try {
@@ -104,6 +106,32 @@ export default function StaffClockPage() {
     finally { setBusy(false); }
   }
 
+  function openAdminShift(row) {
+    setError('');
+    const date = vnMonth() === month ? localStamp(Date.now()).slice(0, 10) : month + '-01';
+    setAdminShift({ id: row?.id, teacherId: row?.teacher_id ?? '', teacher: row?.teacher,
+      start: row ? localStamp(row.started_ms) : date + 'T08:00', end: row ? localStamp(row.ended_ms) : date + 'T11:30',
+      rest: row?.rest_minutes ?? 0, reason: '' });
+  }
+  async function saveAdminShift(event) {
+    event.preventDefault();
+    if (busy) return;
+    setBusy(true);
+    setError('');
+    try {
+      const { id, teacherId, start, end, rest, reason } = adminShift;
+      const body = { teacherId: Number(teacherId), start, end, rest: Number(rest), reason };
+      if (id) await api.put(`${path}/shifts/${id}/manual`, body);
+      else await api.post(path + '/shifts/manual', body);
+      setAdminShift(null);
+      if (start.slice(0, 7) !== month) setMonth(start.slice(0, 7));
+      else await load();
+      setNotice({ text: id ? 'Đã sửa chấm công.' : 'Đã chấm công bổ sung.' });
+    } catch (err) { setError(msg(err)); }
+    finally { setBusy(false); }
+  }
+  const adminField = (key) => (e) => setAdminShift((row) => ({ ...row, [key]: e.target.value }));
+
   return <section>
     <h1 className="h3">Chấm công giáo viên</h1>
     <p className="text-body-secondary">Giờ do máy chủ ghi nhận, hiển thị theo giờ Việt Nam. Ca chấm công chưa tự cộng vào lương theo tiết.</p>
@@ -112,6 +140,7 @@ export default function StaffClockPage() {
       <Form.Group controlId="staff-clock-month"><Form.Label>Tháng</Form.Label>
         <Form.Control type="month" value={month} onChange={(e) => { if (e.target.value) setMonth(e.target.value); }} /></Form.Group>
       {data?.teacher && <Button onClick={start}>{data.open ? 'Chấm công ra' : 'Chấm công vào'}</Button>}
+      {data?.admin && <Button onClick={() => openAdminShift()}>Chấm công bổ sung</Button>}
     </Stack>
     {data?.open && <p><Badge bg="warning" text="dark">Đang làm việc</Badge> · Vào lúc {stamp(data.open.started_ms)}</p>}
     {!data && !notice && <p role="status">Đang tải…</p>}
@@ -131,16 +160,46 @@ export default function StaffClockPage() {
             ].filter((item) => item.id).map((item) => <Button key={item.id} size="sm" variant="outline-secondary"
               onClick={() => setPhotoEvent(item)}>Yêu cầu thay {item.label}</Button>)}
             {row.teacher_id === data.viewerId && <Button size="sm" variant="outline-secondary" onClick={() => setCorrectionShift(row)}>Đề nghị sửa</Button>}
+            {data.admin && <Button size="sm" variant="outline-primary" onClick={() => openAdminShift(row)}>Sửa chấm công</Button>}
             {data.admin && row.ended_ms != null && <Button size="sm" variant="outline-primary" onClick={() => {
               setError(''); setRateEdit({ id: row.id, mode: row.rateMode || 'default', rate: row.rateOverride ?? '', note: row.rateNote || '',
                 minutes: row.rateMinutes ?? '', payableMinutes: row.payable_minutes });
             }}>Đơn giá ca</Button>}
             {row.source === 'excel' ? <span>Excel · {row.work_type}{row.class_label ? ` · ${row.class_label}` : ''}<br />{row.import_note}</span>
+              : row.source === 'manual' ? <span>Quản trị viên bổ sung</span>
               : !row.inPhoto && !row.outPhoto && <span>Không còn ảnh</span>}</div></td></tr>)}</tbody>
       </Table>
       {!data.shifts.length && <p>Chưa có ca chấm công.</p>}
       {data.shifts.length > limit && <Button variant="outline-secondary" onClick={() => setLimit(limit + 10)}>Xem thêm</Button>}
     </>}
+    <Modal centered show={Boolean(adminShift)} onHide={() => { if (!busy) setAdminShift(null); }}>
+      {adminShift && <Form onSubmit={saveAdminShift}>
+        <Modal.Header closeButton={!busy}><Modal.Title>{adminShift.id ? 'Sửa chấm công' : 'Chấm công bổ sung'}</Modal.Title></Modal.Header>
+        <Modal.Body>
+          {error && <Alert role="alert" variant="danger">{error}</Alert>}
+          <fieldset disabled={busy}>
+            {adminShift.id ? <p>Giáo viên: <strong>{adminShift.teacher}</strong></p> :
+              <Form.Group controlId="admin-clock-teacher" className="mb-2"><Form.Label>Giáo viên</Form.Label>
+                <Form.Select required value={adminShift.teacherId} onChange={adminField('teacherId')}>
+                  <option value="">Chọn giáo viên</option>
+                  {data?.teachers?.map((row) => <option key={row.id} value={row.id}>{row.fullname} · {row.code}</option>)}
+                </Form.Select></Form.Group>}
+            <Form.Group controlId="admin-clock-start" className="mb-2"><Form.Label>Giờ vào (giờ Việt Nam)</Form.Label>
+              <Form.Control required type="datetime-local" value={adminShift.start} onChange={adminField('start')} /></Form.Group>
+            <Form.Group controlId="admin-clock-end" className="mb-2"><Form.Label>Giờ ra (giờ Việt Nam)</Form.Label>
+              <Form.Control required type="datetime-local" value={adminShift.end} onChange={adminField('end')} /></Form.Group>
+            <Form.Group controlId="admin-clock-rest" className="mb-2"><Form.Label>Phút nghỉ không lương</Form.Label>
+              <Form.Control required type="number" min={0} max={720} step={15} value={adminShift.rest} onChange={adminField('rest')} /></Form.Group>
+            <Form.Group controlId="admin-clock-reason"><Form.Label>Lý do</Form.Label>
+              <Form.Control required as="textarea" maxLength={500} value={adminShift.reason} onChange={adminField('reason')} /></Form.Group>
+          </fieldset>
+        </Modal.Body>
+        <Modal.Footer>
+          <Button variant="secondary" disabled={busy} onClick={() => setAdminShift(null)}>Hủy</Button>
+          <Button type="submit" disabled={busy}>{busy ? 'Đang lưu…' : 'Lưu chấm công'}</Button>
+        </Modal.Footer>
+      </Form>}
+    </Modal>
     <Modal centered show={Boolean(draft)} onHide={() => { if (!busy && !locating) setDraft(null); }}>
       <Form onSubmit={save}>
         <Modal.Header closeButton={!busy && !locating}><Modal.Title>{draft?.direction === 'out' ? 'Chấm công ra' : 'Chấm công vào'}</Modal.Title></Modal.Header>

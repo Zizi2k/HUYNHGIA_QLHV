@@ -230,6 +230,22 @@ test('MySQL: duyệt công theo tiết, không xem chéo và không chấm trùn
     assert.equal(hourDetail.snapshot[1].override_note, work.note);
     assert.equal((await pay(admin, extras + '/' + extra.id + '/void', { reason: 'Kỳ đã chốt' }))[0], 409);
     assert.equal((await shiftRate(admin, hourlyShift))[0], 409);
+    const manualShift = (account, method, suffix, data) => fetch(`http://127.0.0.1:${server.address().port}/staff-clock/shifts${suffix}`, {
+      method, headers: { Authorization: 'Bearer ' + jwt.sign(account, secret), 'Content-Type': 'application/json' }, body: JSON.stringify(data),
+    });
+    const manual = { teacherId: b.id, start: '2025-02-05T08:00', end: '2025-02-05T10:00', rest: 0, reason: 'Bổ sung ca quên chấm' };
+    assert.equal((await manualShift(b, 'POST', '/manual', manual)).status, 403);
+    const added = await manualShift(admin, 'POST', '/manual', manual);
+    assert.equal(added.status, 200);
+    const addedRow = await added.json();
+    assert.equal((await manualShift(admin, 'POST', '/manual', manual)).status, 409);
+    const edited = await manualShift(admin, 'PUT', '/' + addedRow.id + '/manual', { ...manual, end: '2025-02-05T10:30', rest: 15 });
+    assert.equal(edited.status, 200);
+    assert.equal((await edited.json()).minutes, 135);
+    assert.equal((await pool.query('SELECT COUNT(*) AS n FROM staff_clock_admin_changes WHERE shift_id=?', [addedRow.id]))[0][0].n, 2);
+    assert.equal((await manualShift(admin, 'PUT', '/' + fixtureShift.insertId + '/manual', {
+      ...manual, start: '2025-03-02T10:00', end: '2025-03-02T11:30',
+    })).status, 409);
     assert.equal((await pay(admin, hourPath, hourly, 'PUT'))[0], 409);
     assert.equal((await pay(admin, '/draft/3/2025-04/basis',
       { basis: 'month', rate: 4500000, note: 'Mức cố định tháng 4' }, 'PUT'))[0], 200);
