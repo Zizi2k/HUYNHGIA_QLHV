@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Form, Button, Alert } from 'react-bootstrap';
+import { Form, Button, Alert, Modal } from 'react-bootstrap';
 import { useAuth } from '../context/AuthContext';
+import api from '../services/api';
 
 export default function LoginPage() {
   const [username, setUsername] = useState('');
@@ -11,6 +12,19 @@ export default function LoginPage() {
   const { login } = useAuth();
   const navigate = useNavigate();
   const [showCode, setShowCode] = useState(false);
+  const [recovery, setRecovery] = useState(null);
+
+  async function recoverCode(event) {
+    event.preventDefault();
+    if (!recovery || recovery.busy || recovery.sent || !recovery.username.trim()) return;
+    setRecovery({ ...recovery, busy: true, message: '' });
+    try {
+      const { data } = await api.post('/auth/forgot-code', { username: recovery.username.trim() });
+      setRecovery({ ...recovery, busy: false, sent: true, message: data.message });
+    } catch (err) {
+      setRecovery({ ...recovery, busy: false, message: err.response?.data?.message || 'Không gửi được yêu cầu. Vui lòng liên hệ trung tâm.' });
+    }
+  }
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -179,9 +193,10 @@ export default function LoginPage() {
             <span> Ghi nhớ tôi</span>
           </label>
 
-          <span className="forgot-code">
+          <button type="button" className="forgot-code border-0 bg-transparent p-0"
+            onClick={() => setRecovery({ username: username.trim(), busy: false, sent: false, message: '' })}>
             Quên mã?
-          </span>
+          </button>
 
         </div>
 
@@ -204,6 +219,27 @@ export default function LoginPage() {
         </Button>
 
       </Form>
+
+      <Modal centered show={recovery !== null} onHide={() => { if (!recovery?.busy) setRecovery(null); }}>
+        <Form onSubmit={recoverCode}>
+          <Modal.Header closeButton={!recovery?.busy}><Modal.Title>Quên mã đăng nhập</Modal.Title></Modal.Header>
+          <Modal.Body>
+            {recovery?.message && <Alert variant={recovery.sent ? 'success' : 'danger'}>{recovery.message}</Alert>}
+            {!recovery?.sent && <>
+              <p>Nhập tên đăng nhập để gửi yêu cầu cấp lại mã. Quản trị viên sẽ xác minh danh tính trước khi hỗ trợ.</p>
+              <Form.Group controlId="recover-login-username">
+                <Form.Label>Tên đăng nhập</Form.Label>
+                <Form.Control required autoFocus autoComplete="username" maxLength={100} disabled={recovery?.busy}
+                  value={recovery?.username || ''} onChange={(e) => setRecovery({ ...recovery, username: e.target.value })} />
+              </Form.Group>
+            </>}
+          </Modal.Body>
+          <Modal.Footer>
+            <Button variant="secondary" disabled={recovery?.busy} onClick={() => setRecovery(null)}>Đóng</Button>
+            {!recovery?.sent && <Button type="submit" disabled={recovery?.busy}>{recovery?.busy ? 'Đang gửi…' : 'Gửi yêu cầu'}</Button>}
+          </Modal.Footer>
+        </Form>
+      </Modal>
 
       <div className="login-footer">
         Trung tâm Ngoại ngữ - Tin học
