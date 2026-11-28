@@ -7,6 +7,14 @@ import Sidebar from '../components/layout/Sidebar';
 import Topbar from '../components/layout/Topbar';
 import ScrollRestoration from '../components/common/ScrollRestoration';
 import LoginNotificationModal from '../components/notifications/LoginNotificationModal';
+import './appearance.css';
+
+const themes = ['blue', 'green', 'purple', 'dark'];
+const layouts = ['standard', 'compact', 'focused'];
+function readAppearance(key) {
+  try { return JSON.parse(localStorage.getItem(key)) || {}; }
+  catch { return {}; }
+}
 
 export default function MainLayout() {
   const { user, loading } = useAuth();
@@ -14,6 +22,28 @@ export default function MainLayout() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [loginNotifications, setLoginNotifications] = useState([]);
   const [showLoginNotifications, setShowLoginNotifications] = useState(false);
+  const [preference, setPreference] = useState(null);
+  const key = user?.id == null ? null : `hg-appearance:${user.id}`;
+  const saved = key ? (preference?.key === key ? preference.value : readAppearance(key)) : {};
+  const theme = themes.includes(saved.theme) ? saved.theme : 'blue';
+  const layout = user?.role === 'admin' && layouts.includes(saved.layout) ? saved.layout : 'standard';
+  function setAppearance(next) {
+    if (!key) return;
+    const value = { theme: themes.includes(next.theme) ? next.theme : theme,
+      layout: user.role === 'admin' && layouts.includes(next.layout) ? next.layout : 'standard' };
+    setPreference({ key, value });
+    try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* keep changes for this session */ }
+  }
+  useEffect(() => {
+    if (!key) return;
+    const root = document.documentElement;
+    root.dataset.hgTheme = theme;
+    root.dataset.bsTheme = theme === 'dark' ? 'dark' : 'light';
+    return () => {
+      delete root.dataset.hgTheme;
+      delete root.dataset.bsTheme;
+    };
+  }, [key, theme]);
 
   useEffect(() => {
     document.body.classList.toggle('app-nav-locked', mobileOpen);
@@ -45,6 +75,7 @@ export default function MainLayout() {
 
   return (
     <div
+      data-hg-layout={layout}
       className={`app-shell${sidebarCollapsed ? ' sidebar-collapsed' : ''}${mobileOpen ? ' mobile-nav-open' : ''}`}
     >
       <div
@@ -59,6 +90,8 @@ export default function MainLayout() {
       />
       <div className="app-main">
         <Topbar
+          appearance={{ theme, layout }}
+          onAppearanceChange={setAppearance}
           onToggleSidebar={() => setSidebarCollapsed((v) => !v)}
           onToggleMobile={() => setMobileOpen((v) => !v)}
         />
