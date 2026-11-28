@@ -59,6 +59,9 @@ const withOptionalMultiUpload = (handler) => (req, res, next) => {
 
 
 router.use(authenticate);
+const assignmentGroups = require('./assignmentGroupRoutes');
+router.use('/groups', assignmentGroups.router);
+router.patch('/:id/group', assignmentGroups.moveAssignment);
 
 router.get('/', getAssignments);
 
