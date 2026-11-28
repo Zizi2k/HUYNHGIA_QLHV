@@ -10,6 +10,36 @@ import { isSuperAdmin, isScopedAdmin, lockedCodePrefix, scopeLabel } from '../ut
 import { teachingStaffBadge } from '../utils/roles';
 import AdminAvatarPicker from '../components/AdminAvatarPicker';
 import { profilePath } from '../utils/profilePath';
+import api from '../services/api';
+
+function StudentAvatarPolicy() {
+  const [allowed, setAllowed] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState('');
+  useEffect(() => {
+    const request = new AbortController();
+    api.get('/auth/student-avatar-policy', { signal: request.signal })
+      .then(({ data }) => { if (!request.signal.aborted) setAllowed(data.allowed); })
+      .catch(() => { if (!request.signal.aborted) setMessage('Không tải được quyền đổi ảnh. Vui lòng tải lại trang.'); });
+    return () => request.abort();
+  }, []);
+  async function change(next) {
+    setBusy(true);
+    setMessage('');
+    try {
+      const { data } = await api.put('/auth/student-avatar-policy', { allowed: next });
+      setAllowed(data.allowed);
+    } catch { setMessage('Không lưu được quyền đổi ảnh. Vui lòng thử lại.'); }
+    finally { setBusy(false); }
+  }
+  return <section className="border rounded p-3 mb-3">
+    <Form.Check type="switch" id="student-avatar-policy" label="Cho phép học viên tự đổi ảnh đại diện"
+      checked={allowed === true} disabled={allowed === null || busy}
+      onChange={(e) => void change(e.target.checked)} />
+    <div className="small text-body-secondary">Áp dụng cho toàn bộ học viên. Không thay đổi ảnh hiện có.</div>
+    {message && <Alert className="mt-2 mb-0" variant="warning">{message}</Alert>}
+  </section>;
+}
 
 const allRoleOptions = [
   { value: 'admin', label: 'Quản trị viên' },
@@ -304,6 +334,7 @@ export default function UsersPage() {
         }
       />
 
+      {isSuperAdmin(user) && <StudentAvatarPolicy />}
       <div className="mb-3">
         <ButtonGroup>
           <Button
