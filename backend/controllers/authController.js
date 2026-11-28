@@ -3,6 +3,7 @@ const pool = require('../config/db');
 const { saveMulterFile } = require('../utils/fileStorage');
 const { findUserForStudentLogin, findStudentCodesForUser } = require('../utils/studentIdentity');
 const { SUBJECTS } = require('../utils/tuitionHelpers');
+const { studentAvatarAllowed } = require('./avatarPolicy');
 
 const login = async (req, res) => {
   try {
@@ -130,13 +131,16 @@ const updateProfile = async (req, res) => {
     }
 
     const [currentRows] = await pool.query(
-      'SELECT phone, zalo, avatar_url FROM users WHERE id = ?',
+      'SELECT phone, zalo, avatar_url, role FROM users WHERE id = ?',
       [req.user.id]
     );
     const current = currentRows[0] || {};
 
     let avatarUrl = current.avatar_url || null;
     if (req.file) {
+      if (current.role === 'student' && !(await studentAvatarAllowed())) {
+        return res.status(403).json({ message: 'Trung tâm hiện không cho phép học viên tự đổi ảnh đại diện.' });
+      }
       const saved = await saveMulterFile(req);
       avatarUrl = saved.file_url;
     }
