@@ -7,6 +7,7 @@ import { isSuperAdmin, scopeLabel, getAdminScope } from '../../utils/adminScope'
 import UserAvatar from '../UserAvatar';
 import ProfileModal from '../ProfileModal';
 import NotificationBell from '../notifications/NotificationBell';
+import { accountThemes } from '../../layouts/themes';
 
 export default function Topbar({ onToggleSidebar, onToggleMobile, appearance, onAppearanceChange }) {
   const { user, logout } = useAuth();
@@ -121,10 +122,7 @@ export default function Topbar({ onToggleSidebar, onToggleMobile, appearance, on
             <Form.Group controlId="account-theme" className="mb-3">
               <Form.Label>Chủ đề màu</Form.Label>
               <Form.Select value={appearanceDraft?.theme || 'blue'} onChange={(e) => setAppearanceDraft({ ...appearanceDraft, theme: e.target.value })}>
-                <option value="blue">Xanh Huỳnh Gia (mặc định)</option>
-                <option value="green">Xanh ngọc</option>
-                <option value="purple">Tím</option>
-                <option value="dark">Chế độ tối</option>
+                {accountThemes.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
               </Form.Select>
             </Form.Group>
             {isAdmin && <Form.Group controlId="account-layout">
