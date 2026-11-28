@@ -8,8 +8,9 @@ import Topbar from '../components/layout/Topbar';
 import ScrollRestoration from '../components/common/ScrollRestoration';
 import LoginNotificationModal from '../components/notifications/LoginNotificationModal';
 import './appearance.css';
+import { accountThemes, isDarkTheme } from './themes';
 
-const themes = ['blue', 'green', 'purple', 'dark'];
+const themes = accountThemes.map(([id]) => id);
 const layouts = ['standard', 'compact', 'focused'];
 function readAppearance(key) {
   try { return JSON.parse(localStorage.getItem(key)) || {}; }
@@ -38,7 +39,7 @@ export default function MainLayout() {
     if (!key) return;
     const root = document.documentElement;
     root.dataset.hgTheme = theme;
-    root.dataset.bsTheme = theme === 'dark' ? 'dark' : 'light';
+    root.dataset.bsTheme = isDarkTheme(theme) ? 'dark' : 'light';
     return () => {
       delete root.dataset.hgTheme;
       delete root.dataset.bsTheme;
