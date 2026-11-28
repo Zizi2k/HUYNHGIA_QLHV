@@ -49,20 +49,30 @@
   box-shadow: none !important;
 }
 
-.promo-mkt-hero-inner:has(.promo-mkt-hero-phone[style]) .promo-mkt-hero-visual::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  z-index: 1;
-  background:
-    linear-gradient(90deg, rgba(18,35,74,.88) 0%, rgba(31,61,127,.76) 38%, rgba(31,61,127,.30) 68%, rgba(18,35,74,.10) 100%),
-    linear-gradient(0deg, rgba(15,31,68,.20), rgba(15,31,68,.02));
-}
-
 .promo-mkt-hero-inner:has(.promo-mkt-hero-phone[style]) .promo-mkt-hero-copy {
   position: relative !important;
   z-index: 3 !important;
   max-width: 610px !important;
+}
+
+.promo-mkt-hero-inner:has(.promo-mkt-hero-phone[style]) .promo-mkt-hero-intro {
+  width: fit-content;
+  max-width: min(100%, 42vw);
+  padding: clamp(14px, 2vw, 26px);
+  border: 1px solid rgb(255 255 255 / 55%);
+  border-radius: 18px;
+  background: rgb(14 28 56 / 83%);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+  overflow-wrap: anywhere;
+}
+
+.promo-mkt-hero-inner:has(.promo-mkt-hero-phone[style]) .promo-mkt-hero-intro .promo-mkt-hero-sub {
+  margin-bottom: 0;
+}
+
+.promo-mkt-hero-inner:has(.promo-mkt-hero-phone[style]) .promo-mkt-hero-actions .promo-mkt-btn-outline {
+  background: #1d3054 !important;
 }
 
 .promo-mkt-hero-inner:has(.promo-mkt-hero-phone[style]) .promo-mkt-hero-tag {
@@ -196,8 +206,8 @@
     align-items: flex-end !important;
   }
 
-  .promo-mkt-hero-inner:has(.promo-mkt-hero-phone[style]) .promo-mkt-hero-visual::after {
-    background: linear-gradient(0deg, rgba(16,32,70,.92) 0%, rgba(20,42,88,.60) 58%, rgba(20,42,88,.16) 100%);
+  .promo-mkt-hero-inner:has(.promo-mkt-hero-phone[style]) .promo-mkt-hero-intro {
+    max-width: min(100%, 62vw);
   }
 
   .promo-mkt-hero-title { font-size: clamp(2rem,10vw,3rem) !important; }

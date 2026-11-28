@@ -674,6 +674,7 @@ export default function PromoCoursesPage() {
               <Carousel.Item key={slide.key}>
                 <div className="promo-mkt-hero-inner">
                   <div className="promo-mkt-hero-copy">
+                    <div className="promo-mkt-hero-intro">
                     <span className="promo-mkt-hero-tag">{slide.tag}</span>
                     <h1 className="promo-mkt-hero-title">
                       {slide.title.split('\n').map((line, i) => (
@@ -681,6 +682,7 @@ export default function PromoCoursesPage() {
                       ))}
                     </h1>
                     {slide.subtitle && <p className="promo-mkt-hero-sub">{slide.subtitle}</p>}
+                    </div>
                     <div className="promo-mkt-hero-actions">
                       <a
                         href={slide.ctaLink}
