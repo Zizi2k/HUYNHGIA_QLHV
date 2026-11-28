@@ -1,0 +1,11 @@
+.app-sidebar-link .hg-sidebar-icon {
+  width: 2rem;
+  height: 1.85rem;
+  flex: 0 0 2rem;
+  overflow: visible;
+  filter: drop-shadow(0 1px 1px rgb(31 39 49 / 22%));
+}
+
+[data-bs-theme="dark"] .app-sidebar-link .hg-sidebar-icon {
+  filter: drop-shadow(0 1px 1px rgb(0 0 0 / 55%));
+}
