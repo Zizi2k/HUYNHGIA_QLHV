@@ -70,6 +70,11 @@ export const lessonService = {
 };
 
 export const assignmentService = {
+  getGroups: (classId, signal) => api.get(`/assignments/groups/${classId}`, { signal }),
+  saveGroup: (classId, group) => group.id ? api.put(`/assignments/groups/${classId}/${group.id}`, { name: group.name })
+    : api.post(`/assignments/groups/${classId}`, { name: group.name }),
+  deleteGroup: (classId, groupId) => api.delete(`/assignments/groups/${classId}/${groupId}`),
+  moveToGroup: (id, group_id) => api.patch(`/assignments/${id}/group`, { group_id }),
   getAll: (classId) => api.get('/assignments', { params: { class_id: classId } }),
   create: (data) => api.post('/assignments', data),
   update: (id, data) => api.put(`/assignments/${id}`, data),
