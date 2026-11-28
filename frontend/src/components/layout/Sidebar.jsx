@@ -1,4 +1,5 @@
 import { NavLink } from 'react-router-dom';
+import SidebarIcon from './SidebarIcon';
 import { useAuth } from '../../context/AuthContext';
 import { isSuperAdmin } from '../../utils/adminScope';
 import './SidebarFloating.css';
@@ -12,7 +13,7 @@ function NavItem({ to, icon, label, end = false }) {
         `app-sidebar-link${isActive ? ' active' : ''}`
       }
     >
-      <i className={`bi bi-${icon}`} />
+      <SidebarIcon icon={icon} />
       <span>{label}</span>
     </NavLink>
   );
