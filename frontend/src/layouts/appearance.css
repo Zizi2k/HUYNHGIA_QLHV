@@ -117,6 +117,93 @@ html[data-hg-theme="dark-plum"] {
   --app-gradient-primary-hover: linear-gradient(135deg, #654b80, #4d3864);
 }
 
+/* A surface and its text are themed together, including modals mounted in body. */
+html[data-hg-theme][data-bs-theme="light"] {
+  --hg-ink: #111111;
+  --hg-ink-rgb: 17, 17, 17;
+  --hg-muted: #474747;
+}
+html[data-hg-theme] {
+  --hg-button-bg: var(--hg-accent);
+  --hg-button-ink: #ffffff;
+  --bs-heading-color: var(--hg-ink);
+  --bs-emphasis-color-rgb: var(--hg-ink-rgb);
+  --bs-link-hover-color-rgb: var(--hg-ink-rgb);
+}
+html[data-hg-theme][data-bs-theme="dark"] { --hg-button-bg: #344d83; }
+html[data-hg-theme="dark-plum"][data-bs-theme="dark"] { --hg-button-bg: #594073; }
+html[data-hg-theme] :is(.modal-header, .modal-footer, .card-header, .card-footer, .list-group-item) {
+  color: var(--hg-ink);
+  background: var(--hg-tint);
+  border-color: var(--hg-edge);
+}
+html[data-hg-theme] :is(.modal, .app-content) :is(.form-control, .form-select) {
+  color: var(--hg-ink);
+  background-color: var(--hg-surface);
+  border-color: var(--hg-edge);
+}
+html[data-hg-theme] .form-control::placeholder,
+html[data-hg-theme] :is(.form-text, .text-muted, .text-body-secondary) {
+  color: var(--hg-muted) !important;
+  opacity: 1;
+}
+html[data-hg-theme] .btn.btn-primary,
+html[data-hg-theme] .btn.btn-primary:is(:hover, :focus-visible, :active, .active) {
+  /* A legacy background shorthand set only a gradient. Removing its image left no fill. */
+  background: var(--hg-button-bg);
+  color: var(--hg-button-ink);
+  border-color: var(--hg-button-bg);
+}
+html[data-hg-theme] .btn.btn-primary:is(:disabled, .disabled) {
+  background: var(--hg-tint);
+  color: var(--hg-muted);
+  border-color: var(--hg-edge);
+  opacity: 1;
+  box-shadow: none;
+}
+html[data-hg-theme] .btn.btn-primary:is(:hover, :focus-visible):not(:disabled):not(.disabled) {
+  background: color-mix(in srgb, var(--hg-button-bg) 87%, black);
+}
+html[data-hg-theme] .btn:focus-visible { outline: 2px solid var(--hg-accent); outline-offset: 2px; }
+html[data-hg-theme] :is(.btn-light, .alert-light, .bg-light, .bg-white) {
+  color: var(--hg-ink);
+  background-color: var(--hg-tint) !important;
+}
+html[data-hg-theme] .btn-light { border-color: var(--hg-edge); }
+html[data-hg-theme] .table {
+  --bs-table-color: var(--hg-ink);
+  --bs-table-bg: var(--hg-surface);
+  --bs-table-striped-color: var(--hg-ink);
+  --bs-table-striped-bg: var(--hg-tint);
+  --bs-table-hover-color: var(--hg-ink);
+  --bs-table-hover-bg: var(--hg-tint);
+  --bs-table-border-color: var(--hg-edge);
+}
+html[data-hg-theme] .table-light {
+  --bs-table-color: var(--hg-ink);
+  --bs-table-bg: var(--hg-tint);
+  --bs-table-border-color: var(--hg-edge);
+}
+html[data-hg-theme] .analytics-donut::after,
+html[data-hg-theme] :is(.analytics-kpi, .analytics-panel, .analytics-panel-head,
+  .analytics-mini-stats span, .analytics-score-list > div) {
+  background: var(--hg-surface);
+  border-color: var(--hg-edge);
+}
+html[data-hg-theme] :is(.analytics-titlebar h1, .analytics-kpi > strong, .analytics-panel-head h2,
+  .analytics-donut strong, .analytics-score-list strong, .analytics-mini-stats b, .analytics-table td,
+  .analytics-table th, .analytics-bar-row strong) {
+  color: var(--hg-ink);
+}
+html[data-hg-theme] :is(.analytics-titlebar p, .analytics-eyebrow, .analytics-kpi-head,
+  .analytics-kpi > small, .analytics-panel-head p, .analytics-column-value, .analytics-column-item small,
+  .analytics-donut span, .analytics-legend, .analytics-score-list span, .analytics-progress-summary span,
+  .analytics-mini-stats span, .analytics-empty) { color: var(--hg-muted); }
+html[data-hg-theme] :is(.analytics-table th, .analytics-table tbody tr:hover, .analytics-bar-track) {
+  background: var(--hg-tint);
+}
+html[data-hg-theme] :is(.analytics-bar-row > a, .analytics-table td:nth-child(2) a, .analytics-view) { color: var(--hg-accent); }
+
 @media (min-width: 992px) {
   .app-shell[data-hg-layout="compact"] {
     --app-sidebar-width: 218px;
