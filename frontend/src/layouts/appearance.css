@@ -1,0 +1,59 @@
+html[data-hg-theme="green"] {
+  --app-primary: #087668;
+  --app-primary-dark: #075448;
+  --app-primary-light: #189583;
+  --app-sidebar-accent: #087668;
+  --app-gradient-primary: linear-gradient(135deg, #075448, #087668);
+  --app-gradient-primary-hover: linear-gradient(135deg, #064339, #086859);
+  --app-bg: #edf5f2;
+}
+
+html[data-hg-theme="purple"] {
+  --app-primary: #6943ad;
+  --app-primary-dark: #503387;
+  --app-primary-light: #8d64cf;
+  --app-sidebar-accent: #6943ad;
+  --app-gradient-primary: linear-gradient(135deg, #503387, #754cc0);
+  --app-gradient-primary-hover: linear-gradient(135deg, #41286f, #6943ad);
+  --app-bg: #f3eff9;
+}
+
+html[data-hg-theme="dark"] {
+  --app-bg: #131a27;
+  --app-card-bg: #1c2637;
+  --app-border: #39475c;
+  --app-text: #e8eef9;
+  --app-text-muted: #b5c2d6;
+  --app-primary-light: #a4bdff;
+  --app-gradient-surface: linear-gradient(180deg, #202b3d, #182231);
+}
+
+[data-hg-theme="dark"] .app-topbar,
+[data-hg-theme="dark"] .app-sidebar,
+[data-hg-theme="dark"] .app-dropdown-menu,
+[data-hg-theme="dark"] .app-content {
+  background: var(--app-card-bg);
+  color: var(--app-text);
+}
+
+[data-hg-theme="dark"] .app-topbar-user-name,
+[data-hg-theme="dark"] .app-topbar-btn {
+  color: var(--app-text);
+}
+
+@media (min-width: 992px) {
+  .app-shell[data-hg-layout="compact"] {
+    --app-sidebar-width: 218px;
+    --app-topbar-height: 54px;
+  }
+
+  .app-shell[data-hg-layout="compact"] .app-content {
+    padding: 1rem;
+  }
+
+  .app-shell[data-hg-layout="focused"] .app-content {
+    width: 100%;
+    max-width: 1180px;
+    margin-inline: auto;
+  }
+}
