@@ -1,4 +1,5 @@
 const pool = require('../config/db');
+const { ensureGroups } = require('../routes/assignmentGroupRoutes');
 const {
   assertClassAccess, getAssignmentClassId, getSubmissionClassId,
 } = require('../middleware/classAccess');
@@ -31,10 +32,11 @@ const getAssignments = async (req, res) => {  try {
     const classId = req.query.class_id;
 
     if (classId && !(await assertClassAccess(req.user, classId, res))) return;
+    await ensureGroups();
 
     if (req.user.role === 'student' && classId) {
       const [rows] = await pool.query(
-        `SELECT a.*,
+        `SELECT a.*, (SELECT group_id FROM assignment_group_items WHERE assignment_id=a.id) AS group_id,
           s.id AS submission_id, s.score, s.feedback, s.submitted_at,
           s.file_url AS submission_url
          FROM assignments a
@@ -52,7 +54,7 @@ const getAssignments = async (req, res) => {  try {
     }
 
     let query = `
-      SELECT a.*, COUNT(s.id) AS submission_count,
+      SELECT a.*, (SELECT group_id FROM assignment_group_items WHERE assignment_id=a.id) AS group_id, COUNT(s.id) AS submission_count,
         ${allowedStudentCountSubquery('assignment', 'a')} AS allowed_student_count
       FROM assignments a
       LEFT JOIN submissions s ON a.id = s.assignment_id`;
