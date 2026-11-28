@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { Fragment, useEffect, useState } from 'react';
 import {
   Button, Card, Modal, Form, Alert, Badge, Spinner, Table,
 } from 'react-bootstrap';
@@ -41,6 +41,37 @@ export default function ClassAssignmentsTab({
   const [error, setError] = useState('');
   const [shareTarget, setShareTarget] = useState(null);
   const [accessTarget, setAccessTarget] = useState(null);
+  const [groups, setGroups] = useState([]);
+  const [groupFilter, setGroupFilter] = useState('all');
+  const [groupDraft, setGroupDraft] = useState(null);
+  const [groupBusy, setGroupBusy] = useState(false);
+  const [groupError, setGroupError] = useState('');
+  useEffect(() => {
+    const request = new AbortController();
+    setGroups([]);
+    setGroupFilter('all');
+    setGroupDraft(null);
+    setGroupError('');
+    assignmentService.getGroups(classId, request.signal).then(({ data }) => {
+      if (!request.signal.aborted) setGroups(data);
+    }).catch(() => { if (!request.signal.aborted) setGroupError('Không tải được nhóm bài tập.'); });
+    return () => request.abort();
+  }, [classId]);
+  const known = new Set(groups.map((group) => String(group.id)));
+  const groupOf = (item) => known.has(String(item.group_id)) ? String(item.group_id) : 'none';
+  const sections = [...groups, { id: 'none', name: 'Chưa phân loại' }].map((group) => ({
+    ...group, items: assignments.filter((item) => groupOf(item) === String(group.id)),
+  }));
+  const selectedGroup = groups.find((group) => String(group.id) === groupFilter);
+  async function changeGroup(action, refreshAssignments = false) {
+    setGroupBusy(true);
+    setGroupError('');
+    try {
+      await action();
+      if (refreshAssignments) await onUpdated();
+    } catch (err) { setGroupError(err.response?.data?.message || 'Không thể cập nhật nhóm bài tập.'); }
+    finally { setGroupBusy(false); }
+  }
 
   const openCreate = () => {
     setEditingId(null);
@@ -264,11 +295,40 @@ export default function ClassAssignmentsTab({
           Giao bài tập
         </Button>
       )}
+      <div className="d-flex flex-wrap align-items-end gap-2 mb-3">
+        <Form.Group controlId="assignment-group-filter">
+          <Form.Label>Nhóm bài tập</Form.Label>
+          <Form.Select value={groupFilter} onChange={(e) => setGroupFilter(e.target.value)}>
+            <option value="all">Tất cả bài tập</option>
+            {sections.filter((section) => isTeacher || section.items.length > 0).map((section) =>
+              <option key={section.id} value={section.id}>{section.name} ({section.items.length})</option>)}
+          </Form.Select>
+        </Form.Group>
+        {isTeacher && <>
+          <Button variant="outline-primary" disabled={groupBusy} onClick={() => { setGroupError(''); setGroupDraft({ name: '' }); }}>Tạo nhóm</Button>
+          {selectedGroup && <>
+            <Button variant="outline-secondary" disabled={groupBusy} onClick={() => { setGroupError(''); setGroupDraft(selectedGroup); }}>Đổi tên</Button>
+            <Button variant="outline-danger" disabled={groupBusy} onClick={() => {
+              if (!window.confirm('Xóa nhóm này? Bài tập và bài nộp vẫn giữ nguyên; các bài sẽ chuyển về Chưa phân loại.')) return;
+              void changeGroup(async () => {
+                await assignmentService.deleteGroup(classId, selectedGroup.id);
+                setGroups((rows) => rows.filter((row) => row.id !== selectedGroup.id));
+                setGroupFilter('all');
+              }, true);
+            }}>Xóa nhóm</Button>
+          </>}
+        </>}
+      </div>
+      {groupError && !groupDraft && <Alert variant="danger">{groupError}</Alert>}
 
-      {assignments.length === 0 ? (
+      {assignments.length === 0 && groupFilter === 'all' ? (
         <Alert variant="light">Chưa có bài tập nào.</Alert>
       ) : (
-        assignments.map((a) => {
+        sections.filter((section) => groupFilter === 'all' ? section.items.length > 0 : String(section.id) === groupFilter).map((section) =>
+          <Fragment key={section.id}>
+            <h4 className="h6 mt-3 mb-2"><i className="bi bi-folder me-2" />{section.name} <Badge bg="secondary">{section.items.length}</Badge></h4>
+            {!section.items.length && <Alert variant="light">Nhóm này chưa có bài tập.</Alert>}
+            {section.items.map((a) => {
           const visibility = getContentVisibilityStatus(a);
           return (
           <Card key={a.id} className="mb-3 border-0 shadow-sm">
@@ -276,6 +336,15 @@ export default function ClassAssignmentsTab({
               <div className="d-flex justify-content-between align-items-start gap-3">
                 <div className="flex-grow-1">
                   <h5 className="mb-1">{a.title}</h5>
+                  {isTeacher && groups.length > 0 && <Form.Select size="sm" className="w-auto my-2"
+                    aria-label={`Nhóm của bài tập ${a.title}`} disabled={groupBusy} value={groupOf(a)}
+                    onChange={(e) => {
+                      const next = e.target.value === 'none' ? null : Number(e.target.value);
+                      void changeGroup(() => assignmentService.moveToGroup(a.id, next), true);
+                    }}>
+                    <option value="none">Chưa phân loại</option>
+                    {groups.map((group) => <option key={group.id} value={group.id}>{group.name}</option>)}
+                  </Form.Select>}
                   {a.description && <p className="text-muted mb-2">{a.description}</p>}
                         <AttachmentList item={a} apiBase={API_BASE} defaultExpanded={false} />
                   {getItemAttachments(a).length > 1 && (
@@ -362,8 +431,30 @@ export default function ClassAssignmentsTab({
             </Card.Body>
           </Card>
           );
-        })
+        })}</Fragment>)
       )}
+      <Modal show={Boolean(groupDraft)} centered onHide={() => { if (!groupBusy) setGroupDraft(null); }}>
+        <Form onSubmit={(e) => {
+          e.preventDefault();
+          if (groupBusy || !groupDraft?.name.trim()) return;
+          void changeGroup(async () => {
+            const { data } = await assignmentService.saveGroup(classId, groupDraft);
+            setGroups((rows) => [...rows.filter((row) => row.id !== data.id), data].sort((a, b) => a.name.localeCompare(b.name, 'vi')));
+            setGroupFilter(String(data.id));
+            setGroupDraft(null);
+          });
+        }}>
+          <Modal.Header closeButton={!groupBusy}><Modal.Title>{groupDraft?.id ? 'Đổi tên nhóm' : 'Tạo nhóm bài tập'}</Modal.Title></Modal.Header>
+          <Modal.Body>
+            {groupError && <Alert variant="danger">{groupError}</Alert>}
+            <Form.Group controlId="assignment-group-name"><Form.Label>Tên nhóm</Form.Label>
+              <Form.Control required autoFocus maxLength={100} disabled={groupBusy} value={groupDraft?.name ?? ''}
+                onChange={(e) => setGroupDraft((old) => ({ ...old, name: e.target.value }))} />
+            </Form.Group>
+          </Modal.Body>
+          <Modal.Footer><Button type="submit" disabled={groupBusy}>{groupBusy ? 'Đang lưu…' : 'Lưu nhóm'}</Button></Modal.Footer>
+        </Form>
+      </Modal>
 
       <Modal
         show={showForm}
