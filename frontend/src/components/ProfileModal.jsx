@@ -3,6 +3,7 @@ import { Modal, Form, Button, Alert } from 'react-bootstrap';
 import { authService, userService } from '../services';
 import { useAuth } from '../context/AuthContext';
 import UserAvatar from './UserAvatar';
+import api from '../services/api';
 
 const roleLabels = { admin: 'Quản trị viên', teacher: 'Giáo viên', student: 'Học sinh' };
 
@@ -25,6 +26,18 @@ export default function ProfileModal({ show, onHide, onSaved, targetProfile = nu
   const [preview, setPreview] = useState(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [avatarAllowed, setAvatarAllowed] = useState(null);
+  const checkAvatar = !isManagingOther && user?.role === 'student';
+  const canChangeAvatar = !checkAvatar || avatarAllowed === true;
+  useEffect(() => {
+    if (!show || !checkAvatar) return;
+    const request = new AbortController();
+    setAvatarAllowed(null);
+    api.get('/auth/student-avatar-policy', { signal: request.signal }).then(({ data }) => {
+      if (!request.signal.aborted) setAvatarAllowed(data.allowed === true);
+    }).catch(() => { if (!request.signal.aborted) setAvatarAllowed(false); });
+    return () => request.abort();
+  }, [show, checkAvatar, user?.id]);
 
   useEffect(() => {
     if (!show) return;
@@ -60,7 +73,7 @@ export default function ProfileModal({ show, onHide, onSaved, targetProfile = nu
       formData.append('code', form.code);
       formData.append('phone', form.phone || '');
       formData.append('zalo', form.zalo || '');
-      if (avatarFile) formData.append('avatar', avatarFile);
+      if (avatarFile && canChangeAvatar) formData.append('avatar', avatarFile);
 
       if (isManagingOther) {
         const res = await userService.updateManagedProfile(targetProfile.id, formData);
@@ -96,7 +109,7 @@ export default function ProfileModal({ show, onHide, onSaved, targetProfile = nu
           <div className="text-center mb-4">
             <div className="position-relative d-inline-block">
               <UserAvatar user={displayUser} size={96} />
-              <label
+              {canChangeAvatar && <><label
                 htmlFor="profile-modal-avatar-upload"
                 className="position-absolute bottom-0 end-0 btn btn-primary btn-sm rounded-circle p-2"
                 style={{ width: 32, height: 32, lineHeight: 1 }}
@@ -110,9 +123,10 @@ export default function ProfileModal({ show, onHide, onSaved, targetProfile = nu
                 accept="image/jpeg,image/png,image/gif,image/webp"
                 className="d-none"
                 onChange={handleAvatarChange}
-              />
+              /></>}
             </div>
-            <div className="mt-2 text-muted small">Nhấn biểu tượng máy ảnh để đổi ảnh</div>
+            <div className="mt-2 text-muted small">{canChangeAvatar ? 'Nhấn biểu tượng máy ảnh để đổi ảnh'
+              : avatarAllowed === null ? 'Đang kiểm tra quyền đổi ảnh…' : 'Hiện không thể tự đổi ảnh đại diện. Vui lòng liên hệ trung tâm.'}</div>
           </div>
 
           <Form.Group className="mb-3">
