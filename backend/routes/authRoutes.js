@@ -2,10 +2,12 @@ const express = require('express');
 const { login, logout, register, getMe, updateProfile } = require('../controllers/authController');
 const { authenticate, authorize } = require('../middleware/auth');
 const { uploadMemory } = require('../middleware/upload');
+const { requestLoginCode } = require('../controllers/loginCodeRecovery');
 
 const router = express.Router();
 
 router.post('/login', login);
+router.post('/forgot-code', requestLoginCode);
 router.post('/logout', authenticate, logout);
 router.post('/register', authenticate, authorize('admin'), register);
 router.get('/me', authenticate, getMe);
